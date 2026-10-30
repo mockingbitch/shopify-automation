@@ -196,16 +196,20 @@ Merge rule for overrides: objects merge key by key, arrays and scalars replace.
 
 | Method | Path | Permission | Request | Response |
 |---|---|---|---|---|
-| GET | `/orgs/{org_id}/workflows` | `workflows.read` | `?status=&shop_id=&batch_id=&definition=` | list of `{run}` |
-| GET | `/orgs/{org_id}/workflows/{run_id}` | `workflows.read` | — | `{run, steps[], progress}` |
-| GET | `/orgs/{org_id}/workflows/{run_id}/events` | `workflows.read` | `?after=<cursor>` | events |
-| POST | `/orgs/{org_id}/workflows/{run_id}/cancel` | `workflows.cancel` | `{reason?}` | `202 {run}` |
-| POST | `/orgs/{org_id}/workflows/{run_id}/retry` | `workflows.retry` | `{step_ids?}` | `202 {run}`; `409` if not FAILED/PARTIALLY_COMPLETED |
-| POST | `/orgs/{org_id}/workflows/{run_id}/resume` | `workflows.run` | — | `202 {run}`; `409` if not WAITING_USER |
-| POST | `/orgs/{org_id}/workflows/{run_id}/steps/{step_id}/complete` | `workflows.run` | `{note?}` | `{step}` (manual task done) |
-| GET | `/orgs/{org_id}/approvals` | `workflows.read` | `?status=PENDING` | list |
-| GET | `/orgs/{org_id}/approvals/{id}` | `workflows.read` | — | `{approval, diff}` |
-| POST | `/orgs/{org_id}/approvals/{id}/decision` | `approvals.decide` | `{decision: APPROVE\|REJECT, selected_change_paths[], comment?}` | `{approval}`; `409` already decided |
+| POST | `/orgs/{org_id}/templates/{id}/versions/{vid}/apply` | `workflows.run` | `{shop_ids[]}` (1–50) + optional `Idempotency-Key` (UUID) | `202 {batch_id, workflow_run_ids[], replayed}`; `409 version_not_published`, `shop_busy`, `idempotency_mismatch`; `424` if a shop is not connected |
+| GET | `/orgs/{org_id}/workflows` | `workflows.read` | `?status=&shop_id=&batch_id=&limit=&cursor=` | list of `{run}` |
+| GET | `/orgs/{org_id}/workflows/{run_id}` | `workflows.read` | — | `{run, steps[], progress, pending_approval}` |
+| GET | `/orgs/{org_id}/workflows/{run_id}/events` | `workflows.read` | `?after=<cursor>` | events in order; poll with the returned cursor |
+| POST | `/orgs/{org_id}/workflows/{run_id}/cancel` | `workflows.cancel` | `{reason?}` | `202 {run view}`; `409 not_cancellable` |
+| POST | `/orgs/{org_id}/workflows/{run_id}/retry` | `workflows.retry` | — | `202`; `409 not_retryable` unless FAILED/PARTIALLY_COMPLETED |
+| POST | `/orgs/{org_id}/workflows/{run_id}/resume` | `workflows.run` | — | `202`; `409` if not waiting or only manual tasks are open |
+| POST | `/orgs/{org_id}/workflows/{run_id}/steps/{step_id}/complete` | `workflows.run` | `{note?}` | `202` (manual tasks done) |
+| GET | `/orgs/{org_id}/workflow-events` | `workflows.read` | `?level=&cursor=` | execution log across runs, newest first |
+| GET | `/orgs/{org_id}/approvals` | `workflows.read` | `?status=` | list |
+| GET | `/orgs/{org_id}/approvals/{id}` | `workflows.read` | — | `{approval}` with `diff: {changes[], blocked[]}` |
+| POST | `/orgs/{org_id}/approvals/{id}/decision` | `approvals.decide` | `{decision: APPROVE\|REJECT, selected_change_paths[], comment?}` | `{approval}`; `409 already_decided`; `422` unknown path; `403 self_approval_not_allowed` |
+
+Step retries with explicit `step_ids` were not needed: retry resets every failed step and never reruns succeeded ones.
 
 ### 3.7 Audit and notifications
 

@@ -1648,7 +1648,10 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        /** Delete a template (soft delete) */
+        /**
+         * Delete a template (soft delete)
+         * @description Refused with `409 template_in_use` while workflow runs that use the template are active.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -1670,6 +1673,7 @@ export interface paths {
                 };
                 403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
             };
         };
         options?: never;
@@ -2175,6 +2179,555 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/orgs/{orgID}/templates/{templateID}/versions/{versionID}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                templateID: components["parameters"]["TemplateID"];
+                versionID: components["parameters"]["VersionID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply a published version to shops
+         * @description Starts one SHOP_SETUP run per shop, sharing a batch ID. With an
+         *     `Idempotency-Key` (UUID), repeating the same request returns the same
+         *     runs (`replayed: true`); the same key with a different request is `409`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                    versionID: components["parameters"]["VersionID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        shop_ids: string[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Runs started */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                /** Format: uuid */
+                                batch_id: string;
+                                workflow_run_ids: string[];
+                                replayed: boolean;
+                            };
+                        };
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                424: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        /** List workflow runs, newest first */
+        get: {
+            parameters: {
+                query?: {
+                    status?: components["schemas"]["RunStatus"];
+                    shop_id?: string;
+                    batch_id?: string;
+                    limit?: number;
+                    cursor?: string;
+                };
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Runs */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["RunSummary"][];
+                            next_cursor: string | null;
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/workflows/{runID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                runID: components["parameters"]["RunID"];
+            };
+            cookie?: never;
+        };
+        /** Run with steps, progress and pending approval */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    runID: components["parameters"]["RunID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["RunView200"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/workflows/{runID}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                runID: components["parameters"]["RunID"];
+            };
+            cookie?: never;
+        };
+        /** Run events in order (poll with `after`) */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cursor from the previous response */
+                    after?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    runID: components["parameters"]["RunID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["Events"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/workflows/{runID}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                runID: components["parameters"]["RunID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a run
+         * @description Changes already applied on Shopee are not rolled back.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    runID: components["parameters"]["RunID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        reason?: string | null;
+                    };
+                };
+            };
+            responses: {
+                202: components["responses"]["RunView202"];
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/workflows/{runID}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                runID: components["parameters"]["RunID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry the failed steps of a run
+         * @description Succeeded steps are never run again.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    runID: components["parameters"]["RunID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                202: components["responses"]["RunView202"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/workflows/{runID}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                runID: components["parameters"]["RunID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume steps waiting for a user (e.g. after reconnecting) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    runID: components["parameters"]["RunID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                202: components["responses"]["RunView202"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/workflows/{runID}/steps/{stepID}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                runID: components["parameters"]["RunID"];
+                stepID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark a step's manual tasks as done */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    runID: components["parameters"]["RunID"];
+                    stepID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        note?: string | null;
+                    };
+                };
+            };
+            responses: {
+                202: components["responses"]["RunView202"];
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/workflow-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        /** Execution log across all runs, newest first */
+        get: {
+            parameters: {
+                query?: {
+                    level?: "info" | "warn" | "error";
+                    cursor?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["Events"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        /** List approvals, newest first */
+        get: {
+            parameters: {
+                query?: {
+                    status?: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+                };
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Approvals */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["Approval"][];
+                            next_cursor: string | null;
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/approvals/{approvalID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                approvalID: string;
+            };
+            cookie?: never;
+        };
+        /** Approval with the diff it asks about */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    approvalID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["Approval200"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/approvals/{approvalID}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                approvalID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve (with the selected changes) or reject
+         * @description Only listed, enabled changes can be selected. Operators cannot
+         *     approve runs they started unless the organization allows
+         *     self-approval (`403 self_approval_not_allowed`).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    approvalID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        decision: "APPROVE" | "REJECT";
+                        selected_change_paths?: string[];
+                        comment?: string | null;
+                    };
+                };
+            };
+            responses: {
+                200: components["responses"]["Approval200"];
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/shopee-apps": {
         parameters: {
             query?: never;
@@ -2622,8 +3175,162 @@ export interface components {
             /** @description Changes whose capability is not available for this shop */
             blocked: components["schemas"]["Change"][];
         };
+        /** @enum {string} */
+        RunStatus: "PENDING" | "RUNNING" | "WAITING_APPROVAL" | "WAITING_USER" | "COMPLETED" | "PARTIALLY_COMPLETED" | "FAILED" | "CANCELLED";
+        RunSummary: {
+            /** Format: uuid */
+            id: string;
+            /** @example SHOP_SETUP */
+            definition: string;
+            definition_version: number;
+            /** Format: uuid */
+            shop_id: string;
+            /** Format: uuid */
+            batch_id: string | null;
+            status: components["schemas"]["RunStatus"];
+            input: {
+                [key: string]: unknown;
+            };
+            /** @description Report of the run when finished */
+            output: {
+                [key: string]: unknown;
+            };
+            /** Format: uuid */
+            created_by: string | null;
+            cancel_requested: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+        };
+        WorkflowStep: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            position: number;
+            /** @enum {string} */
+            status: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "SKIPPED" | "CANCELLED" | "WAITING_APPROVAL" | "WAITING_USER";
+            /** @description false when the run continues after this step fails */
+            blocking: boolean;
+            capability: string | null;
+            attempt_count: number;
+            max_attempts: number;
+            /**
+             * Format: date-time
+             * @description Set while waiting to retry
+             */
+            next_attempt_at: string | null;
+            /** @description Step output; for WAITING_USER: {reason, message, tasks[], result} */
+            output: unknown;
+            error: unknown;
+            skip_reason: string | null;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+        };
+        RunView: {
+            run: components["schemas"]["RunSummary"];
+            steps: components["schemas"]["WorkflowStep"][];
+            progress: {
+                total: number;
+                done: number;
+            };
+            pending_approval: components["schemas"]["Approval"] | null;
+        };
+        Approval: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            run_id: string;
+            /** Format: uuid */
+            step_id: string;
+            /** Format: uuid */
+            shop_id: string;
+            /** Format: uuid */
+            run_created_by: string | null;
+            /** @enum {string} */
+            status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+            diff: {
+                changes: components["schemas"]["Change"][];
+                blocked: components["schemas"]["Change"][];
+            };
+            selected_changes: string[];
+            /** Format: uuid */
+            decided_by: string | null;
+            comment: string | null;
+            /** Format: date-time */
+            decided_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        WorkflowEvent: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            run_id: string;
+            /** Format: uuid */
+            step_id: string | null;
+            /** @enum {string} */
+            type: "RUN_CREATED" | "RUN_STATUS_CHANGED" | "STEP_STATUS_CHANGED" | "STEP_ATTEMPT_STARTED" | "STEP_ATTEMPT_FINISHED" | "APPROVAL_REQUESTED" | "APPROVAL_DECIDED" | "USER_ACTION_REQUESTED" | "USER_ACTION_COMPLETED" | "LOG" | "CANCEL_REQUESTED";
+            /** @enum {string} */
+            level: "info" | "warn" | "error";
+            message: string;
+            data: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+        };
     };
     responses: {
+        /** @description Run */
+        RunView200: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["RunView"];
+                };
+            };
+        };
+        /** @description Accepted; current state of the run */
+        RunView202: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["RunView"];
+                };
+            };
+        };
+        /** @description Approval */
+        Approval200: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["Approval"];
+                };
+            };
+        };
+        /** @description Events */
+        Events: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["WorkflowEvent"][];
+                    next_cursor: string | null;
+                };
+            };
+        };
         /** @description Template and its draft */
         TemplateCreated: {
             headers: {
@@ -2722,6 +3429,7 @@ export interface components {
     };
     parameters: {
         OrgID: string;
+        RunID: string;
         TemplateID: string;
         VersionID: string;
         ShopID: string;

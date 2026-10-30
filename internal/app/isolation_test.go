@@ -45,9 +45,21 @@ func TestTenantIsolationHTTP(t *testing.T) {
 	aSelection := loc.Query().Get("state")
 
 	aTpl, aVersion := alice.createTemplate(orgA, "Org A template", map[string]any{"description": map[string]any{"text": "Org A secret text"}})
+	// A workflow run of org A, waiting for approval.
+	alice.must(200, "POST", "/orgs/"+orgA+"/templates/"+aTpl+"/versions/"+aVersion+"/publish", nil)
+	var applied applyResp
+	alice.must(202, "POST", "/orgs/"+orgA+"/templates/"+aTpl+"/versions/"+aVersion+"/apply", map[string]any{"shop_ids": []string{aShop}}).json(t, &applied)
+	aRun := applied.Data.RunIDs[0]
+	aRunView := alice.runView(orgA, aRun)
+	if aRunView.Data.PendingApproval == nil {
+		t.Fatalf("org A run not waiting for approval: %s", aRunView.Data.Run.Status)
+	}
+	aApproval := aRunView.Data.PendingApproval.ID
+	aStep := aRunView.Data.Steps[0].ID
 
 	ids := map[string]string{"{memberID}": aMember, "{invitationID}": inv.Data.ID, "{shopID}": aShop, "{stateID}": aSelection,
-		"{templateID}": aTpl, "{versionID}": aVersion, "{sectionKey}": "description"}
+		"{templateID}": aTpl, "{versionID}": aVersion, "{sectionKey}": "description",
+		"{runID}": aRun, "{stepID}": aStep, "{approvalID}": aApproval}
 	bodies := map[string]any{
 		"PATCH /orgs/{orgID}":                                                                 map[string]any{"name": "pwned"},
 		"DELETE /orgs/{orgID}":                                                                map[string]string{"confirm_slug": "org-a"},
@@ -63,6 +75,8 @@ func TestTenantIsolationHTTP(t *testing.T) {
 		"PUT /orgs/{orgID}/templates/{templateID}/versions/{versionID}/sections/{sectionKey}": map[string]any{"text": "pwned"},
 		"POST /orgs/{orgID}/templates/{templateID}/versions/{versionID}/preview":              map[string]any{"shop_ids": []string{aShop}},
 		"PUT /orgs/{orgID}/templates/{templateID}/shops/{shopID}/overrides":                   map[string]any{"overrides": map[string]any{}},
+		"POST /orgs/{orgID}/templates/{templateID}/versions/{versionID}/apply":                map[string]any{"shop_ids": []string{aShop}},
+		"POST /orgs/{orgID}/approvals/{approvalID}/decision":                                  map[string]any{"decision": "REJECT"},
 	}
 
 	checked := 0
@@ -114,6 +128,9 @@ func TestTenantIsolationHTTP(t *testing.T) {
 		t.Fatalf("org A shop was modified: %+v", shop.Data.Shop)
 	}
 	alice.must(200, "GET", "/orgs/"+orgA+"/shops/connect/"+aSelection, nil)
+	if v := alice.runView(orgA, aRun); v.Data.Run.Status != "WAITING_APPROVAL" || v.Data.Run.ID != aRun {
+		t.Fatalf("org A run was modified: %s", v.Data.Run.Status)
+	}
 	// Bob's org list only shows org B.
 	var list struct {
 		Data []struct {
@@ -141,11 +158,20 @@ func TestTenantIsolationDatabase(t *testing.T) {
 	e.setupApp()
 	e.fake.AddShop(shopeefake.Shop{ID: 1001, Name: "Org A shop", Region: "VN"})
 	e.connectShop(alice.noRedirect(), orgA.String(), 1001)
-	alice.createTemplate(orgA.String(), "Org A template", nil)
+	tplA, verA := alice.createTemplate(orgA.String(), "Org A template", map[string]any{"description": map[string]any{"text": "x"}})
+	alice.must(200, "POST", "/orgs/"+orgA.String()+"/templates/"+tplA+"/versions/"+verA+"/publish", nil)
+	var shopsA struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	alice.must(200, "GET", "/orgs/"+orgA.String()+"/shops", nil).json(t, &shopsA)
+	alice.must(202, "POST", "/orgs/"+orgA.String()+"/templates/"+tplA+"/versions/"+verA+"/apply", map[string]any{"shop_ids": []string{shopsA.Data[0].ID}})
 
 	tenantTables := []string{"organizations", "organization_members", "organization_invitations", "audit_logs",
 		"shop_connections", "shop_credentials", "shop_authorizations", "shop_profiles", "oauth_states",
-		"shop_templates", "shop_template_versions", "shop_template_sections"}
+		"shop_templates", "shop_template_versions", "shop_template_sections",
+		"workflow_runs", "workflow_steps", "workflow_step_attempts", "workflow_approvals", "workflow_events", "shop_config_snapshots"}
 	count := func(scope db.Scope, table, where string, args ...any) int {
 		t.Helper()
 		var n int
@@ -243,6 +269,10 @@ func TestSystemRoleCannotReadSecrets(t *testing.T) {
 		"SELECT partner_key_enc FROM shopee_apps",
 		"SELECT shop_name FROM shop_connections",
 		"SELECT raw FROM shop_profiles",
+		"SELECT output FROM workflow_steps",
+		"SELECT input FROM workflow_runs",
+		"SELECT diff_snapshot FROM workflow_approvals",
+		"UPDATE workflow_steps SET status = 'PENDING'",
 		"UPDATE shop_connections SET status = 'ACTIVE'",
 	} {
 		err := e.system.Tx(ctx, db.Scope{}, func(tx pgx.Tx) error {

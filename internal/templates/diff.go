@@ -94,16 +94,55 @@ func (r *Registry) addressChanges(obj map[string]any, cur Current, caps map[stri
 		}
 	}
 	if len(addr) > 0 {
-		out = append(out, label(Change{Path: "return_address.address", Section: "return_address", Target: addr,
+		c := Change{Path: "return_address.address", Section: "return_address", Target: addr,
 			Capability: "shop.address.update", Sensitive: true,
-			Note: "Updates the shop's existing return address. If the shop has none, creating one has no Open API."}, caps))
+			Note: "Updates the shop's existing return address. If the shop has none, creating one has no Open API."}
+		if cur.Known[c.Path] {
+			c.CurrentKnown, c.Current = true, cur.Values[c.Path]
+			// Shopee's address list has no recipient name or phone, so only
+			// the fields it returns can be compared.
+			if currentMap, ok := c.Current.(map[string]any); ok && subsetEqual(addr, currentMap) {
+				c.Note = "Recipient name and phone cannot be read back from Shopee; other fields already match."
+			}
+		}
+		out = append(out, label(c, caps))
 	}
 	if useAs, ok := obj["use_as"]; ok {
-		out = append(out, label(Change{Path: "return_address.use_as", Section: "return_address", Target: useAs,
-			Capability: "shop.address.config", Sensitive: true}, caps))
+		c := Change{Path: "return_address.use_as", Section: "return_address", Target: useAs,
+			Capability: "shop.address.config", Sensitive: true}
+		if cur.Known[c.Path] {
+			c.CurrentKnown, c.Current = true, cur.Values[c.Path]
+			if sameSet(c.Current, useAs) {
+				return out
+			}
+		}
+		out = append(out, label(c, caps))
 	}
-	_ = cur
 	return out
+}
+
+// subsetEqual reports whether every key of a that b also has is equal.
+func subsetEqual(a, b map[string]any) bool {
+	for k, v := range a {
+		if bv, ok := b[k]; ok && !equal(v, bv) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameSet(a, b any) bool {
+	toSet := func(v any) map[string]bool {
+		m := map[string]bool{}
+		raw, _ := json.Marshal(v)
+		var list []string
+		_ = json.Unmarshal(raw, &list)
+		for _, x := range list {
+			m[x] = true
+		}
+		return m
+	}
+	return reflect.DeepEqual(toSet(a), toSet(b))
 }
 
 func (r *Registry) channelChanges(obj map[string]any, cur Current, caps map[string]capability.Resolved) []Change {

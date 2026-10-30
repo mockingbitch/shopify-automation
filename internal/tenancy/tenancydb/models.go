@@ -154,6 +154,16 @@ type ShopAuthorization struct {
 	CreatedAt        time.Time
 }
 
+type ShopConfigSnapshot struct {
+	ID               uuid.UUID
+	OrgID            uuid.UUID
+	ShopConnectionID uuid.UUID
+	Kind             string
+	WorkflowRunID    *uuid.UUID
+	Config           []byte
+	CapturedAt       time.Time
+}
+
 type ShopConnection struct {
 	ID                     uuid.UUID
 	OrgID                  uuid.UUID
@@ -323,4 +333,101 @@ type WebhookEvent struct {
 	LastError     *string
 	ReceivedAt    time.Time
 	ProcessedAt   *time.Time
+}
+
+type WorkflowApproval struct {
+	ID              uuid.UUID
+	OrgID           uuid.UUID
+	RunID           uuid.UUID
+	StepID          uuid.UUID
+	Status          string
+	DiffSnapshot    []byte
+	SelectedChanges []byte
+	DecidedBy       *uuid.UUID
+	Comment         *string
+	DecidedAt       *time.Time
+	CreatedAt       time.Time
+}
+
+type WorkflowEvent struct {
+	ID        uuid.UUID
+	OrgID     uuid.UUID
+	RunID     uuid.UUID
+	StepID    *uuid.UUID
+	Type      string
+	Level     string
+	Message   string
+	Data      []byte
+	CreatedAt time.Time
+}
+
+type WorkflowEventsDefault struct {
+	ID        uuid.UUID
+	OrgID     uuid.UUID
+	RunID     uuid.UUID
+	StepID    *uuid.UUID
+	Type      string
+	Level     string
+	Message   string
+	Data      []byte
+	CreatedAt time.Time
+}
+
+type WorkflowRun struct {
+	ID                uuid.UUID
+	OrgID             uuid.UUID
+	DefinitionKey     string
+	DefinitionVersion int32
+	ShopConnectionID  uuid.UUID
+	BatchID           *uuid.UUID
+	Status            string
+	Input             []byte
+	Output            []byte
+	IdempotencyKey    *string
+	RequestHash       []byte
+	CreatedBy         *uuid.UUID
+	StartedAt         *time.Time
+	FinishedAt        *time.Time
+	CancelRequestedAt *time.Time
+	CancelReason      *string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+type WorkflowStep struct {
+	ID             uuid.UUID
+	OrgID          uuid.UUID
+	RunID          uuid.UUID
+	StepKey        string
+	ItemKey        string
+	Position       int32
+	Status         string
+	Blocking       bool
+	Mutating       bool
+	CapabilityKey  *string
+	ExecutionMode  *string
+	AttemptCount   int32
+	MaxAttempts    int32
+	NextAttemptAt  time.Time
+	LeaseToken     *uuid.UUID
+	LeaseExpiresAt *time.Time
+	Output         []byte
+	Error          []byte
+	SkipReason     *string
+	StartedAt      *time.Time
+	FinishedAt     *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type WorkflowStepAttempt struct {
+	ID         uuid.UUID
+	OrgID      uuid.UUID
+	StepID     uuid.UUID
+	AttemptNo  int32
+	Outcome    string
+	Error      []byte
+	TraceID    *string
+	StartedAt  time.Time
+	FinishedAt time.Time
 }

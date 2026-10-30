@@ -275,7 +275,21 @@ Docker Compose for local development and a single-host staging setup: `nginx`, `
 | Validation | Structural (schema) on every write, so a stored section is always well-formed. Semantic checks (address completeness, duplicate channels/categories/attributes, COD needs an enabled channel, SKU generation settings) and warnings run on validate, publish and preview. |
 | Diff | Pure function over the merged target, what is known about the shop, and the resolved capabilities. Product sections are not shop changes. Sensitivity comes from the field, not the capability (update_profile is sensitive for the name but not the description). |
 
-## 11. Conventions
+## 11. Phase 4 implementation notes
+
+| Topic | As built |
+|---|---|
+| Packages | `internal/workflow` is the generic engine (no Shopee or template knowledge); `internal/workflows/shopsetup` registers SHOP_SETUP v1 and the apply endpoint. Definitions live in code only; the planned `workflow_definitions` table was not needed. |
+| Run status | Never set directly: derived from the steps after every change (`DeriveRunStatus`) and checked against the legal run moves. Step changes go through `Transition`, covered by an exhaustive table test. |
+| Claim and finish | Claim locks the step and run rows, checks due time, earlier steps and cancellation, then sets a lease token. Handlers run outside any transaction. Finish updates `WHERE lease_token = mine`; a worker whose lease expired cannot overwrite the newer result. |
+| Queue | Tasks carry `(org_id, step_id)` only, with Asynq retries disabled; the engine owns retries (full jitter). Engine enqueues use no task IDs: claiming is the deduplication, and a reused ID could swallow a legitimate re-run after a user retry (a bug found by the tests). The sweeper (every 15 s, app_system pool, read-only columns) re-enqueues runnable steps older than 30 s and expired leases. |
+| Per-shop serialization | Mutating steps take a transaction-scoped advisory lock per shop during claim and wait (without spending an attempt) while another mutating step of that shop holds a live lease. |
+| Approvals | Approval rows keep the exact diff shown. Decisions validate the selected paths against that diff. Q-3 is enforced by a policy hook: Operators cannot approve runs they started unless `allow_self_approval` is on. |
+| Manual work | Changes without an Open API (banner, decoration, warehouse, address creation, and the logo until S-4) become manual tasks; the step waits until a user marks them done. |
+| Shopee auth during runs | A rejected access token triggers one forced refresh; a rejected refresh marks the shop `RECONNECT_REQUIRED` and the run waits for reconnect + resume. |
+| Partitions | `maintenance.EnsurePartitions` runs daily on the system pool (the only role allowed to create partitions), three months ahead, for `audit_logs` and `workflow_events`. |
+
+## 12. Conventions
 
 - Go: `gofmt`, `go vet`, `golangci-lint` (errcheck, staticcheck, gosec, revive, contextcheck). `context.Context` is the first parameter of every function that does I/O.
 - Errors: wrap with `%w`; domain errors are typed (`ErrNotFound`, `ErrConflict`, `ValidationError`) and mapped to HTTP only in `httpx`.

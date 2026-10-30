@@ -551,8 +551,17 @@ Phase 3 notes:
 - A check ties `content_sha256` and `published_at` to non-draft status. The hash is SHA-256 of the canonical JSON of all sections (sorted keys).
 - Published and archived sections are immutable in the database: a trigger rejects `INSERT`/`UPDATE`/`DELETE` on sections whose version is not `DRAFT`, whatever the application does. A test checks it.
 - `shop_template_sections.content` is validated against the section's JSON Schema on every write (in the application); the column only enforces "is an object".
-- `shop_config_snapshots` from the ERD is not created yet; it arrives with the workflow engine in Phase 4. Previews compare against `shop_profiles`.
+- `shop_config_snapshots` arrived in Phase 4 (`BEFORE_APPLY` and `AFTER_APPLY` per run). Previews still compare against `shop_profiles`; runs compare against what they read.
 - Template names are unique per org among non-deleted templates (`lower(name)`).
+
+Phase 4 tables with RLS: `workflow_runs`, `workflow_steps`, `workflow_step_attempts`, `workflow_approvals`, `workflow_events` (append-only, monthly partitions), `shop_config_snapshots`.
+
+Phase 4 notes:
+- Idempotency: `(org_id, idempotency_key)` is indexed, not unique, because one apply request creates one run per shop. The apply transaction takes an advisory lock on the key and compares a request hash, so a repeated key returns the same runs and a different request with the same key is `409`.
+- One active SHOP_SETUP per shop: partial unique index on `shop_connection_id` for active statuses.
+- `workflow_steps` has a check tying `status = RUNNING` to a lease token. `workflow_approvals` allows one pending approval per step.
+- `app_system` gets read-only column grants on `workflow_steps` and `workflow_runs` for the sweeper, never input, output or diffs (tested).
+- Migration `00004` switches `shop.avatar.upload` to `MANUAL` until S-4 is verified.
 
 ### 4.1 Roles
 

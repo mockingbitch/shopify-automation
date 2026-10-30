@@ -24,6 +24,7 @@ import (
 	"shopee-automation/internal/platform/envelope"
 	"shopee-automation/internal/platform/logx"
 	"shopee-automation/internal/platform/mailer"
+	"shopee-automation/internal/platform/maintenance"
 	"shopee-automation/internal/platform/otelx"
 	"shopee-automation/internal/platform/queue"
 	"shopee-automation/internal/platform/ratelimit"
@@ -108,6 +109,17 @@ func run() error {
 		_, err := svc.SweepWebhooks(ctx)
 		return err
 	})
+	mux.Handle(queue.TypeStepExecute, a.Engine.HandleExecute)
+	mux.Handle(queue.TypeStepSweep, func(ctx context.Context, _ []byte) error {
+		n, err := a.Engine.Sweep(ctx)
+		if n > 0 {
+			log.InfoContext(ctx, "workflow steps re-enqueued", slog.Int("count", n))
+		}
+		return err
+	})
+	mux.Handle(queue.TypePartitions, func(ctx context.Context, _ []byte) error {
+		return maintenance.EnsurePartitions(ctx, system, time.Now(), 3)
+	})
 
 	redisConn := asynq.RedisClientOpt{Addr: ropt.Addr, Username: ropt.Username, Password: ropt.Password, DB: ropt.DB, TLSConfig: ropt.TLSConfig}
 	srv := asynq.NewServer(redisConn, asynq.Config{
@@ -124,6 +136,14 @@ func run() error {
 			return err
 		}
 		if _, err := sched.Register("*/2 * * * *", asynq.NewTask(queue.TypeWebhookSweep, nil), asynq.Unique(90*time.Second)); err != nil {
+			return err
+		}
+		// Workflow steps without a live task (workflow-design.md §4).
+		if _, err := sched.Register("@every 15s", asynq.NewTask(queue.TypeStepSweep, nil), asynq.Unique(14*time.Second)); err != nil {
+			return err
+		}
+		// Monthly partitions for audit_logs and workflow_events, 3 months ahead.
+		if _, err := sched.Register("17 3 * * *", asynq.NewTask(queue.TypePartitions, nil), asynq.Unique(time.Hour)); err != nil {
 			return err
 		}
 		if err := sched.Start(); err != nil {

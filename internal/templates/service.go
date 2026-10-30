@@ -46,6 +46,9 @@ type Service struct {
 	Registry *Registry
 	Shops    ShopReader
 	Log      *slog.Logger
+	// ActiveRuns counts workflow runs that use a template and are still
+	// running (set by the app; nil means none).
+	ActiveRuns func(ctx context.Context, orgID, templateID uuid.UUID) (int64, error)
 }
 
 func (s *Service) tx(ctx context.Context, p authctx.Principal, t authctx.Tenant, fn func(q *templatesdb.Queries, tx pgx.Tx) error) error {
@@ -321,9 +324,18 @@ func (s *Service) Update(ctx context.Context, p authctx.Principal, t authctx.Ten
 	return d.Template, err
 }
 
-// Delete soft-deletes a template. Workflows that use templates arrive in
-// Phase 4; they will block deletion while running.
+// Delete soft-deletes a template. It is refused while workflow runs that
+// use the template are still active.
 func (s *Service) Delete(ctx context.Context, p authctx.Principal, t authctx.Tenant, id uuid.UUID) error {
+	if s.ActiveRuns != nil {
+		n, err := s.ActiveRuns(ctx, t.OrgID, id)
+		if err != nil {
+			return apperr.Internal(err)
+		}
+		if n > 0 {
+			return apperr.Conflict("template_in_use", "Workflows using this template are still running. Wait for them or cancel them first.")
+		}
+	}
 	return wrap(s.tx(ctx, p, t, func(q *templatesdb.Queries, tx pgx.Tx) error {
 		if _, err := q.LockTemplate(ctx, templatesdb.LockTemplateParams{OrgID: t.OrgID, ID: id}); err != nil {
 			return wrap(err, errTemplateNotFound)
@@ -833,4 +845,71 @@ func derefStr(p *string) string {
 		return ""
 	}
 	return *p
+}
+
+// Resolved is a published version merged with one shop's overrides.
+type Resolved struct {
+	TemplateID   uuid.UUID `json:"template_id"`
+	TemplateName string    `json:"template_name"`
+	VersionID    uuid.UUID `json:"version_id"`
+	VersionNo    int       `json:"version_no"`
+	Status       string    `json:"status"`
+	Sections     Sections  `json:"sections"`
+	HasOverrides bool      `json:"has_overrides"`
+}
+
+// Resolve returns a version merged with the shop's current overrides.
+func (s *Service) Resolve(ctx context.Context, t authctx.Tenant, templateID, versionID, shopID uuid.UUID) (Resolved, error) {
+	var out Resolved
+	err := s.tx(ctx, authctx.Principal{}, t, func(q *templatesdb.Queries, _ pgx.Tx) error {
+		tpl, err := q.GetTemplate(ctx, templatesdb.GetTemplateParams{OrgID: t.OrgID, ID: templateID})
+		if err != nil {
+			return wrap(err, errTemplateNotFound)
+		}
+		v, err := q.GetVersion(ctx, templatesdb.GetVersionParams{OrgID: t.OrgID, TemplateID: templateID, ID: versionID})
+		if err != nil {
+			return wrap(err, errVersionNotFound)
+		}
+		base, _, err := s.loadSections(ctx, q, t, v.ID)
+		if err != nil {
+			return err
+		}
+		var over Sections
+		m, err := q.GetMapping(ctx, templatesdb.GetMappingParams{OrgID: t.OrgID, TemplateID: templateID, ShopConnectionID: shopID})
+		switch {
+		case err == nil:
+			if err := json.Unmarshal(m.Overrides, &over); err != nil {
+				return err
+			}
+		case !db.IsNoRows(err):
+			return err
+		}
+		merged, err := Merge(base, over)
+		if err != nil {
+			return err
+		}
+		out = Resolved{TemplateID: tpl.ID, TemplateName: tpl.Name, VersionID: v.ID, VersionNo: int(v.VersionNo), Status: v.Status,
+			Sections: merged, HasOverrides: len(over) > 0}
+		return nil
+	})
+	return out, wrap(err, nil)
+}
+
+// VersionStatus returns a version's status and number.
+func (s *Service) VersionStatus(ctx context.Context, t authctx.Tenant, templateID, versionID uuid.UUID) (string, int, string, error) {
+	var status, name string
+	var no int
+	err := s.tx(ctx, authctx.Principal{}, t, func(q *templatesdb.Queries, _ pgx.Tx) error {
+		tpl, err := q.GetTemplate(ctx, templatesdb.GetTemplateParams{OrgID: t.OrgID, ID: templateID})
+		if err != nil {
+			return wrap(err, errTemplateNotFound)
+		}
+		v, err := q.GetVersion(ctx, templatesdb.GetVersionParams{OrgID: t.OrgID, TemplateID: templateID, ID: versionID})
+		if err != nil {
+			return wrap(err, errVersionNotFound)
+		}
+		status, no, name = v.Status, int(v.VersionNo), tpl.Name
+		return nil
+	})
+	return status, no, name, wrap(err, nil)
 }

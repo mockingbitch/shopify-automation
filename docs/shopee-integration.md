@@ -245,6 +245,7 @@ Implemented and tested against an in-process fake that follows the documented co
 | Client | Re-sign per attempt; retries for reads on transient errors, for all calls on connection refused / DNS failure and on `error_rate_limit` / HTTP 429; writes that may have reached Shopee become `KindAmbiguous` and are not retried; per-app and per-shop limits in Redis (fail open); errors and spans carry the path, never the URL | `internal/shopee/client.go` |
 | Error mapping | Table of documented codes (from the error lists of `auth/token/get`, `auth/access_token/get`, `shop/get_shop_info` and the common list) → transient, rate limited, auth, authorization lost, app config, permission, validation, not found | `internal/shopee/errors.go` |
 | Endpoints | `auth/token/get` (shop or main account), `auth/access_token/get`, `shop/get_shop_info`, `shop/get_profile`, auth link, push signature | `internal/shopee/api.go` |
+| Endpoints (Phase 4) | `logistics/get_channel_list`, `logistics/get_address_list`, `shop/update_profile`, `logistics/update_channel`, `logistics/update_address`, `logistics/set_address_config` (set-value calls, retried on transient errors) | `internal/shopee/logistics.go` |
 | Flows | Connect, reconnect (same shop only), main-account selection, just-in-time and scheduled refresh, sync, disconnect, pushes 1/2/12 | `internal/shops` |
 
 Findings while reading the reference (handled in code, to confirm in sandbox):
@@ -253,6 +254,8 @@ Findings while reading the reference (handled in code, to confirm in sandbox):
 - Main account: the guide says the first `access_token`/`refresh_token` are identical for all authorized shops and each shop then refreshes on its own. Each attached shop therefore stores the same initial pair.
 - `error_auth` is also documented for unrelated messages ("System error", stock rules), so it maps to `auth`, not to "authorization lost". Only the refresh-specific codes (`error_shop_refresh_token`, `refresh_token_expired`, `shop_access_expired`, `shop_no_linked`, …) mark a shop `RECONNECT_REQUIRED`.
 - `logistics/set_address_config` documents the address type `PICKUP_ADDRESS`, while `logistics/get_address_list` returns `PICK_UP_ADDRESS`. Templates use the set-side value; the Phase 4 reader must accept both.
+- `get_channel_list` documents `cod_enabled` as "this channel supports COD", not "COD is on", so the current COD state of a channel is treated as unknown. `get_address_list` has no recipient name or phone, so those cannot be verified after `update_address`.
+- `shop.avatar.upload` runs as a manual task until S-4 (logo `scene`, whether `update_profile.shop_logo` accepts a media_space URL) is verified.
 - Push delivery: timeout 3 s, retries after 300, 1800 and 10800 seconds (push reference metadata). The receiver stores and answers before any processing.
 
 ## 11. Open items

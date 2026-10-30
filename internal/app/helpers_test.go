@@ -85,6 +85,7 @@ func newEnv(t *testing.T) *env {
 		queue.TypeShopSync:       e.app.Shops.HandleSync,
 		queue.TypeTokenRefresh:   e.app.Shops.HandleRefresh,
 		queue.TypeWebhookProcess: e.app.Shops.HandleWebhook,
+		queue.TypeStepExecute:    e.app.Engine.HandleExecute,
 	}
 	e.srv = httptest.NewServer(e.app.Handler())
 	t.Cleanup(e.srv.Close)

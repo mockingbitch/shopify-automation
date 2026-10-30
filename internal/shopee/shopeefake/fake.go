@@ -28,6 +28,26 @@ type Shop struct {
 	Logo        string
 	Description string
 	ExpireTime  time.Time
+	Channels    []Channel
+	Addresses   []Address
+}
+
+// Channel is a fake logistics channel.
+type Channel struct {
+	ID          int64
+	Name        string
+	Enabled     bool
+	SupportsCOD bool
+	CODEnabled  bool
+}
+
+// Address is a fake shop address. Types use the read spelling
+// (PICK_UP_ADDRESS), as get_address_list documents.
+type Address struct {
+	ID                                                 int64
+	State, City, District, Town, Line, Zipcode, Region string
+	Name, Phone                                        string
+	Types                                              []string
 }
 
 type token struct {
@@ -78,8 +98,24 @@ func New(partnerID int64, partnerKey []byte) *Server {
 	mux.HandleFunc("POST /api/v2/auth/access_token/get", s.refreshGet)
 	mux.HandleFunc("GET /api/v2/shop/get_shop_info", s.shopInfo)
 	mux.HandleFunc("GET /api/v2/shop/get_profile", s.profile)
+	mux.HandleFunc("GET /api/v2/logistics/get_channel_list", s.channelList)
+	mux.HandleFunc("GET /api/v2/logistics/get_address_list", s.addressList)
+	mux.HandleFunc("POST /api/v2/shop/update_profile", s.updateProfile)
+	mux.HandleFunc("POST /api/v2/logistics/update_channel", s.updateChannel)
+	mux.HandleFunc("POST /api/v2/logistics/update_address", s.updateAddress)
+	mux.HandleFunc("POST /api/v2/logistics/set_address_config", s.setAddressConfig)
 	s.Server = httptest.NewServer(mux)
 	return s
+}
+
+// Shop returns a copy of a shop's current state.
+func (s *Server) Shop(id int64) Shop {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sh := *s.shops[id]
+	sh.Channels = append([]Channel(nil), sh.Channels...)
+	sh.Addresses = append([]Address(nil), sh.Addresses...)
+	return sh
 }
 
 // AddShop registers a shop.
@@ -348,6 +384,197 @@ func remove(ids []int64, id int64) []int64 {
 	out := ids[:0:0]
 	for _, x := range ids {
 		if x != id {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+func (s *Server) shopFor(w http.ResponseWriter, shopID int64) *Shop {
+	sh := s.shops[shopID]
+	if sh == nil {
+		writeErr(w, 200, "error_shop", "shopid is invalid")
+	}
+	return sh
+}
+
+func (s *Server) channelList(w http.ResponseWriter, r *http.Request) {
+	_, shopID, ok := s.begin(w, r, signer.Shop)
+	if !ok {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sh := s.shopFor(w, shopID)
+	if sh == nil {
+		return
+	}
+	list := []map[string]any{}
+	for _, c := range sh.Channels {
+		list = append(list, map[string]any{"logistics_channel_id": c.ID, "logistics_channel_name": c.Name,
+			"cod_enabled": c.SupportsCOD, "enabled": c.Enabled, "fee_type": "SIZE_INPUT", "mask_channel_id": 0, "force_enable": false})
+	}
+	writeJSON(w, map[string]any{"error": "", "message": "", "request_id": random()[:16],
+		"response": map[string]any{"logistics_channel_list": list}})
+}
+
+func (s *Server) addressList(w http.ResponseWriter, r *http.Request) {
+	_, shopID, ok := s.begin(w, r, signer.Shop)
+	if !ok {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sh := s.shopFor(w, shopID)
+	if sh == nil {
+		return
+	}
+	list := []map[string]any{}
+	for _, a := range sh.Addresses {
+		list = append(list, map[string]any{"address_id": a.ID, "region": a.Region, "state": a.State, "city": a.City,
+			"district": a.District, "town": a.Town, "address": a.Line, "zipcode": a.Zipcode, "address_type": a.Types})
+	}
+	writeJSON(w, map[string]any{"error": "", "message": "", "request_id": random()[:16],
+		"response": map[string]any{"show_pickup_address": true, "address_list": list}})
+}
+
+func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
+	body, shopID, ok := s.begin(w, r, signer.Shop)
+	if !ok {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sh := s.shopFor(w, shopID)
+	if sh == nil {
+		return
+	}
+	if v, ok := body["shop_name"].(string); ok {
+		sh.Name = v
+	}
+	if v, ok := body["description"].(string); ok {
+		sh.Description = v
+	}
+	if v, ok := body["shop_logo"].(string); ok {
+		sh.Logo = v
+	}
+	writeJSON(w, map[string]any{"error": "", "message": "", "request_id": random()[:16], "response": map[string]any{}})
+}
+
+func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
+	body, shopID, ok := s.begin(w, r, signer.Shop)
+	if !ok {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sh := s.shopFor(w, shopID)
+	if sh == nil {
+		return
+	}
+	id := num(body["logistics_channel_id"])
+	for i := range sh.Channels {
+		c := &sh.Channels[i]
+		if c.ID != id {
+			continue
+		}
+		if v, ok := body["enabled"].(bool); ok {
+			c.Enabled = v
+		}
+		if v, ok := body["cod_enabled"].(bool); ok {
+			if v && !c.SupportsCOD {
+				writeErr(w, 200, "error_param", "Seller or Channel does not support COD.")
+				return
+			}
+			c.CODEnabled = v
+		}
+		writeJSON(w, map[string]any{"error": "", "message": "", "request_id": random()[:16],
+			"response": map[string]any{"shop_id": shopID, "logistics_channel_id": id, "enabled": c.Enabled, "cod_enabled": c.CODEnabled}})
+		return
+	}
+	writeErr(w, 200, "error_param", "Wrong parameters, detail: channel not found.")
+}
+
+func (s *Server) updateAddress(w http.ResponseWriter, r *http.Request) {
+	body, shopID, ok := s.begin(w, r, signer.Shop)
+	if !ok {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sh := s.shopFor(w, shopID)
+	if sh == nil {
+		return
+	}
+	id := num(body["address_id"])
+	for i := range sh.Addresses {
+		a := &sh.Addresses[i]
+		if a.ID != id {
+			continue
+		}
+		set := func(dst *string, key string) {
+			if v, ok := body[key].(string); ok {
+				*dst = v
+			}
+		}
+		set(&a.State, "state")
+		set(&a.City, "city")
+		set(&a.District, "district")
+		set(&a.Town, "town")
+		set(&a.Line, "address")
+		set(&a.Zipcode, "zipcode")
+		set(&a.Name, "name")
+		set(&a.Phone, "phone")
+		writeJSON(w, map[string]any{"error": "", "message": "", "request_id": random()[:16]})
+		return
+	}
+	writeErr(w, 200, "logistics.address_not_found", "Address not found.")
+}
+
+func (s *Server) setAddressConfig(w http.ResponseWriter, r *http.Request) {
+	body, shopID, ok := s.begin(w, r, signer.Shop)
+	if !ok {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sh := s.shopFor(w, shopID)
+	if sh == nil {
+		return
+	}
+	cfg, _ := body["address_type_config"].(map[string]any)
+	id := num(cfg["address_id"])
+	raw, _ := cfg["address_type"].([]any)
+	found := false
+	for _, a := range sh.Addresses {
+		found = found || a.ID == id
+	}
+	if !found {
+		writeErr(w, 200, "logistics.address_not_found", "Address not found.")
+		return
+	}
+	for _, t := range raw {
+		typ, _ := t.(string)
+		read := typ
+		if typ == "PICKUP_ADDRESS" {
+			read = "PICK_UP_ADDRESS"
+		}
+		// A flag belongs to exactly one address: move it.
+		for i := range sh.Addresses {
+			a := &sh.Addresses[i]
+			a.Types = remove2(a.Types, read)
+			if a.ID == id {
+				a.Types = append(a.Types, read)
+			}
+		}
+	}
+	writeJSON(w, map[string]any{"error": "", "message": "", "request_id": random()[:16]})
+}
+
+func remove2(ts []string, t string) []string {
+	out := ts[:0:0]
+	for _, x := range ts {
+		if x != t {
 			out = append(out, x)
 		}
 	}

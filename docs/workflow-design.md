@@ -1,6 +1,6 @@
 # Workflow Engine Design — Shopee Shop Automation
 
-Status: Phase 0 draft · Last updated: 2026-10-30
+Status: Phase 4 implemented · Last updated: 2026-10-30
 
 ## 1. Principles
 
@@ -184,3 +184,19 @@ The UI polls `GET /runs/{id}/events?after=<cursor>` (SSE later). Event payloads 
 - Unit: transition table (every state × every event); backoff bounds; fan-out expansion; diff generation.
 - Integration (real Postgres + Redis in Docker): duplicate delivery (enqueue the same step 5× → handler runs once); worker crash (kill mid-step → lease expiry → one more attempt, never two concurrent); zombie fencing; partial failure and retry of only failed items; cancel during run; approval → resume.
 - `add_item` ambiguity: fake Shopee that times out after creating the item; assert reconciliation adopts the item and no duplicate is created.
+
+## 9. As built (Phase 4)
+
+Differences from the design above:
+
+| Design | As built | Why |
+|---|---|---|
+| `PENDING → WAITING_APPROVAL` | `RUNNING → WAITING_APPROVAL`; after approval the step returns to `PENDING`, runs again and succeeds with the selection | The handler decides whether an approval is needed and builds the diff |
+| Handlers may skip only from `PENDING` | `RUNNING → SKIPPED` is legal | Handlers find "nothing to change" while running |
+| Asynq `TaskID` on step tasks | No task IDs on engine enqueues; sweeper uses time-bucketed IDs | Claiming already deduplicates; a reused ID swallowed a re-run after user retry |
+| `workflow_definitions` table | Definitions in code only | Nothing reads them from the database yet |
+| Fan-out per item | Not yet; `apply_logistics` loops over channels inside one step and reports per item | Needed for products in Phase 5 |
+| Queues per class, per-org limit | One queue; per-shop serialization for mutating steps only | Numbers need load tests (Phase 8) |
+| Compensation | Not implemented | Needs a product decision on what may be restored automatically |
+| SHOP_SETUP step 7 `apply_branding` | Collects every selected change without an API (branding, warehouse, address creation) as manual tasks | One place where the user finishes the manual work |
+| Steps 9–11 | Not in v1 of the definition | Phase 5 |

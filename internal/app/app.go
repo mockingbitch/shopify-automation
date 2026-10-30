@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
@@ -31,6 +32,9 @@ import (
 	"shopee-automation/internal/shops"
 	"shopee-automation/internal/templates"
 	"shopee-automation/internal/tenancy"
+	"shopee-automation/internal/workflow"
+	"shopee-automation/internal/workflow/workflowdb"
+	"shopee-automation/internal/workflows/shopsetup"
 )
 
 // Access describes who may call a route.
@@ -94,6 +98,10 @@ type App struct {
 	audit    audit.Handler
 	shops    shops.Handler
 	tpl      templates.Handler
+	wf       workflow.Handler
+	apply    shopsetup.Handler
+	// Engine is exposed for the worker and tests.
+	Engine *workflow.Engine
 	// Shops is exposed for the worker and tests.
 	Shops *shops.Service
 }
@@ -118,8 +126,22 @@ func New(d Deps) *App {
 		AllowInsecureHosts: !d.Config.IsProduction(),
 	}
 	a.shops = shops.Handler{Svc: a.Shops, Log: d.Log}
-	a.tpl = templates.Handler{Svc: &templates.Service{DB: d.DB, Clock: d.Clock, Audit: rec,
-		Registry: templateRegistry, Shops: a.Shops, Log: d.Log}}
+	a.Engine = &workflow.Engine{DB: d.DB, System: d.SystemDB, Queue: d.Queue, Clock: d.Clock, Audit: rec, Log: d.Log}
+	tplSvc := &templates.Service{DB: d.DB, Clock: d.Clock, Audit: rec, Registry: templateRegistry, Shops: a.Shops, Log: d.Log,
+		ActiveRuns: func(ctx context.Context, orgID, templateID uuid.UUID) (int64, error) {
+			var n int64
+			err := d.DB.Tx(ctx, db.Scope{OrgID: orgID}, func(tx pgx.Tx) error {
+				var err error
+				n, err = workflowdb.New(tx).ActiveRunsForTemplate(ctx, workflowdb.ActiveRunsForTemplateParams{OrgID: orgID, TemplateID: templateID.String()})
+				return err
+			})
+			return n, err
+		}}
+	a.tpl = templates.Handler{Svc: tplSvc}
+	setup := &shopsetup.Setup{Shops: a.Shops, Templates: tplSvc, Engine: a.Engine}
+	a.Engine.Register(setup.Definition())
+	a.apply = shopsetup.Handler{Setup: setup, Audit: rec}
+	a.wf = workflow.Handler{Engine: a.Engine, Policy: approvalPolicy(tSvc)}
 	a.identity = identity.Handler{
 		Svc: idSvc, Limiter: d.Limiter, Log: d.Log, CookieSecure: d.Config.CookieSecure,
 		Memberships: func(ctx context.Context, userID uuid.UUID) (any, error) {
@@ -134,7 +156,7 @@ var templateRegistry = templates.LoadRegistry()
 
 // Routes returns the API route table.
 func (a *App) Routes() []Route {
-	id, tn, sh, tp := a.identity, a.tenancy, a.shops, a.tpl
+	id, tn, sh, tp, wf := a.identity, a.tenancy, a.shops, a.tpl, a.wf
 	return []Route{
 		{"POST", "/auth/register", Public, "", id.Register},
 		{"POST", "/auth/login", Public, "", id.Login},
@@ -190,6 +212,19 @@ func (a *App) Routes() []Route {
 		{"POST", "/orgs/{orgID}/templates/{templateID}/versions/{versionID}/preview", Tenant, rbac.TemplatesRead, tp.Preview},
 		{"GET", "/orgs/{orgID}/templates/{templateID}/shops/{shopID}/overrides", Tenant, rbac.TemplatesRead, tp.GetOverrides},
 		{"PUT", "/orgs/{orgID}/templates/{templateID}/shops/{shopID}/overrides", Tenant, rbac.TemplatesWrite, tp.PutOverrides},
+		{"POST", "/orgs/{orgID}/templates/{templateID}/versions/{versionID}/apply", Tenant, rbac.WorkflowsRun, a.apply.Apply},
+
+		{"GET", "/orgs/{orgID}/workflows", Tenant, rbac.WorkflowsRead, wf.List},
+		{"GET", "/orgs/{orgID}/workflows/{runID}", Tenant, rbac.WorkflowsRead, wf.Get},
+		{"GET", "/orgs/{orgID}/workflows/{runID}/events", Tenant, rbac.WorkflowsRead, wf.Events},
+		{"POST", "/orgs/{orgID}/workflows/{runID}/cancel", Tenant, rbac.WorkflowsCancel, wf.Cancel},
+		{"POST", "/orgs/{orgID}/workflows/{runID}/retry", Tenant, rbac.WorkflowsRetry, wf.Retry},
+		{"POST", "/orgs/{orgID}/workflows/{runID}/resume", Tenant, rbac.WorkflowsRun, wf.Resume},
+		{"POST", "/orgs/{orgID}/workflows/{runID}/steps/{stepID}/complete", Tenant, rbac.WorkflowsRun, wf.Complete},
+		{"GET", "/orgs/{orgID}/workflow-events", Tenant, rbac.WorkflowsRead, wf.Logs},
+		{"GET", "/orgs/{orgID}/approvals", Tenant, rbac.WorkflowsRead, wf.ListApprovals},
+		{"GET", "/orgs/{orgID}/approvals/{approvalID}", Tenant, rbac.WorkflowsRead, wf.GetApproval},
+		{"POST", "/orgs/{orgID}/approvals/{approvalID}/decision", Tenant, rbac.ApprovalsDecide, wf.Decide},
 
 		{"GET", "/admin/shopee-apps", Admin, "", sh.ListApps},
 		{"POST", "/admin/shopee-apps", Admin, "", sh.CreateApp},
@@ -241,6 +276,25 @@ func (a *App) Handler() http.Handler {
 		}
 		return r.Method
 	}))
+}
+
+// approvalPolicy implements Q-3: Operators may approve only runs started by
+// someone else, unless the organization allows self-approval. Owners and
+// admins may approve any run.
+func approvalPolicy(t *tenancy.Service) workflow.ApprovalPolicy {
+	return func(ctx context.Context, p authctx.Principal, tn authctx.Tenant, run workflowdb.WorkflowRun) error {
+		if tn.Role != rbac.Operator || run.CreatedBy == nil || *run.CreatedBy != p.UserID {
+			return nil
+		}
+		org, err := t.GetOrg(ctx, tn)
+		if err != nil {
+			return err
+		}
+		if !org.Settings.AllowSelfApproval {
+			return apperr.Forbidden("self_approval_not_allowed", "Operators cannot approve their own runs in this organization.")
+		}
+		return nil
+	}
 }
 
 // requireAdmin hides platform admin routes from everyone else.

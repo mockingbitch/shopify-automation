@@ -13,7 +13,7 @@ make env                      # .env from .env.example with a fresh encryption k
 make up                       # Postgres :5433, Redis :6379, MinIO :9000, Mailpit :8025, Jaeger :16686
 make tools                    # sqlc + golangci-lint
 make run                      # applies migrations, starts the API on :8080
-make worker                   # second terminal: background tasks + scheduler
+make worker                   # second terminal: background tasks + scheduler (needed for workflows)
 
 cd web
 npm ci
@@ -66,6 +66,10 @@ Without a sandbox app, the Go integration tests cover the same flows against `in
 | `app_system` | worker cross-tenant lookups | `BYPASSRLS`, column-level `SELECT` only |
 
 Integration tests create a throwaway database per test (`internal/platform/testdb`), migrate it as `app_owner` and connect as `app_rw` (and as `app_system` when `TEST_DATABASE_SYSTEM_URL` is set; CI always sets it).
+
+## Workflows locally
+
+Workflow steps run on the worker. Without `make worker`, applied templates stay `PENDING`. The scheduler (`-scheduler`, included in `make worker`) re-enqueues steps every 15 seconds, so a restarted worker picks up where it stopped. Run only one worker build at a time: an older worker without a handler for a task type consumes and drops those tasks (the sweeper re-enqueues them, but the old worker may take them again).
 
 ## Encryption keys
 

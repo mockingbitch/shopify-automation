@@ -7,7 +7,7 @@ info:
     organizations, membership, invitations, audit logs (Phase 1), and Shopee
     shop connections, capabilities, webhooks and partner-app administration
     (Phase 2), and shop templates with versions, overrides and previews
-    (Phase 3).
+    (Phase 3), and workflows with approvals and manual tasks (Phase 4).
 
     Conventions (see docs/api-design.md):
     - Session cookie `sid` (`__Host-sid` over HTTPS). Unsafe methods need the
@@ -30,6 +30,7 @@ tags:
   - name: audit
   - name: shops
   - name: templates
+  - name: workflows
   - name: webhooks
   - name: admin
 
@@ -910,11 +911,13 @@ paths:
     delete:
       tags: [templates]
       summary: Delete a template (soft delete)
+      description: Refused with `409 template_in_use` while workflow runs that use the template are active.
       x-permission: templates.publish
       responses:
         '204': {description: Deleted}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
 
   /orgs/{orgID}/templates/{templateID}/clone:
     parameters:
@@ -1177,6 +1180,290 @@ paths:
         '415': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
 
+  /orgs/{orgID}/templates/{templateID}/versions/{versionID}/apply:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/TemplateID'}
+      - {$ref: '#/components/parameters/VersionID'}
+    post:
+      tags: [workflows]
+      summary: Apply a published version to shops
+      description: |
+        Starts one SHOP_SETUP run per shop, sharing a batch ID. With an
+        `Idempotency-Key` (UUID), repeating the same request returns the same
+        runs (`replayed: true`); the same key with a different request is `409`.
+      x-permission: workflows.run
+      parameters:
+        - {name: Idempotency-Key, in: header, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [shop_ids]
+              properties:
+                shop_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: {type: string, format: uuid}
+      responses:
+        '202':
+          description: Runs started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [batch_id, workflow_run_ids, replayed]
+                    properties:
+                      batch_id: {type: string, format: uuid}
+                      workflow_run_ids:
+                        type: array
+                        items: {type: string, format: uuid}
+                      replayed: {type: boolean}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '424': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/workflows:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [workflows]
+      summary: List workflow runs, newest first
+      x-permission: workflows.read
+      parameters:
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/RunStatus'}}
+        - {name: shop_id, in: query, schema: {type: string, format: uuid}}
+        - {name: batch_id, in: query, schema: {type: string, format: uuid}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: Runs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/RunSummary'}
+                  next_cursor: {type: string, nullable: true}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/workflows/{runID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/RunID'}
+    get:
+      tags: [workflows]
+      summary: Run with steps, progress and pending approval
+      x-permission: workflows.read
+      responses:
+        '200': {$ref: '#/components/responses/RunView200'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/workflows/{runID}/events:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/RunID'}
+    get:
+      tags: [workflows]
+      summary: Run events in order (poll with `after`)
+      x-permission: workflows.read
+      parameters:
+        - {name: after, in: query, description: Cursor from the previous response, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 200}}
+      responses:
+        '200': {$ref: '#/components/responses/Events'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/workflows/{runID}/cancel:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/RunID'}
+    post:
+      tags: [workflows]
+      summary: Cancel a run
+      description: Changes already applied on Shopee are not rolled back.
+      x-permission: workflows.cancel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason: {type: string, maxLength: 500, nullable: true}
+      responses:
+        '202': {$ref: '#/components/responses/RunView202'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/workflows/{runID}/retry:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/RunID'}
+    post:
+      tags: [workflows]
+      summary: Retry the failed steps of a run
+      description: Succeeded steps are never run again.
+      x-permission: workflows.retry
+      responses:
+        '202': {$ref: '#/components/responses/RunView202'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/workflows/{runID}/resume:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/RunID'}
+    post:
+      tags: [workflows]
+      summary: Resume steps waiting for a user (e.g. after reconnecting)
+      x-permission: workflows.run
+      responses:
+        '202': {$ref: '#/components/responses/RunView202'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/workflows/{runID}/steps/{stepID}/complete:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/RunID'}
+      - {name: stepID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [workflows]
+      summary: Mark a step's manual tasks as done
+      x-permission: workflows.run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                note: {type: string, maxLength: 1000, nullable: true}
+      responses:
+        '202': {$ref: '#/components/responses/RunView202'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/workflow-events:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [workflows]
+      summary: Execution log across all runs, newest first
+      x-permission: workflows.read
+      parameters:
+        - {name: level, in: query, schema: {type: string, enum: [info, warn, error]}}
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 100}}
+      responses:
+        '200': {$ref: '#/components/responses/Events'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/approvals:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [workflows]
+      summary: List approvals, newest first
+      x-permission: workflows.read
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [PENDING, APPROVED, REJECTED, EXPIRED]}}
+      responses:
+        '200':
+          description: Approvals
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Approval'}
+                  next_cursor: {type: string, nullable: true}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/approvals/{approvalID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: approvalID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [workflows]
+      summary: Approval with the diff it asks about
+      x-permission: workflows.read
+      responses:
+        '200': {$ref: '#/components/responses/Approval200'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/approvals/{approvalID}/decision:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: approvalID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [workflows]
+      summary: Approve (with the selected changes) or reject
+      description: |
+        Only listed, enabled changes can be selected. Operators cannot
+        approve runs they started unless the organization allows
+        self-approval (`403 self_approval_not_allowed`).
+      x-permission: approvals.decide
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [decision]
+              properties:
+                decision: {type: string, enum: [APPROVE, REJECT]}
+                selected_change_paths:
+                  type: array
+                  items: {type: string}
+                comment: {type: string, maxLength: 1000, nullable: true}
+      responses:
+        '200': {$ref: '#/components/responses/Approval200'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
   /admin/shopee-apps:
     get:
       tags: [admin]
@@ -1251,6 +1538,11 @@ components:
       in: path
       required: true
       schema: {type: string}
+    RunID:
+      name: runID
+      in: path
+      required: true
+      schema: {type: string}
     TemplateID:
       name: templateID
       in: path
@@ -1268,6 +1560,45 @@ components:
       schema: {type: string}
 
   responses:
+    RunView200:
+      description: Run
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/RunView'}
+    RunView202:
+      description: Accepted; current state of the run
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/RunView'}
+    Approval200:
+      description: Approval
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/Approval'}
+    Events:
+      description: Events
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data, next_cursor]
+            properties:
+              data:
+                type: array
+                items: {$ref: '#/components/schemas/WorkflowEvent'}
+              next_cursor: {type: string, nullable: true}
     TemplateCreated:
       description: Template and its draft
       content:
@@ -1760,3 +2091,107 @@ components:
           type: array
           description: Changes whose capability is not available for this shop
           items: {$ref: '#/components/schemas/Change'}
+
+    RunStatus:
+      type: string
+      enum: [PENDING, RUNNING, WAITING_APPROVAL, WAITING_USER, COMPLETED, PARTIALLY_COMPLETED, FAILED, CANCELLED]
+
+    RunSummary:
+      type: object
+      required: [id, definition, definition_version, shop_id, batch_id, status, input, output, created_by,
+        cancel_requested, created_at, started_at, finished_at]
+      properties:
+        id: {type: string, format: uuid}
+        definition: {type: string, example: SHOP_SETUP}
+        definition_version: {type: integer}
+        shop_id: {type: string, format: uuid}
+        batch_id: {type: string, format: uuid, nullable: true}
+        status: {$ref: '#/components/schemas/RunStatus'}
+        input: {type: object, additionalProperties: true}
+        output: {type: object, additionalProperties: true, description: Report of the run when finished}
+        created_by: {type: string, format: uuid, nullable: true}
+        cancel_requested: {type: boolean}
+        created_at: {type: string, format: date-time}
+        started_at: {type: string, format: date-time, nullable: true}
+        finished_at: {type: string, format: date-time, nullable: true}
+
+    WorkflowStep:
+      type: object
+      required: [id, key, position, status, blocking, capability, attempt_count, max_attempts, next_attempt_at,
+        output, error, skip_reason, started_at, finished_at]
+      properties:
+        id: {type: string, format: uuid}
+        key: {type: string}
+        position: {type: integer}
+        status: {type: string, enum: [PENDING, RUNNING, SUCCEEDED, FAILED, SKIPPED, CANCELLED, WAITING_APPROVAL, WAITING_USER]}
+        blocking: {type: boolean, description: false when the run continues after this step fails}
+        capability: {type: string, nullable: true}
+        attempt_count: {type: integer}
+        max_attempts: {type: integer}
+        next_attempt_at: {type: string, format: date-time, nullable: true, description: Set while waiting to retry}
+        output: {nullable: true, description: 'Step output; for WAITING_USER: {reason, message, tasks[], result}'}
+        error: {nullable: true}
+        skip_reason: {type: string, nullable: true}
+        started_at: {type: string, format: date-time, nullable: true}
+        finished_at: {type: string, format: date-time, nullable: true}
+
+    RunView:
+      type: object
+      required: [run, steps, progress, pending_approval]
+      properties:
+        run: {$ref: '#/components/schemas/RunSummary'}
+        steps:
+          type: array
+          items: {$ref: '#/components/schemas/WorkflowStep'}
+        progress:
+          type: object
+          required: [total, done]
+          properties:
+            total: {type: integer}
+            done: {type: integer}
+        pending_approval:
+          allOf: [{$ref: '#/components/schemas/Approval'}]
+          nullable: true
+
+    Approval:
+      type: object
+      required: [id, run_id, step_id, shop_id, run_created_by, status, diff, selected_changes, decided_by, comment, decided_at, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        run_id: {type: string, format: uuid}
+        step_id: {type: string, format: uuid}
+        shop_id: {type: string, format: uuid}
+        run_created_by: {type: string, format: uuid, nullable: true}
+        status: {type: string, enum: [PENDING, APPROVED, REJECTED, EXPIRED]}
+        diff:
+          type: object
+          required: [changes, blocked]
+          properties:
+            changes:
+              type: array
+              items: {$ref: '#/components/schemas/Change'}
+            blocked:
+              type: array
+              items: {$ref: '#/components/schemas/Change'}
+        selected_changes:
+          type: array
+          items: {type: string}
+        decided_by: {type: string, format: uuid, nullable: true}
+        comment: {type: string, nullable: true}
+        decided_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+
+    WorkflowEvent:
+      type: object
+      required: [id, run_id, step_id, type, level, message, data, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        run_id: {type: string, format: uuid}
+        step_id: {type: string, format: uuid, nullable: true}
+        type: {type: string, enum: [RUN_CREATED, RUN_STATUS_CHANGED, STEP_STATUS_CHANGED, STEP_ATTEMPT_STARTED,
+          STEP_ATTEMPT_FINISHED, APPROVAL_REQUESTED, APPROVAL_DECIDED, USER_ACTION_REQUESTED, USER_ACTION_COMPLETED,
+          LOG, CANCEL_REQUESTED]}
+        level: {type: string, enum: [info, warn, error]}
+        message: {type: string}
+        data: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}

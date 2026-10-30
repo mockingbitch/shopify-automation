@@ -28,11 +28,11 @@ Deferred from Phase 1, tracked for later phases:
 
 | Item | Moves to |
 |---|---|
-| Emails through a retried background job | Phase 4 |
+| Emails through a retried background job | Phase 7 (moved) |
 | Breached-password check (k-anonymity range API) | Phase 8 |
 | TOTP / MFA (Q-5) | Phase 8 |
 | Platform admin endpoints (`/admin/*`) | Done in Phase 2 (`/admin/shopee-apps`) |
-| Job that creates future `audit_logs` partitions and purges deleted organizations | Phase 4 (scheduler) |
+| Job that creates future `audit_logs` partitions | Done in Phase 4; purge of deleted organizations moved to Phase 8 |
 | Resend verification email endpoint | Done in Phase 2 |
 
 
@@ -128,7 +128,43 @@ Goal: an operator builds a versioned shop template, admins publish it, shop-spec
 | 3.7 | Dashboard | Template list, editor generated from the schemas, versions, publish, clone, overrides, preview | Type-check + Playwright |
 | 3.8 | Docs sync | | Reviewed |
 
-## 5. Definition of done (every phase)
+## 5. Phase 4 task breakdown
+
+**Status (2026-10-30): done against the documented API.** Verified locally:
+- Exhaustive state-machine table test.
+- Engine integration tests on Postgres 17: duplicate delivery runs a step once, expired lease is taken over and the zombie's late result is dropped, retry with backoff, user retry reruns only failed steps, ContinueOnFailure, mutating steps serialize per shop, approve/reject, manual tasks, resume, cancel, sweeper recovers lost tasks.
+- SHOP_SETUP end to end through the API against the Shopee fake: idempotent apply, one active setup per shop, selection validation, self-approval rule, profile/channel/address writes, manual tasks, verification and report, partial failure then retry, lost authorization then reconnect and resume.
+- Tenant isolation extended to every workflow route and table; system role cannot read step data; partition job.
+- Mutation checks: removing the lease fence or the selection check each fails a test.
+- `golangci-lint` 0 issues, `sqlc diff`, migrations up/down/up, `nuxt typecheck` and build, Playwright smoke test, Docker build, and a manual UI run (apply → approve → manual task → completed).
+
+Deferred from Phase 4:
+
+| Item | Moves to |
+|---|---|
+| Steps 9–11 (products) and fan-out per item | Phase 5 |
+| Shop logo upload through the API (S-4); today a manual task | When S-4 is verified |
+| Emails through a retried job; in-app notifications (approval waiting, reconnect required) | Phase 7 |
+| Per-org concurrency limit and per-class queues (critical/default/bulk/low) | Phase 8 (load tests decide the numbers) |
+| Compensation (restore from `BEFORE_APPLY`) | Later; needs product decision |
+| Purge of deleted organizations; daily `get_shops_by_partner` reconciliation; `get_lost_push_message` recovery; trace propagation into tasks | Phase 8 |
+
+Goal: applying a published template to shops starts one SHOP_SETUP run per shop. Runs read the current shop configuration, show a diff for approval, apply only approved changes through the Open API, turn operations without an API into manual tasks, verify the result and report. Runs survive worker crashes, duplicate deliveries and retries without applying anything twice.
+
+| # | Task | Output | Done when |
+|---|---|---|---|
+| 4.1 | State machines | Pure `Transition` for runs and steps | Exhaustive table test (every state × every event) |
+| 4.2 | Schema | Migration `00004`: `workflow_runs`, `workflow_steps`, `workflow_step_attempts`, `workflow_approvals`, `workflow_events` (monthly partitions), `shop_config_snapshots` | RLS, one active SHOP_SETUP per shop, idempotency key per org |
+| 4.3 | Engine | Definitions in code, start, claim with lease (conditional update), fenced finish, dependencies, retry with full-jitter backoff, approvals, manual tasks, cancel, resume, user retry, events | Integration tests: duplicate delivery runs once, expired lease is taken over, zombie cannot overwrite, retry only failed steps |
+| 4.4 | Sweeper | Scheduled task that re-enqueues runnable steps and steps with expired leases | Test |
+| 4.5 | Shopee endpoints | `logistics/get_channel_list`, `logistics/get_address_list`, `shop/update_profile`, `logistics/update_channel`, `logistics/update_address`, `logistics/set_address_config` | Field names from the reference; fake extended |
+| 4.6 | SHOP_SETUP v1 | Steps 1–8 and 12–13 from workflow-design.md §6 (products 9–11 come in Phase 5). Branding, warehouse and address creation become manual tasks until the extension exists | End-to-end test against the fake |
+| 4.7 | API | Apply (with `Idempotency-Key`), runs list/detail/events, cancel, retry, resume, complete manual task, approvals list/detail/decision with the self-approval rule (Q-3) | Contract + isolation tests |
+| 4.8 | Housekeeping jobs | Create future `audit_logs` / `workflow_events` partitions | Test |
+| 4.9 | Dashboard | Apply from the preview, workflow list and detail (steps, approval with change selection, manual tasks), execution logs | Type-check + Playwright |
+| 4.10 | Docs sync | | Reviewed |
+
+## 6. Definition of done (every phase)
 
 1. Code + tests merged; `go test -race ./...`, lint and type-check green.
 2. Integration tests run against real Postgres/Redis containers.
@@ -137,7 +173,7 @@ Goal: an operator builds a versioned shop template, admins publish it, shop-spec
 5. Docs in `docs/` updated in the same PR.
 6. No feature is reported as working against Shopee unless it was exercised in sandbox; otherwise it is labelled `DOC-VERIFIED` only.
 
-## 6. Decisions needed from the product owner
+## 7. Decisions needed from the product owner
 
 | ID | Decision | Needed by |
 |---|---|---|

@@ -58,6 +58,29 @@ async function run() {
   }
 }
 
+const selectedVersion = computed(() => detail.value?.versions.find((v) => v.id === versionId.value))
+const canApply = computed(() => selectedVersion.value?.status === 'PUBLISHED' && can('workflows.run'))
+// One key per confirmation dialog: a double click or a retried request
+// returns the same runs instead of starting new ones.
+const applyKey = ref(crypto.randomUUID())
+
+async function apply() {
+  busy.value = true
+  error.value = ''
+  try {
+    const res = unwrap(await api.POST('/orgs/{orgID}/templates/{templateID}/versions/{versionID}/apply', {
+      params: { path: { ...path.value, versionID: versionId.value }, header: { 'Idempotency-Key': applyKey.value } },
+      body: { shop_ids: chosen.value },
+    }))
+    applyKey.value = crypto.randomUUID()
+    await navigateTo(`/orgs/${orgId.value}/workflows?batch=${res.data.batch_id}`)
+  } catch (e) {
+    error.value = toApiError(e).message
+  } finally {
+    busy.value = false
+  }
+}
+
 async function editOverrides(shopId: string) {
   overrideErrors.value = []
   overrideNotice.value = ''
@@ -121,7 +144,7 @@ function rowNote(c: Change): string {
   <div class="mx-auto max-w-6xl space-y-6">
     <NuxtLink :to="`/orgs/${orgId}/templates/${templateId}`" class="text-sm text-muted-foreground hover:underline">← Back to template</NuxtLink>
     <PageHeader :title="`Preview: ${detail?.template.name ?? ''}`"
-                description="What this version would change on each shop, compared with the last synced shop data. Nothing is changed on Shopee here; applying a template arrives with workflows." />
+                description="What this version would change on each shop, compared with the last synced shop data. Nothing is changed on Shopee until you apply and approve." />
     <FormError :message="error" />
 
     <form v-if="detail" class="space-y-4 rounded-lg border bg-background p-4" @submit.prevent="run">
@@ -142,7 +165,15 @@ function rowNote(c: Change): string {
           </label>
         </div>
       </fieldset>
-      <Button type="submit" :disabled="busy || !chosen.length || !versionId">{{ busy ? 'Comparing…' : 'Preview changes' }}</Button>
+      <div class="flex flex-wrap items-center gap-2">
+        <Button type="submit" :disabled="busy || !chosen.length || !versionId">{{ busy ? 'Working…' : 'Preview changes' }}</Button>
+        <ConfirmDialog v-if="canApply" :title="`Apply to ${chosen.length} shop${chosen.length === 1 ? '' : 's'}?`"
+                       description="One setup run starts per shop. Each run reads the shop again and waits for an approval before changing anything on Shopee."
+                       confirm-label="Start setup" @confirm="apply">
+          <template #trigger><Button type="button" variant="outline" :disabled="busy || !chosen.length">Apply to selected shops</Button></template>
+        </ConfirmDialog>
+        <span v-else-if="selectedVersion && selectedVersion.status !== 'PUBLISHED'" class="text-sm text-muted-foreground">Only the published version can be applied.</span>
+      </div>
     </form>
 
     <section v-for="p in previews" :key="p.shop_id" class="space-y-3 rounded-lg border bg-background p-4" :aria-labelledby="`pv-${p.shop_id}`">

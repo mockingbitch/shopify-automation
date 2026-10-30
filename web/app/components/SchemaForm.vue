@@ -117,7 +117,7 @@ function obj(name: string): JsonObject {
         </div>
         <textarea v-else-if="s.type === 'array'" :id="fid(name)" rows="3" :readonly="readonly"
                   class="w-full rounded-md border bg-background px-3 py-2 text-sm" placeholder="One per line"
-                  :value="lines(modelValue[name])" @change="set(name, fromLines($event))" />
+                  :value="lines(modelValue[name])" @input="set(name, fromLines($event))" />
         <select v-else-if="s.enum" :id="fid(name)" :disabled="readonly" class="h-9 w-full rounded-md border bg-background px-3 text-sm"
                 :value="modelValue[name] ?? ''" @change="set(name, ($event.target as HTMLSelectElement).value || undefined)">
           <option value="">Not set</option>
@@ -130,7 +130,7 @@ function obj(name: string): JsonObject {
         </label>
         <Input v-else-if="s.type === 'integer' || s.type === 'number'" :id="fid(name)" type="number" :readonly="readonly"
                :step="s.type === 'integer' ? 1 : 'any'" :model-value="(modelValue[name] as number | undefined) ?? ''"
-               @change="set(name, num($event, s.type === 'integer'))" />
+               @input="set(name, num($event, s.type === 'integer'))" />
         <textarea v-else-if="s['x-multiline']" :id="fid(name)" rows="4" :readonly="readonly" :maxlength="s.maxLength"
                   class="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   :value="(modelValue[name] as string | undefined) ?? ''" @input="set(name, ($event.target as HTMLTextAreaElement).value)" />

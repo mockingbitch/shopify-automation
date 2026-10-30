@@ -233,3 +233,49 @@ func TestAccessTTL(t *testing.T) {
 		}
 	}
 }
+
+func TestLogisticsAndProfileWrites(t *testing.T) {
+	fake, c, app, _ := setup(t)
+	fake.AddShop(shopeefake.Shop{ID: 42, Name: "S", Region: "VN",
+		Channels:  []shopeefake.Channel{{ID: 50011, Name: "Express", Enabled: false, SupportsCOD: true}, {ID: 50012, Name: "Bulky"}},
+		Addresses: []shopeefake.Address{{ID: 9, City: "HCM", Line: "1 A", Types: []string{"DEFAULT_ADDRESS", "PICK_UP_ADDRESS", "RETURN_ADDRESS"}}, {ID: 10, City: "HN"}}})
+	ctx := context.Background()
+	tok, _ := c.GetAccessToken(ctx, app, fake.Authorize(42), 42, 0)
+	at := tok.AccessToken
+
+	chans, err := c.GetChannelList(ctx, app, at, 42)
+	if err != nil || len(chans) != 2 || chans[0].Name != "Express" || !chans[0].CODEnabled || chans[0].Enabled {
+		t.Fatalf("channels: %+v %v", chans, err)
+	}
+	addrs, err := c.GetAddressList(ctx, app, at, 42)
+	if err != nil || len(addrs.Addresses) != 2 {
+		t.Fatalf("addresses: %+v %v", addrs, err)
+	}
+	if got := addrs.Addresses[0].AddressType; len(got) != 3 || got[1] != shopee.AddressPickup {
+		t.Fatalf("address types not normalized: %v", got)
+	}
+
+	name, desc := "New", "Desc"
+	if _, err := c.UpdateProfile(ctx, app, at, 42, shopee.ProfileUpdate{ShopName: &name, Description: &desc}); err != nil {
+		t.Fatal(err)
+	}
+	on, cod := true, true
+	if _, err := c.UpdateChannel(ctx, app, at, 42, shopee.ChannelUpdate{ID: 50011, Enabled: &on, CODEnabled: &cod}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.UpdateChannel(ctx, app, at, 42, shopee.ChannelUpdate{ID: 50012, CODEnabled: &cod}); !shopee.IsKind(err, shopee.KindValidation) {
+		t.Fatalf("cod on unsupported channel: %v", err)
+	}
+	city := "Hà Nội"
+	if _, err := c.UpdateAddress(ctx, app, at, 42, shopee.AddressUpdate{ID: 10, City: &city}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.SetAddressConfig(ctx, app, at, 42, 10, []string{shopee.AddressReturn}); err != nil {
+		t.Fatal(err)
+	}
+	sh := fake.Shop(42)
+	if sh.Name != "New" || sh.Description != "Desc" || !sh.Channels[0].Enabled || !sh.Channels[0].CODEnabled ||
+		sh.Addresses[1].City != "Hà Nội" || len(sh.Addresses[1].Types) != 1 || len(sh.Addresses[0].Types) != 2 {
+		t.Fatalf("fake state: %+v", sh)
+	}
+}

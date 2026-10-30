@@ -22,6 +22,9 @@ const (
 	TypeTokenRefreshDue = "shopee:token_refresh_due" // #nosec G101 -- task name, not a credential
 	TypeWebhookProcess  = "webhook:process"
 	TypeWebhookSweep    = "webhook:sweep"
+	TypeStepExecute     = "workflow:step"
+	TypeStepSweep       = "workflow:sweep"
+	TypePartitions      = "maintenance:partitions"
 )
 
 // Options controls one enqueue.
@@ -30,7 +33,11 @@ type Options struct {
 	// first is pending or retained.
 	ID       string
 	MaxRetry int
-	Timeout  time.Duration
+	// NoRetry disables queue-level retries (the caller owns retries).
+	NoRetry bool
+	Timeout time.Duration
+	// Delay postpones processing.
+	Delay time.Duration
 }
 
 // Enqueuer schedules tasks.
@@ -58,6 +65,12 @@ func (q Asynq) Enqueue(ctx context.Context, typ string, payload any, opt Options
 	}
 	if opt.MaxRetry > 0 {
 		opts = append(opts, asynq.MaxRetry(opt.MaxRetry))
+	}
+	if opt.NoRetry {
+		opts = append(opts, asynq.MaxRetry(0))
+	}
+	if opt.Delay > 0 {
+		opts = append(opts, asynq.ProcessIn(opt.Delay))
 	}
 	if opt.Timeout > 0 {
 		opts = append(opts, asynq.Timeout(opt.Timeout))
@@ -119,6 +132,13 @@ type Inline struct {
 	// Errors records handler failures; tests can assert it is empty.
 	Errors []error
 	ids    map[string]bool
+	// Delayed holds tasks enqueued with a delay; RunDelayed executes them.
+	delayed []delayedTask
+}
+
+type delayedTask struct {
+	typ     string
+	payload []byte
 }
 
 // Enqueue implements Enqueuer.
@@ -141,6 +161,11 @@ func (q *Inline) Enqueue(ctx context.Context, typ string, payload any, opt Optio
 		q.ids[opt.ID] = true
 	}
 	h := q.Handlers[typ]
+	if opt.Delay > 0 {
+		q.delayed = append(q.delayed, delayedTask{typ, b})
+		q.mu.Unlock()
+		return "delayed", nil
+	}
 	q.mu.Unlock()
 	if h != nil {
 		if err := h(context.WithoutCancel(ctx), b); err != nil {
@@ -154,6 +179,28 @@ func (q *Inline) Enqueue(ctx context.Context, typ string, payload any, opt Optio
 		id = "inline"
 	}
 	return id, nil
+}
+
+// RunDelayed executes every delayed task once (tests advance a fake clock
+// first so the work is due).
+func (q *Inline) RunDelayed(ctx context.Context) int {
+	q.mu.Lock()
+	tasks := q.delayed
+	q.delayed = nil
+	q.mu.Unlock()
+	for _, t := range tasks {
+		q.mu.Lock()
+		h := q.Handlers[t.typ]
+		q.mu.Unlock()
+		if h != nil {
+			if err := h(ctx, t.payload); err != nil {
+				q.mu.Lock()
+				q.Errors = append(q.Errors, fmt.Errorf("%s: %w", t.typ, err))
+				q.mu.Unlock()
+			}
+		}
+	}
+	return len(tasks)
 }
 
 // Count returns how many tasks of typ were enqueued.
