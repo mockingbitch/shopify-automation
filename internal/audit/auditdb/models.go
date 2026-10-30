@@ -204,6 +204,59 @@ type ShopProfile struct {
 	FetchedAt        time.Time
 }
 
+type ShopTemplate struct {
+	ID                        uuid.UUID
+	OrgID                     uuid.UUID
+	Name                      string
+	Description               string
+	CurrentPublishedVersionID *uuid.UUID
+	ClonedFromVersionID       *uuid.UUID
+	CreatedBy                 *uuid.UUID
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
+	DeletedAt                 *time.Time
+}
+
+type ShopTemplateMapping struct {
+	ID                   uuid.UUID
+	OrgID                uuid.UUID
+	TemplateID           uuid.UUID
+	ShopConnectionID     uuid.UUID
+	Overrides            []byte
+	LastAppliedVersionID *uuid.UUID
+	LastAppliedAt        *time.Time
+	UpdatedBy            *uuid.UUID
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+type ShopTemplateSection struct {
+	ID            uuid.UUID
+	OrgID         uuid.UUID
+	VersionID     uuid.UUID
+	SectionKey    string
+	Content       []byte
+	SchemaVersion int32
+	UpdatedBy     *uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type ShopTemplateVersion struct {
+	ID            uuid.UUID
+	OrgID         uuid.UUID
+	TemplateID    uuid.UUID
+	VersionNo     int32
+	Status        string
+	BasedOnID     *uuid.UUID
+	ContentSha256 []byte
+	CreatedBy     *uuid.UUID
+	PublishedAt   *time.Time
+	PublishedBy   *uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
 type ShopeeApp struct {
 	ID              uuid.UUID
 	Name            string

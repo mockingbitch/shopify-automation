@@ -6,7 +6,8 @@ info:
     REST API for the Shopee Shop Automation platform: authentication,
     organizations, membership, invitations, audit logs (Phase 1), and Shopee
     shop connections, capabilities, webhooks and partner-app administration
-    (Phase 2).
+    (Phase 2), and shop templates with versions, overrides and previews
+    (Phase 3).
 
     Conventions (see docs/api-design.md):
     - Session cookie `sid` (`__Host-sid` over HTTPS). Unsafe methods need the
@@ -28,6 +29,7 @@ tags:
   - name: invitations
   - name: audit
   - name: shops
+  - name: templates
   - name: webhooks
   - name: admin
 
@@ -775,6 +777,406 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '413': {$ref: '#/components/responses/Problem'}
 
+  /template-sections:
+    get:
+      tags: [templates]
+      summary: JSON Schemas (draft 2020-12) of the template sections
+      description: Source of truth for section content. Fields carry `x-capability` and `x-sensitive` annotations.
+      responses:
+        '200':
+          description: Section schemas in display order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [key, applies_to, schema]
+                      properties:
+                        key: {$ref: '#/components/schemas/SectionKey'}
+                        applies_to: {type: string, enum: [shop, products, defaults]}
+                        schema: {type: object, additionalProperties: true}
+                  next_cursor: {type: string, nullable: true}
+        '401': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/templates:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [templates]
+      summary: List templates
+      x-permission: templates.read
+      responses:
+        '200':
+          description: Templates
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Template'}
+                  next_cursor: {type: string, nullable: true}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [templates]
+      summary: Create a template with its first draft
+      x-permission: templates.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 100}
+                description: {type: string, maxLength: 1000}
+                sections:
+                  type: object
+                  description: Initial content per section key; other sections start empty.
+                  additionalProperties: {type: object, additionalProperties: true}
+      responses:
+        '201': {$ref: '#/components/responses/TemplateCreated'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/templates/{templateID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/TemplateID'}
+    get:
+      tags: [templates]
+      summary: Template with its versions, newest first
+      x-permission: templates.read
+      responses:
+        '200':
+          description: Template
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [template, versions]
+                    properties:
+                      template: {$ref: '#/components/schemas/Template'}
+                      versions:
+                        type: array
+                        items: {$ref: '#/components/schemas/TemplateVersion'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+    patch:
+      tags: [templates]
+      summary: Rename or describe a template
+      x-permission: templates.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: {type: string, minLength: 1, maxLength: 100}
+                description: {type: string, maxLength: 1000}
+      responses:
+        '200':
+          description: Template
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/Template'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [templates]
+      summary: Delete a template (soft delete)
+      x-permission: templates.publish
+      responses:
+        '204': {description: Deleted}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/templates/{templateID}/clone:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/TemplateID'}
+    post:
+      tags: [templates]
+      summary: Copy a version into a new template
+      description: Defaults to the published version, else the latest one.
+      x-permission: templates.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 100}
+                from_version_id: {type: string, format: uuid, nullable: true}
+      responses:
+        '201': {$ref: '#/components/responses/TemplateCreated'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/templates/{templateID}/versions:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/TemplateID'}
+    post:
+      tags: [templates]
+      summary: Start a new draft from an existing version
+      x-permission: templates.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [from_version_id]
+              properties:
+                from_version_id: {type: string, format: uuid}
+      responses:
+        '201':
+          description: Draft
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/TemplateVersion'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/templates/{templateID}/versions/{versionID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/TemplateID'}
+      - {$ref: '#/components/parameters/VersionID'}
+    get:
+      tags: [templates]
+      summary: Version with its sections
+      x-permission: templates.read
+      responses:
+        '200':
+          description: Version
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [version, sections]
+                    properties:
+                      version: {$ref: '#/components/schemas/TemplateVersion'}
+                      sections:
+                        type: array
+                        items: {$ref: '#/components/schemas/TemplateSection'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/templates/{templateID}/versions/{versionID}/sections/{sectionKey}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/TemplateID'}
+      - {$ref: '#/components/parameters/VersionID'}
+      - {name: sectionKey, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [templates]
+      summary: Replace one section of a draft
+      description: Body is the section object, validated against its JSON Schema. Requires `If-Match` with the section's `etag`.
+      x-permission: templates.write
+      parameters:
+        - {name: If-Match, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        '200':
+          description: Section
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/TemplateSection'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/templates/{templateID}/versions/{versionID}/validate:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/TemplateID'}
+      - {$ref: '#/components/parameters/VersionID'}
+    post:
+      tags: [templates]
+      summary: Validate a version
+      x-permission: templates.read
+      responses:
+        '200':
+          description: Validation report
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/ValidationReport'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/templates/{templateID}/versions/{versionID}/publish:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/TemplateID'}
+      - {$ref: '#/components/parameters/VersionID'}
+    post:
+      tags: [templates]
+      summary: Publish a draft
+      description: The version becomes immutable and current; the previous published version is archived. `422` lists validation errors.
+      x-permission: templates.publish
+      responses:
+        '200':
+          description: Published version
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/TemplateVersion'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/templates/{templateID}/versions/{versionID}/preview:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/TemplateID'}
+      - {$ref: '#/components/parameters/VersionID'}
+    post:
+      tags: [templates]
+      summary: Preview the changes a version would make on shops
+      description: |
+        Per shop: the version merged with the shop's overrides, compared with
+        the last synced profile. Values Shopee was not read for are
+        `current_known: false`; they are read before applying (Phase 4).
+      x-permission: templates.read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [shop_ids]
+              properties:
+                shop_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Previews
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/ShopPreview'}
+                  next_cursor: {type: string, nullable: true}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/templates/{templateID}/shops/{shopID}/overrides:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/TemplateID'}
+      - {$ref: '#/components/parameters/ShopID'}
+    get:
+      tags: [templates]
+      summary: Shop-specific overrides of a template
+      x-permission: templates.read
+      responses:
+        '200': {$ref: '#/components/responses/Overrides'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [templates]
+      summary: Replace shop-specific overrides
+      description: Partial sections, deep-merged on top of the template (objects merge, arrays replace). `{}` clears them.
+      x-permission: templates.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [overrides]
+              properties:
+                overrides:
+                  type: object
+                  additionalProperties: {type: object, additionalProperties: true}
+      responses:
+        '200': {$ref: '#/components/responses/Overrides'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
   /admin/shopee-apps:
     get:
       tags: [admin]
@@ -849,6 +1251,16 @@ components:
       in: path
       required: true
       schema: {type: string}
+    TemplateID:
+      name: templateID
+      in: path
+      required: true
+      schema: {type: string}
+    VersionID:
+      name: versionID
+      in: path
+      required: true
+      schema: {type: string}
     ShopID:
       name: shopID
       in: path
@@ -856,6 +1268,37 @@ components:
       schema: {type: string}
 
   responses:
+    TemplateCreated:
+      description: Template and its draft
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                type: object
+                required: [template, draft_version]
+                properties:
+                  template: {$ref: '#/components/schemas/Template'}
+                  draft_version: {$ref: '#/components/schemas/TemplateVersion'}
+    Overrides:
+      description: Shop overrides
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                type: object
+                required: [shop_id, overrides, updated_at]
+                properties:
+                  shop_id: {type: string, format: uuid}
+                  overrides:
+                    type: object
+                    additionalProperties: {type: object, additionalProperties: true}
+                  updated_at: {type: string, format: date-time, nullable: true}
     ConnectResult:
       description: Authorization URL to open in the browser
       content:
@@ -1215,3 +1658,105 @@ components:
         redirect_uri: {type: string}
         push_callback_url: {type: string, description: Empty string clears it}
         enabled: {type: boolean}
+
+    SectionKey:
+      type: string
+      enum: [general, branding, description, contact, warehouse, return_address, logistics, product_defaults,
+        category_mappings, sku_rules, default_descriptions, default_attributes]
+
+    Template:
+      type: object
+      required: [id, name, description, current_published_version_id, draft_version_id, latest_version_no,
+        cloned_from_version_id, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        current_published_version_id: {type: string, format: uuid, nullable: true}
+        draft_version_id: {type: string, format: uuid, nullable: true}
+        latest_version_no: {type: integer}
+        cloned_from_version_id: {type: string, format: uuid, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+
+    TemplateVersion:
+      type: object
+      required: [id, template_id, version_no, status, based_on_id, content_sha256, published_at, published_by, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        template_id: {type: string, format: uuid}
+        version_no: {type: integer, minimum: 1}
+        status: {type: string, enum: [DRAFT, PUBLISHED, ARCHIVED]}
+        based_on_id: {type: string, format: uuid, nullable: true}
+        content_sha256: {type: string, nullable: true}
+        published_at: {type: string, format: date-time, nullable: true}
+        published_by: {type: string, format: uuid, nullable: true}
+        created_at: {type: string, format: date-time}
+
+    TemplateSection:
+      type: object
+      required: [key, content, etag, updated_at]
+      properties:
+        key: {$ref: '#/components/schemas/SectionKey'}
+        content: {type: object, additionalProperties: true}
+        etag: {type: string, description: Send as If-Match when replacing the section}
+        updated_at: {type: string, format: date-time}
+
+    Issue:
+      type: object
+      required: [field, code, message]
+      properties:
+        field: {type: string}
+        code: {type: string}
+        message: {type: string}
+
+    ValidationReport:
+      type: object
+      required: [valid, errors, warnings]
+      properties:
+        valid: {type: boolean}
+        errors:
+          type: array
+          items: {$ref: '#/components/schemas/Issue'}
+        warnings:
+          type: array
+          items: {$ref: '#/components/schemas/Issue'}
+
+    Change:
+      type: object
+      required: [path, section, current, current_known, target, capability, mode, enabled, reason, sensitive, default_selected]
+      properties:
+        path: {type: string, example: general.shop_name}
+        section: {$ref: '#/components/schemas/SectionKey'}
+        current: {nullable: true, description: Last known value; null when unknown}
+        current_known: {type: boolean}
+        target: {nullable: true}
+        capability: {type: string}
+        mode: {type: string, enum: [API, BROWSER, MANUAL, UNSUPPORTED]}
+        enabled: {type: boolean}
+        reason: {type: string}
+        sensitive: {type: boolean, description: Never selected by default (FR-TPL-7)}
+        default_selected: {type: boolean}
+        note: {type: string}
+
+    ShopPreview:
+      type: object
+      required: [shop_id, shop_name, connection_status, has_overrides, errors, warnings, changes, blocked]
+      properties:
+        shop_id: {type: string, format: uuid}
+        shop_name: {type: string, nullable: true}
+        connection_status: {$ref: '#/components/schemas/ConnectionStatus'}
+        has_overrides: {type: boolean}
+        errors:
+          type: array
+          items: {$ref: '#/components/schemas/Issue'}
+        warnings:
+          type: array
+          items: {$ref: '#/components/schemas/Issue'}
+        changes:
+          type: array
+          items: {$ref: '#/components/schemas/Change'}
+        blocked:
+          type: array
+          description: Changes whose capability is not available for this shop
+          items: {$ref: '#/components/schemas/Change'}

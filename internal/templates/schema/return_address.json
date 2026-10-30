@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shopee-automation.local/templates/return_address.json",
+  "title": "Return address",
+  "description": "Pickup/return address. Existing addresses are edited with logistics/update_address and flagged with logistics/set_address_config; creating an address has no Open API (browser or manual). User-managed: never changed unless ticked in the approval step.",
+  "type": "object",
+  "additionalProperties": false,
+  "x-applies-to": "shop",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "title": "Recipient name"
+    },
+    "phone": {
+      "type": "string",
+      "pattern": "^\\+[1-9][0-9]{6,14}$",
+      "description": "E.164, e.g. +84901234567.",
+      "title": "Recipient phone"
+    },
+    "state": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "title": "State / province"
+    },
+    "city": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "title": "City"
+    },
+    "district": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "title": "District"
+    },
+    "town": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "title": "Town / ward"
+    },
+    "address": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "title": "Street address"
+    },
+    "zipcode": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9 -]{3,12}$",
+      "title": "Postal code"
+    },
+    "use_as": {
+      "type": "array",
+      "uniqueItems": true,
+      "title": "Use as",
+      "items": {
+        "type": "string",
+        "enum": [
+          "DEFAULT_ADDRESS",
+          "PICKUP_ADDRESS",
+          "RETURN_ADDRESS"
+        ]
+      },
+      "x-capability": "shop.address.config",
+      "description": "Address types from logistics/set_address_config."
+    }
+  },
+  "x-capability": "shop.address.update",
+  "x-sensitive": true
+}

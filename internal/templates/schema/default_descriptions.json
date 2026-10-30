@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shopee-automation.local/templates/default_descriptions.json",
+  "title": "Default descriptions",
+  "description": "Text added to product descriptions. {name} is replaced by the product name.",
+  "type": "object",
+  "additionalProperties": false,
+  "x-applies-to": "products",
+  "properties": {
+    "header": {
+      "type": "string",
+      "maxLength": 2000,
+      "title": "Header",
+      "x-multiline": true
+    },
+    "body_template": {
+      "type": "string",
+      "maxLength": 5000,
+      "title": "Body when the row has no description",
+      "x-multiline": true
+    },
+    "footer": {
+      "type": "string",
+      "maxLength": 2000,
+      "title": "Footer",
+      "x-multiline": true
+    }
+  }
+}

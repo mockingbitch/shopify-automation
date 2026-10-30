@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shopee-automation.local/templates/product_defaults.json",
+  "title": "Product defaults",
+  "description": "Defaults for products created from imports (product/add_item).",
+  "type": "object",
+  "additionalProperties": false,
+  "x-applies-to": "products",
+  "properties": {
+    "condition": {
+      "type": "string",
+      "enum": [
+        "NEW",
+        "USED"
+      ],
+      "title": "Condition"
+    },
+    "item_status": {
+      "type": "string",
+      "enum": [
+        "NORMAL",
+        "UNLIST"
+      ],
+      "title": "Status after creation",
+      "description": "UNLIST keeps new products hidden until reviewed."
+    },
+    "weight_kg": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1000,
+      "title": "Weight (kg)",
+      "description": "maximum: Internal limit; Shopee does not document one. Channel weight limits are checked when applying."
+    },
+    "package_cm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "length",
+        "width",
+        "height"
+      ],
+      "title": "Package size (cm)",
+      "properties": {
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      }
+    },
+    "pre_order": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "is_pre_order"
+      ],
+      "title": "Pre-order",
+      "properties": {
+        "is_pre_order": {
+          "type": "boolean"
+        },
+        "days_to_ship": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 90,
+          "description": "Allowed range comes from Shopee per category; checked when applying."
+        }
+      }
+    },
+    "brand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "brand_id",
+        "original_brand_name"
+      ],
+      "title": "Brand",
+      "properties": {
+        "brand_id": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "0 with \"No Brand\" when the product has no brand."
+        },
+        "original_brand_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      }
+    },
+    "stock": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000000,
+      "title": "Default stock"
+    }
+  }
+}

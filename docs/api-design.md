@@ -152,22 +152,25 @@ Callback error codes: `invalid_state`, `state_expired`, `state_used`, `authoriza
 
 | Method | Path | Permission | Request | Response |
 |---|---|---|---|---|
-| GET | `/orgs/{org_id}/templates` | `templates.read` | — | list |
-| POST | `/orgs/{org_id}/templates` | `templates.write` | `{name, description, sections}` | `201 {template, draft_version}` |
+| GET | `/template-sections` | S | — | JSON Schema (draft 2020-12) per section, in display order |
+| GET | `/orgs/{org_id}/templates` | `templates.read` | — | list (`draft_version_id`, `current_published_version_id`, `latest_version_no`) |
+| POST | `/orgs/{org_id}/templates` | `templates.write` | `{name, description?, sections?}` | `201 {template, draft_version}` |
 | GET | `/orgs/{org_id}/templates/{id}` | `templates.read` | — | `{template, versions[]}` |
 | PATCH | `/orgs/{org_id}/templates/{id}` | `templates.write` | `{name?, description?}` | `{template}` |
-| DELETE | `/orgs/{org_id}/templates/{id}` | `templates.publish` | — | `204` (soft); `409` if running workflows use it |
-| POST | `/orgs/{org_id}/templates/{id}/clone` | `templates.write` | `{name, from_version_id?}` | `201 {template}` |
-| GET | `/orgs/{org_id}/templates/{id}/versions/{vid}` | `templates.read` | — | `{version, sections}` |
-| POST | `/orgs/{org_id}/templates/{id}/versions` | `templates.write` | `{from_version_id}` | `201 {draft_version}`; `409` if a draft exists |
-| PUT | `/orgs/{org_id}/templates/{id}/versions/{vid}/sections/{section_key}` | `templates.write` | section JSON + `If-Match` | `{section}`; `409` if published |
-| POST | `/orgs/{org_id}/templates/{id}/versions/{vid}/validate` | `templates.read` | `{region?}` | `{valid, errors[], warnings[]}` |
-| POST | `/orgs/{org_id}/templates/{id}/versions/{vid}/publish` | `templates.publish` | — | `{version}`; `422` if invalid |
-| PUT | `/orgs/{org_id}/templates/{id}/shops/{shop_id}/overrides` | `templates.write` | overrides JSON | `{mapping}` |
-| POST | `/orgs/{org_id}/templates/{id}/versions/{vid}/preview` | `templates.read` | `{shop_ids[]}` (≤ 50) | `{previews: [{shop_id, changes[], blocked[]}]}` |
-| POST | `/orgs/{org_id}/templates/{id}/versions/{vid}/apply` | `workflows.run` | `{shop_ids[], import_batch_id?}` + `Idempotency-Key` | `202 {batch_id, workflow_run_ids[]}`; `409` per shop already running |
+| DELETE | `/orgs/{org_id}/templates/{id}` | `templates.publish` | — | `204` (soft). Blocking while workflows run comes in Phase 4 |
+| POST | `/orgs/{org_id}/templates/{id}/clone` | `templates.write` | `{name, from_version_id?}` | `201 {template, draft_version}` (default source: published, else latest) |
+| GET | `/orgs/{org_id}/templates/{id}/versions/{vid}` | `templates.read` | — | `{version, sections[{key, content, etag, updated_at}]}` |
+| POST | `/orgs/{org_id}/templates/{id}/versions` | `templates.write` | `{from_version_id}` | `201 {draft_version}`; `409 draft_exists` |
+| PUT | `/orgs/{org_id}/templates/{id}/versions/{vid}/sections/{section_key}` | `templates.write` | section JSON + `If-Match: <etag>` | `{section}` + `ETag`; `409 version_not_draft`; `412`; `422` with JSON Schema errors |
+| POST | `/orgs/{org_id}/templates/{id}/versions/{vid}/validate` | `templates.read` | — | `{valid, errors[], warnings[]}` |
+| POST | `/orgs/{org_id}/templates/{id}/versions/{vid}/publish` | `templates.publish` | — | `{version}`; `422` if invalid; previous published version → `ARCHIVED` |
+| GET/PUT | `/orgs/{org_id}/templates/{id}/shops/{shop_id}/overrides` | read / `templates.write` | `{overrides: {section: partial}}` | `{shop_id, overrides, updated_at}`; validated after merging on the template |
+| POST | `/orgs/{org_id}/templates/{id}/versions/{vid}/preview` | `templates.read` | `{shop_ids[]}` (1–50) | `[{shop_id, shop_name, connection_status, has_overrides, errors[], warnings[], changes[], blocked[]}]` |
+| POST | `/orgs/{org_id}/templates/{id}/versions/{vid}/apply` | `workflows.run` | `{shop_ids[], import_batch_id?}` + `Idempotency-Key` | Phase 4 |
 
-A diff change item: `{path, section, current, target, capability, mode, sensitive, default_selected}`.
+A change item: `{path, section, current, current_known, target, capability, mode, enabled, reason, sensitive, default_selected, note?}`. `current_known` is false when the value was not read from Shopee (only the profile is synced today). Sensitive fields (`x-sensitive` in the schema: shop name, return address, logistics) are never selected by default. Changes whose capability is disabled for the shop are listed under `blocked`.
+
+Merge rule for overrides: objects merge key by key, arrays and scalars replace.
 
 ### 3.5 Products and imports
 

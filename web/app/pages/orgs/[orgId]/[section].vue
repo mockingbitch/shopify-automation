@@ -1,12 +1,11 @@
 <script setup lang="ts">
 definePageMeta({
   middleware: 'org',
-  validate: (route) => ['templates', 'products', 'imports', 'workflows', 'logs'].includes(String(route.params.section)),
+  validate: (route) => ['products', 'imports', 'workflows', 'logs'].includes(String(route.params.section)),
 })
 
 const route = useRoute()
 const sections: Record<string, { title: string; phase: string; text: string }> = {
-  templates: { title: 'Shop Templates', phase: 'Phase 3', text: 'Create versioned configuration templates and preview the changes they would make.' },
   products: { title: 'Products', phase: 'Phase 5', text: 'Manage products, variations and images, and publish them to your shops.' },
   imports: { title: 'Product Imports', phase: 'Phase 5', text: 'Import products from CSV or Excel with row-by-row validation.' },
   workflows: { title: 'Automation Workflows', phase: 'Phase 4', text: 'Run shop setup workflows, approve changes, and retry or resume them.' },

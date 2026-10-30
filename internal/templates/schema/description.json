@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shopee-automation.local/templates/description.json",
+  "title": "Shop description",
+  "description": "Shop description text.",
+  "type": "object",
+  "additionalProperties": false,
+  "x-applies-to": "shop",
+  "properties": {
+    "text": {
+      "type": "string",
+      "maxLength": 5000,
+      "title": "Description",
+      "x-capability": "shop.profile.update",
+      "x-multiline": true,
+      "description": "Applied with shop/update_profile. maxLength: Internal limit; Shopee does not document one."
+    }
+  }
+}

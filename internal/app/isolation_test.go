@@ -44,15 +44,25 @@ func TestTenantIsolationHTTP(t *testing.T) {
 	loc := callback(t, alice, url.Values{"code": {e.fake.AuthorizeMain(5, 1002)}, "main_account_id": {"5"}, "state": {state}})
 	aSelection := loc.Query().Get("state")
 
-	ids := map[string]string{"{memberID}": aMember, "{invitationID}": inv.Data.ID, "{shopID}": aShop, "{stateID}": aSelection}
+	aTpl, aVersion := alice.createTemplate(orgA, "Org A template", map[string]any{"description": map[string]any{"text": "Org A secret text"}})
+
+	ids := map[string]string{"{memberID}": aMember, "{invitationID}": inv.Data.ID, "{shopID}": aShop, "{stateID}": aSelection,
+		"{templateID}": aTpl, "{versionID}": aVersion, "{sectionKey}": "description"}
 	bodies := map[string]any{
-		"PATCH /orgs/{orgID}":                               map[string]any{"name": "pwned"},
-		"DELETE /orgs/{orgID}":                              map[string]string{"confirm_slug": "org-a"},
-		"POST /orgs/{orgID}/transfer-ownership":             map[string]string{"new_owner_user_id": uuid.NewString()},
-		"PATCH /orgs/{orgID}/members/{memberID}":            map[string]string{"role": "viewer"},
-		"POST /orgs/{orgID}/invitations":                    map[string]string{"email": "bob@b.example", "role": "admin"},
-		"DELETE /orgs/{orgID}/shops/{shopID}":               map[string]any{"confirm": true},
-		"POST /orgs/{orgID}/shops/connect/{stateID}/select": map[string]any{"shopee_shop_ids": []string{"1002"}},
+		"PATCH /orgs/{orgID}":                                                                 map[string]any{"name": "pwned"},
+		"DELETE /orgs/{orgID}":                                                                map[string]string{"confirm_slug": "org-a"},
+		"POST /orgs/{orgID}/transfer-ownership":                                               map[string]string{"new_owner_user_id": uuid.NewString()},
+		"PATCH /orgs/{orgID}/members/{memberID}":                                              map[string]string{"role": "viewer"},
+		"POST /orgs/{orgID}/invitations":                                                      map[string]string{"email": "bob@b.example", "role": "admin"},
+		"DELETE /orgs/{orgID}/shops/{shopID}":                                                 map[string]any{"confirm": true},
+		"POST /orgs/{orgID}/shops/connect/{stateID}/select":                                   map[string]any{"shopee_shop_ids": []string{"1002"}},
+		"POST /orgs/{orgID}/templates":                                                        map[string]any{"name": "pwned"},
+		"PATCH /orgs/{orgID}/templates/{templateID}":                                          map[string]any{"name": "pwned"},
+		"POST /orgs/{orgID}/templates/{templateID}/clone":                                     map[string]any{"name": "stolen"},
+		"POST /orgs/{orgID}/templates/{templateID}/versions":                                  map[string]any{"from_version_id": aVersion},
+		"PUT /orgs/{orgID}/templates/{templateID}/versions/{versionID}/sections/{sectionKey}": map[string]any{"text": "pwned"},
+		"POST /orgs/{orgID}/templates/{templateID}/versions/{versionID}/preview":              map[string]any{"shop_ids": []string{aShop}},
+		"PUT /orgs/{orgID}/templates/{templateID}/shops/{shopID}/overrides":                   map[string]any{"overrides": map[string]any{}},
 	}
 
 	checked := 0
@@ -82,7 +92,7 @@ func TestTenantIsolationHTTP(t *testing.T) {
 				t.Errorf("%s (%s): status %d, want 404: %s", key, target.name, r.Status, r.Body)
 			}
 			if strings.Contains(string(r.Body), "Org A") || strings.Contains(string(r.Body), "alice@a.example") ||
-				strings.Contains(string(r.Body), "1001") {
+				strings.Contains(string(r.Body), "1001") || strings.Contains(string(r.Body), "Org A secret") {
 				t.Errorf("%s (%s): response leaks org A data: %s", key, target.name, r.Body)
 			}
 			checked++
@@ -131,9 +141,11 @@ func TestTenantIsolationDatabase(t *testing.T) {
 	e.setupApp()
 	e.fake.AddShop(shopeefake.Shop{ID: 1001, Name: "Org A shop", Region: "VN"})
 	e.connectShop(alice.noRedirect(), orgA.String(), 1001)
+	alice.createTemplate(orgA.String(), "Org A template", nil)
 
 	tenantTables := []string{"organizations", "organization_members", "organization_invitations", "audit_logs",
-		"shop_connections", "shop_credentials", "shop_authorizations", "shop_profiles", "oauth_states"}
+		"shop_connections", "shop_credentials", "shop_authorizations", "shop_profiles", "oauth_states",
+		"shop_templates", "shop_template_versions", "shop_template_sections"}
 	count := func(scope db.Scope, table, where string, args ...any) int {
 		t.Helper()
 		var n int

@@ -544,6 +544,16 @@ Phase 2 notes:
 - `oauth_states` uses the same `<org-hex>.<random>` token format as invitations. For main-account logins it also keeps the token pair (encrypted, own data key) and the offered shop IDs for 30 minutes, until the user picks shops; the ciphertext is cleared after selection.
 - Disconnect deletes `shop_credentials` and `shop_profiles` (Shopee content) at once and keeps the connection row and `shop_authorizations` as history.
 
+Phase 3 tables with RLS: `shop_templates`, `shop_template_versions`, `shop_template_sections`, `shop_template_mappings`.
+
+Phase 3 notes:
+- One open draft per template: partial unique index `(template_id) WHERE status = 'DRAFT'`. Version numbers are per template (`UNIQUE (template_id, version_no)`).
+- A check ties `content_sha256` and `published_at` to non-draft status. The hash is SHA-256 of the canonical JSON of all sections (sorted keys).
+- Published and archived sections are immutable in the database: a trigger rejects `INSERT`/`UPDATE`/`DELETE` on sections whose version is not `DRAFT`, whatever the application does. A test checks it.
+- `shop_template_sections.content` is validated against the section's JSON Schema on every write (in the application); the column only enforces "is an object".
+- `shop_config_snapshots` from the ERD is not created yet; it arrives with the workflow engine in Phase 4. Previews compare against `shop_profiles`.
+- Template names are unique per org among non-deleted templates (`lower(name)`).
+
 ### 4.1 Roles
 
 | DB role | Used by | Privileges |

@@ -29,6 +29,7 @@ import (
 	"shopee-automation/internal/rbac"
 	"shopee-automation/internal/shopee"
 	"shopee-automation/internal/shops"
+	"shopee-automation/internal/templates"
 	"shopee-automation/internal/tenancy"
 )
 
@@ -92,6 +93,7 @@ type App struct {
 	tenancy  tenancy.Handler
 	audit    audit.Handler
 	shops    shops.Handler
+	tpl      templates.Handler
 	// Shops is exposed for the worker and tests.
 	Shops *shops.Service
 }
@@ -116,6 +118,8 @@ func New(d Deps) *App {
 		AllowInsecureHosts: !d.Config.IsProduction(),
 	}
 	a.shops = shops.Handler{Svc: a.Shops, Log: d.Log}
+	a.tpl = templates.Handler{Svc: &templates.Service{DB: d.DB, Clock: d.Clock, Audit: rec,
+		Registry: templateRegistry, Shops: a.Shops, Log: d.Log}}
 	a.identity = identity.Handler{
 		Svc: idSvc, Limiter: d.Limiter, Log: d.Log, CookieSecure: d.Config.CookieSecure,
 		Memberships: func(ctx context.Context, userID uuid.UUID) (any, error) {
@@ -125,9 +129,12 @@ func New(d Deps) *App {
 	return a
 }
 
+// templateRegistry compiles the embedded section schemas once per process.
+var templateRegistry = templates.LoadRegistry()
+
 // Routes returns the API route table.
 func (a *App) Routes() []Route {
-	id, tn, sh := a.identity, a.tenancy, a.shops
+	id, tn, sh, tp := a.identity, a.tenancy, a.shops, a.tpl
 	return []Route{
 		{"POST", "/auth/register", Public, "", id.Register},
 		{"POST", "/auth/login", Public, "", id.Login},
@@ -167,6 +174,22 @@ func (a *App) Routes() []Route {
 		{"DELETE", "/orgs/{orgID}/shops/{shopID}", Tenant, rbac.ShopsDisconnect, sh.Disconnect},
 		{"GET", "/oauth/shopee/callback", Callback, "", sh.Callback},
 		{"POST", "/webhooks/shopee/{appID}", Webhook, "", sh.Webhook},
+
+		{"GET", "/template-sections", Session, "", tp.Schemas},
+		{"GET", "/orgs/{orgID}/templates", Tenant, rbac.TemplatesRead, tp.List},
+		{"POST", "/orgs/{orgID}/templates", Tenant, rbac.TemplatesWrite, tp.Create},
+		{"GET", "/orgs/{orgID}/templates/{templateID}", Tenant, rbac.TemplatesRead, tp.Get},
+		{"PATCH", "/orgs/{orgID}/templates/{templateID}", Tenant, rbac.TemplatesWrite, tp.Update},
+		{"DELETE", "/orgs/{orgID}/templates/{templateID}", Tenant, rbac.TemplatesPublish, tp.Delete},
+		{"POST", "/orgs/{orgID}/templates/{templateID}/clone", Tenant, rbac.TemplatesWrite, tp.Clone},
+		{"POST", "/orgs/{orgID}/templates/{templateID}/versions", Tenant, rbac.TemplatesWrite, tp.NewDraft},
+		{"GET", "/orgs/{orgID}/templates/{templateID}/versions/{versionID}", Tenant, rbac.TemplatesRead, tp.GetVersion},
+		{"PUT", "/orgs/{orgID}/templates/{templateID}/versions/{versionID}/sections/{sectionKey}", Tenant, rbac.TemplatesWrite, tp.PutSection},
+		{"POST", "/orgs/{orgID}/templates/{templateID}/versions/{versionID}/validate", Tenant, rbac.TemplatesRead, tp.Validate},
+		{"POST", "/orgs/{orgID}/templates/{templateID}/versions/{versionID}/publish", Tenant, rbac.TemplatesPublish, tp.Publish},
+		{"POST", "/orgs/{orgID}/templates/{templateID}/versions/{versionID}/preview", Tenant, rbac.TemplatesRead, tp.Preview},
+		{"GET", "/orgs/{orgID}/templates/{templateID}/shops/{shopID}/overrides", Tenant, rbac.TemplatesRead, tp.GetOverrides},
+		{"PUT", "/orgs/{orgID}/templates/{templateID}/shops/{shopID}/overrides", Tenant, rbac.TemplatesWrite, tp.PutOverrides},
 
 		{"GET", "/admin/shopee-apps", Admin, "", sh.ListApps},
 		{"POST", "/admin/shopee-apps", Admin, "", sh.CreateApp},

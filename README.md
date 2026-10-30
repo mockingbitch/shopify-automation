@@ -5,6 +5,7 @@ Multi-tenant SaaS for configuring many Shopee shops from reusable templates, usi
 Status:
 - **Phase 1 (foundation) complete**: accounts, organizations, members, invitations, roles, audit log, tenant isolation, dashboard shell.
 - **Phase 2 (Shopee integration) complete against the documented API**: partner apps, OAuth connect and reconnect (including main accounts), encrypted tokens with safe refresh, shop sync, authorization webhooks, capability registry, shop pages. Not yet exercised against the real Shopee sandbox (needs S-1, see [docs/roadmap.md](docs/roadmap.md)).
+- **Phase 3 (templates) complete**: versioned shop templates with 12 schema-defined sections, publish/clone, shop overrides and a per-shop change preview. Applying templates comes with workflows in Phase 4.
 
 Quick start: see [docs/development.md](docs/development.md).
 

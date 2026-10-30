@@ -99,7 +99,36 @@ Goal: an admin registers a Shopee partner app, an org admin connects a shop thro
 | 2.13 | Dashboard | Shops list, connect, callback result, shop detail (profile, capabilities, sync, reconnect, disconnect), main-account selection, admin apps page | Type-check + Playwright |
 | 2.14 | Docs sync | Update docs with what was built and what is still unverified | Reviewed |
 
-## 4. Definition of done (every phase)
+## 4. Phase 3 task breakdown
+
+**Status (2026-10-30): done.** Verified locally:
+- Unit tests: every section schema, structural and semantic validation, override merge, canonical hash, diff, per-field sensitivity.
+- Integration tests against Postgres 17: version lifecycle with ETags, the database trigger refusing edits to published sections, clone, soft delete, overrides, preview against shops connected through the Shopee fake (sensitive changes not preselected, unknown current values flagged, region mismatch, disconnected shop fully blocked), permissions, and tenant isolation extended to the new routes and tables.
+- `golangci-lint` 0 issues, `sqlc diff`, migrations up/down/up, `nuxt typecheck` and build, a Playwright smoke test (create, edit with a validation error, validate, publish), the Docker build, and a manual UI run of the editor and the preview.
+
+Deferred from Phase 3:
+
+| Item | Moves to |
+|---|---|
+| Apply endpoint (`…/apply`), snapshots `BEFORE_APPLY`/`AFTER_APPLY`, blocking delete while runs are active | Phase 4 |
+| Live current values for logistics, addresses and warehouses in the preview (read with `get_channel_list`, `get_address_list`, `get_warehouse_detail` in the workflow's `fetch_current_config` step) | Phase 4 |
+| Market-specific limits (`get_item_limit`, days-to-ship ranges, channel weight limits) | Phase 5 |
+| Form-based overrides editor (JSON editor today) and a picker for channel/category IDs | Phase 7 |
+
+Goal: an operator builds a versioned shop template, admins publish it, shop-specific overrides are stored, and a preview shows per shop which fields would change, through which capability and mode, and which changes are sensitive. Applying a template is a workflow and comes in Phase 4.
+
+| # | Task | Output | Done when |
+|---|---|---|---|
+| 3.1 | Section schemas | One JSON Schema (draft 2020-12) per section in `internal/templates/schema/`, embedded, served by `GET /template-sections` | Every field is grounded in a documented Shopee field or marked as an internal limit |
+| 3.2 | Schema | Migration `00003`: `shop_templates`, `shop_template_versions`, `shop_template_sections`, `shop_template_mappings`; RLS; one open draft per template; published sections immutable (trigger) | Up/down/up; isolation tests |
+| 3.3 | Templates and versions | Create, list, get, rename, soft delete, clone, new draft from a version, section update with `If-Match`, publish (archives the previous published version, stores a content hash) | Integration tests |
+| 3.4 | Validation | Structural (JSON Schema) on every write; semantic checks (cross-field, uniqueness) and warnings on validate/publish | Table tests per section |
+| 3.5 | Overrides | Per (template, shop) partial sections, deep-merged on top of the version | Merge unit tests; validated after merge |
+| 3.6 | Diff and preview | Pure field-level diff; preview for up to 50 shops against the last synced profile; changes labelled with capability, mode, enabled, sensitive, default selection; fields whose current value is unknown are marked so | Unit + integration tests |
+| 3.7 | Dashboard | Template list, editor generated from the schemas, versions, publish, clone, overrides, preview | Type-check + Playwright |
+| 3.8 | Docs sync | | Reviewed |
+
+## 5. Definition of done (every phase)
 
 1. Code + tests merged; `go test -race ./...`, lint and type-check green.
 2. Integration tests run against real Postgres/Redis containers.
@@ -108,7 +137,7 @@ Goal: an admin registers a Shopee partner app, an org admin connects a shop thro
 5. Docs in `docs/` updated in the same PR.
 6. No feature is reported as working against Shopee unless it was exercised in sandbox; otherwise it is labelled `DOC-VERIFIED` only.
 
-## 5. Decisions needed from the product owner
+## 6. Decisions needed from the product owner
 
 | ID | Decision | Needed by |
 |---|---|---|

@@ -266,7 +266,16 @@ Docker Compose for local development and a single-host staging setup: `nginx`, `
 | Webhooks | `POST /api/v1/webhooks/shopee/{appID}` is mounted outside the API sub-router (no origin check, no session). Signature over `push_callback_url + "\|" + body`; stored with SHA-256 dedupe; `204` with an empty body; processed by the worker. |
 | Dashboard CSP | `img-src` allows `https:` for shop logos served from per-market Shopee CDNs. |
 
-## 10. Conventions
+## 10. Phase 3 implementation notes
+
+| Topic | As built |
+|---|---|
+| Section schemas | One JSON Schema (draft 2020-12) per section in `internal/templates/schema/`, embedded in the binary, compiled once (`santhosh-tekuri/jsonschema`, formats asserted). The same files are served by `GET /template-sections`, and the dashboard renders its forms from them (`SchemaForm.vue`), so the server, the API and the UI cannot disagree. Custom keywords: `x-applies-to` (shop, products, defaults), `x-capability`, `x-sensitive`, `x-multiline`. |
+| Grounding | Every applied field maps to a documented Shopee field (`update_profile`, `update_address`, `set_address_config`, `update_channel`, `add_item`). Limits Shopee does not document are labelled "internal limit" in the schema description. |
+| Validation | Structural (schema) on every write, so a stored section is always well-formed. Semantic checks (address completeness, duplicate channels/categories/attributes, COD needs an enabled channel, SKU generation settings) and warnings run on validate, publish and preview. |
+| Diff | Pure function over the merged target, what is known about the shop, and the resolved capabilities. Product sections are not shop changes. Sensitivity comes from the field, not the capability (update_profile is sensitive for the name but not the description). |
+
+## 11. Conventions
 
 - Go: `gofmt`, `go vet`, `golangci-lint` (errcheck, staticcheck, gosec, revive, contextcheck). `context.Context` is the first parameter of every function that does I/O.
 - Errors: wrap with `%w`; domain errors are typed (`ErrNotFound`, `ErrConflict`, `ValidationError`) and mapped to HTTP only in `httpx`.

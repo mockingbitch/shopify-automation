@@ -1478,6 +1478,703 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/template-sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * JSON Schemas (draft 2020-12) of the template sections
+         * @description Source of truth for section content. Fields carry `x-capability` and `x-sensitive` annotations.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Section schemas in display order */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                key: components["schemas"]["SectionKey"];
+                                /** @enum {string} */
+                                applies_to: "shop" | "products" | "defaults";
+                                schema: {
+                                    [key: string]: unknown;
+                                };
+                            }[];
+                            next_cursor: string | null;
+                        };
+                    };
+                };
+                401: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        /** List templates */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Templates */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["Template"][];
+                            next_cursor: string | null;
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /** Create a template with its first draft */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        name: string;
+                        description?: string;
+                        /** @description Initial content per section key; other sections start empty. */
+                        sections?: {
+                            [key: string]: {
+                                [key: string]: unknown;
+                            };
+                        };
+                    };
+                };
+            };
+            responses: {
+                201: components["responses"]["TemplateCreated"];
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/templates/{templateID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                templateID: components["parameters"]["TemplateID"];
+            };
+            cookie?: never;
+        };
+        /** Template with its versions, newest first */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Template */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                template: components["schemas"]["Template"];
+                                versions: components["schemas"]["TemplateVersion"][];
+                            };
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        /** Delete a template (soft delete) */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Rename or describe a template */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        name?: string;
+                        description?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Template */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["Template"];
+                        };
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        trace?: never;
+    };
+    "/orgs/{orgID}/templates/{templateID}/clone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                templateID: components["parameters"]["TemplateID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy a version into a new template
+         * @description Defaults to the published version, else the latest one.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** Format: uuid */
+                        from_version_id?: string | null;
+                    };
+                };
+            };
+            responses: {
+                201: components["responses"]["TemplateCreated"];
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/templates/{templateID}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                templateID: components["parameters"]["TemplateID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a new draft from an existing version */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        from_version_id: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Draft */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["TemplateVersion"];
+                        };
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/templates/{templateID}/versions/{versionID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                templateID: components["parameters"]["TemplateID"];
+                versionID: components["parameters"]["VersionID"];
+            };
+            cookie?: never;
+        };
+        /** Version with its sections */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                    versionID: components["parameters"]["VersionID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Version */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                version: components["schemas"]["TemplateVersion"];
+                                sections: components["schemas"]["TemplateSection"][];
+                            };
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/templates/{templateID}/versions/{versionID}/sections/{sectionKey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                templateID: components["parameters"]["TemplateID"];
+                versionID: components["parameters"]["VersionID"];
+                sectionKey: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace one section of a draft
+         * @description Body is the section object, validated against its JSON Schema. Requires `If-Match` with the section's `etag`.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header: {
+                    "If-Match": string;
+                };
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                    versionID: components["parameters"]["VersionID"];
+                    sectionKey: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            responses: {
+                /** @description Section */
+                200: {
+                    headers: {
+                        ETag?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["TemplateSection"];
+                        };
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                412: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/templates/{templateID}/versions/{versionID}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                templateID: components["parameters"]["TemplateID"];
+                versionID: components["parameters"]["VersionID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate a version */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                    versionID: components["parameters"]["VersionID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Validation report */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["ValidationReport"];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/templates/{templateID}/versions/{versionID}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                templateID: components["parameters"]["TemplateID"];
+                versionID: components["parameters"]["VersionID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish a draft
+         * @description The version becomes immutable and current; the previous published version is archived. `422` lists validation errors.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                    versionID: components["parameters"]["VersionID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Published version */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["TemplateVersion"];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/templates/{templateID}/versions/{versionID}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                templateID: components["parameters"]["TemplateID"];
+                versionID: components["parameters"]["VersionID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview the changes a version would make on shops
+         * @description Per shop: the version merged with the shop's overrides, compared with
+         *     the last synced profile. Values Shopee was not read for are
+         *     `current_known: false`; they are read before applying (Phase 4).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                    versionID: components["parameters"]["VersionID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        shop_ids: string[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Previews */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["ShopPreview"][];
+                            next_cursor: string | null;
+                        };
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/templates/{templateID}/shops/{shopID}/overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                templateID: components["parameters"]["TemplateID"];
+                shopID: components["parameters"]["ShopID"];
+            };
+            cookie?: never;
+        };
+        /** Shop-specific overrides of a template */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                    shopID: components["parameters"]["ShopID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["Overrides"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        /**
+         * Replace shop-specific overrides
+         * @description Partial sections, deep-merged on top of the template (objects merge, arrays replace). `{}` clears them.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    templateID: components["parameters"]["TemplateID"];
+                    shopID: components["parameters"]["ShopID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        overrides: {
+                            [key: string]: {
+                                [key: string]: unknown;
+                            };
+                        };
+                    };
+                };
+            };
+            responses: {
+                200: components["responses"]["Overrides"];
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/shopee-apps": {
         parameters: {
             query?: never;
@@ -1838,8 +2535,130 @@ export interface components {
             push_callback_url?: string;
             enabled?: boolean;
         };
+        /** @enum {string} */
+        SectionKey: "general" | "branding" | "description" | "contact" | "warehouse" | "return_address" | "logistics" | "product_defaults" | "category_mappings" | "sku_rules" | "default_descriptions" | "default_attributes";
+        Template: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string;
+            /** Format: uuid */
+            current_published_version_id: string | null;
+            /** Format: uuid */
+            draft_version_id: string | null;
+            latest_version_no: number;
+            /** Format: uuid */
+            cloned_from_version_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        TemplateVersion: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            template_id: string;
+            version_no: number;
+            /** @enum {string} */
+            status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+            /** Format: uuid */
+            based_on_id: string | null;
+            content_sha256: string | null;
+            /** Format: date-time */
+            published_at: string | null;
+            /** Format: uuid */
+            published_by: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        TemplateSection: {
+            key: components["schemas"]["SectionKey"];
+            content: {
+                [key: string]: unknown;
+            };
+            /** @description Send as If-Match when replacing the section */
+            etag: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Issue: {
+            field: string;
+            code: string;
+            message: string;
+        };
+        ValidationReport: {
+            valid: boolean;
+            errors: components["schemas"]["Issue"][];
+            warnings: components["schemas"]["Issue"][];
+        };
+        Change: {
+            /** @example general.shop_name */
+            path: string;
+            section: components["schemas"]["SectionKey"];
+            /** @description Last known value; null when unknown */
+            current: unknown;
+            current_known: boolean;
+            target: unknown;
+            capability: string;
+            /** @enum {string} */
+            mode: "API" | "BROWSER" | "MANUAL" | "UNSUPPORTED";
+            enabled: boolean;
+            reason: string;
+            /** @description Never selected by default (FR-TPL-7) */
+            sensitive: boolean;
+            default_selected: boolean;
+            note?: string;
+        };
+        ShopPreview: {
+            /** Format: uuid */
+            shop_id: string;
+            shop_name: string | null;
+            connection_status: components["schemas"]["ConnectionStatus"];
+            has_overrides: boolean;
+            errors: components["schemas"]["Issue"][];
+            warnings: components["schemas"]["Issue"][];
+            changes: components["schemas"]["Change"][];
+            /** @description Changes whose capability is not available for this shop */
+            blocked: components["schemas"]["Change"][];
+        };
     };
     responses: {
+        /** @description Template and its draft */
+        TemplateCreated: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: {
+                        template: components["schemas"]["Template"];
+                        draft_version: components["schemas"]["TemplateVersion"];
+                    };
+                };
+            };
+        };
+        /** @description Shop overrides */
+        Overrides: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: {
+                        /** Format: uuid */
+                        shop_id: string;
+                        overrides: {
+                            [key: string]: {
+                                [key: string]: unknown;
+                            };
+                        };
+                        /** Format: date-time */
+                        updated_at: string | null;
+                    };
+                };
+            };
+        };
         /** @description Authorization URL to open in the browser */
         ConnectResult: {
             headers: {
@@ -1903,6 +2722,8 @@ export interface components {
     };
     parameters: {
         OrgID: string;
+        TemplateID: string;
+        VersionID: string;
         ShopID: string;
     };
     requestBodies: never;

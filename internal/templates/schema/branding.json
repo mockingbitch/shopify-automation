@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shopee-automation.local/templates/branding.json",
+  "title": "Branding",
+  "description": "Logo, banners and decoration.",
+  "type": "object",
+  "additionalProperties": false,
+  "x-applies-to": "shop",
+  "properties": {
+    "logo_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://",
+      "maxLength": 2048,
+      "title": "Logo image URL",
+      "x-capability": "shop.avatar.upload",
+      "description": "Downloaded, uploaded with media_space/upload_image, then set with shop/update_profile (open item S-4)."
+    },
+    "banner_urls": {
+      "type": "array",
+      "maxItems": 10,
+      "uniqueItems": true,
+      "title": "Banner image URLs",
+      "x-capability": "shop.banner.upload",
+      "items": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https://",
+        "maxLength": 2048
+      },
+      "description": "No Open API; applied by the browser extension or as a manual task. maxItems: Internal limit; Shopee does not document one."
+    },
+    "decoration_notes": {
+      "type": "string",
+      "maxLength": 4000,
+      "title": "Decoration instructions",
+      "x-capability": "shop.decoration.update",
+      "description": "Instructions for the decoration page; no Open API exists."
+    }
+  }
+}

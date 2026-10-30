@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shopee-automation.local/templates/default_attributes.json",
+  "title": "Default attributes",
+  "description": "Attribute values applied to products (product/add_item attribute_list). Valid values come from product/get_attribute_tree per category.",
+  "type": "object",
+  "additionalProperties": false,
+  "x-applies-to": "products",
+  "properties": {
+    "attributes": {
+      "type": "array",
+      "maxItems": 500,
+      "title": "Attributes",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "attribute_id",
+          "value_id"
+        ],
+        "properties": {
+          "category_id": {
+            "type": "integer",
+            "minimum": 1,
+            "title": "Only for category",
+            "description": "Empty: every category that has this attribute."
+          },
+          "attribute_id": {
+            "type": "integer",
+            "minimum": 1,
+            "title": "Attribute ID"
+          },
+          "value_id": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Value ID",
+            "description": "0 for a custom value; then the value name is required."
+          },
+          "original_value_name": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Value name"
+          },
+          "value_unit": {
+            "type": "string",
+            "maxLength": 20,
+            "title": "Unit"
+          }
+        },
+        "if": {
+          "properties": {
+            "value_id": {
+              "const": 0
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "original_value_name"
+          ]
+        }
+      }
+    }
+  }
+}

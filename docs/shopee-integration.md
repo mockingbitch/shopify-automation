@@ -252,6 +252,7 @@ Findings while reading the reference (handled in code, to confirm in sandbox):
 - The code 2 push samples use both `shop_id` and `shopid` inside `data`; both are read.
 - Main account: the guide says the first `access_token`/`refresh_token` are identical for all authorized shops and each shop then refreshes on its own. Each attached shop therefore stores the same initial pair.
 - `error_auth` is also documented for unrelated messages ("System error", stock rules), so it maps to `auth`, not to "authorization lost". Only the refresh-specific codes (`error_shop_refresh_token`, `refresh_token_expired`, `shop_access_expired`, `shop_no_linked`, …) mark a shop `RECONNECT_REQUIRED`.
+- `logistics/set_address_config` documents the address type `PICKUP_ADDRESS`, while `logistics/get_address_list` returns `PICK_UP_ADDRESS`. Templates use the set-side value; the Phase 4 reader must accept both.
 - Push delivery: timeout 3 s, retries after 300, 1800 and 10800 seconds (push reference metadata). The receiver stores and answers before any processing.
 
 ## 11. Open items
