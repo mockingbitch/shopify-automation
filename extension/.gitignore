@@ -1,0 +1,8 @@
+node_modules/
+.output/
+.wxt/
+e2e/.tmp/
+test-results/
+playwright-report/
+.env.local
+.env.*.local

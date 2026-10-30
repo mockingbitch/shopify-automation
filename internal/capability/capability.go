@@ -36,6 +36,7 @@ const (
 	ReasonShopNotActive        = "shop_not_active"
 	ReasonNotSandboxVerified   = "not_sandbox_verified"
 	ReasonExtensionUnavailable = "browser_extension_unavailable"
+	ReasonNoRecipe             = "browser_recipe_unavailable"
 )
 
 // Definition is one registry entry.
@@ -70,8 +71,12 @@ type Context struct {
 	AppEnvironment   string // sandbox | production
 	Region           string
 	ConnectionStatus string
-	// ExtensionAvailable is false until the browser extension ships (Phase 6).
+	// ExtensionAvailable is true when the organization has a paired,
+	// unrevoked browser extension.
 	ExtensionAvailable bool
+	// BrowserReady lists capabilities with an enabled, verified recipe for
+	// the shop's market.
+	BrowserReady map[string]bool
 }
 
 // Resolved is the outcome for one capability.
@@ -166,13 +171,20 @@ func resolveOne(d Definition, ovs []Override, ctx Context) Resolved {
 			return disable(ReasonNotSandboxVerified)
 		}
 	case ModeBrowser:
-		if !ctx.ExtensionAvailable {
+		reason := ""
+		switch {
+		case !ctx.BrowserReady[d.Key]:
+			reason = ReasonNoRecipe
+		case !ctx.ExtensionAvailable:
+			reason = ReasonExtensionUnavailable
+		}
+		if reason != "" {
 			if d.FallbackMode == ModeManual {
 				r.Mode = ModeManual
-				r.Reason = ReasonExtensionUnavailable
+				r.Reason = reason
 				return r
 			}
-			return disable(ReasonExtensionUnavailable)
+			return disable(reason)
 		}
 	}
 	return r

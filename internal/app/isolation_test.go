@@ -70,7 +70,12 @@ func TestTenantIsolationHTTP(t *testing.T) {
 		t.Fatalf("org A import rows: %+v", ar)
 	}
 
-	ids := map[string]string{"{productID}": aProduct, "{imageID}": aImage, "{batchID}": ab.Data.ID, "{rowID}": ar.Data[0].ID,
+	// A paired browser, a browser task and a screenshot of org A.
+	e.requireSystem()
+	_, aDevice := e.pair(alice, orgA)
+	aTask, aShot := insertBrowserTask(t, e, uuid.MustParse(orgA), uuid.MustParse(aRun), uuid.MustParse(aStep), uuid.MustParse(aShop))
+
+	ids := map[string]string{"{deviceID}": aDevice, "{taskID}": aTask.String(), "{screenshotID}": aShot.String(), "{productID}": aProduct, "{imageID}": aImage, "{batchID}": ab.Data.ID, "{rowID}": ar.Data[0].ID,
 		"{memberID}": aMember, "{invitationID}": inv.Data.ID, "{shopID}": aShop, "{stateID}": aSelection,
 		"{templateID}": aTpl, "{versionID}": aVersion, "{sectionKey}": "description",
 		"{runID}": aRun, "{stepID}": aStep, "{approvalID}": aApproval}
@@ -221,12 +226,30 @@ func TestTenantIsolationDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Extension rows of every kind in org A.
+	_, _ = e.pair(alice, orgA.String())
+	var code struct {
+		Data struct {
+			Code string `json:"code"`
+		} `json:"data"`
+	}
+	alice.must(201, "POST", "/orgs/"+orgA.String()+"/extension/pairing-codes", nil).json(t, &code)
+	runA := uuid.MustParse(run.Data.RunIDs[0])
+	var stepA uuid.UUID
+	if err := e.db.Tx(ctx, db.Scope{OrgID: orgA}, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, "SELECT id FROM workflow_steps WHERE run_id = $1 LIMIT 1", runA).Scan(&stepA)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	insertBrowserTask(t, e, orgA, runA, stepA, shopA)
+
 	tenantTables := []string{"organizations", "organization_members", "organization_invitations", "audit_logs",
 		"shop_connections", "shop_credentials", "shop_authorizations", "shop_profiles", "oauth_states",
 		"shop_templates", "shop_template_versions", "shop_template_sections", "shop_template_mappings",
 		"workflow_runs", "workflow_steps", "workflow_step_attempts", "workflow_approvals", "workflow_events", "shop_config_snapshots",
 		"products", "product_variations", "product_images", "product_mappings", "product_image_uploads",
-		"product_import_batches", "product_import_rows"}
+		"product_import_batches", "product_import_rows",
+		"extension_pairing_codes", "extension_devices", "browser_tasks", "browser_task_screenshots"}
 
 	// Every table with an org_id column has forced RLS and is listed above.
 	listed := map[string]bool{}
@@ -365,4 +388,25 @@ func TestSystemRoleCannotReadSecrets(t *testing.T) {
 			t.Errorf("%s: %v", q, err)
 		}
 	}
+}
+
+// insertBrowserTask writes a browser task and a screenshot row directly in
+// the org's scope (the isolation tests only need the rows).
+func insertBrowserTask(t *testing.T, e *env, org, run, step, shop uuid.UUID) (task, shot uuid.UUID) {
+	t.Helper()
+	task, shot = db.NewID(), db.NewID()
+	err := e.db.Tx(context.Background(), db.Scope{OrgID: org}, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(context.Background(), `INSERT INTO browser_tasks (id, org_id, shop_connection_id, run_id, step_id, task_key,
+			capability_key, market, title) VALUES ($1, $2, $3, $4, $5, 'branding.banner_urls', 'shop.banner.upload', 'VN', 'Upload shop banners')`,
+			task, org, shop, run, step); err != nil {
+			return err
+		}
+		_, err := tx.Exec(context.Background(), `INSERT INTO browser_task_screenshots (id, org_id, task_id, storage_key) VALUES ($1, $2, $3, 'x')`,
+			shot, org, task)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return task, shot
 }

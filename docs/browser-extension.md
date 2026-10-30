@@ -1,6 +1,6 @@
 # Browser Extension — Shopee Shop Automation
 
-Status: Phase 0 draft · Last updated: 2026-10-30 · Decision: Q-1 answered (see §1)
+Status: built in Phase 6 (§11 is the as-built contract) · Last updated: 2026-10-30 · Decision: Q-1 answered (see §1)
 
 ## 1. Decision
 
@@ -162,3 +162,68 @@ sequenceDiagram
 | E-2 | How to read the logged-in shop ID safely from the page (visible UI element vs page metadata), without calling internal APIs |
 | E-3 | Whether Seller Centre allows several shops in one browser session (main/sub accounts) or the seller must switch accounts |
 | E-4 | Chrome Web Store listing type (public vs unlisted) and the privacy disclosure text |
+| E-5 | Confirm `captureVisibleTab` works with the `activeTab` grant from the toolbar click through same-origin navigations; otherwise screenshots need another approach |
+
+## 11. Phase 6 contract (as built)
+
+This section is the contract between the API and the extension. `api/openapi.yaml` (tag `extension`) is authoritative for request and response fields; `internal/browser/recipe.schema.json` is authoritative for recipes.
+
+### 11.1 Changes from the draft above
+
+| Draft | As built | Why |
+|---|---|---|
+| The extension opens `/ext/pair?code=…` on the dashboard | The dashboard shows a one-time code (`XXXXX-XXXXX`, 50 bits, 6 minutes, single use); the seller types it into the popup, which calls `POST /ext/pair` | No page that depends on the extension ID; works the same in every Chromium browser |
+| "Randomized 0.5–2 s delays" | A fixed pause between actions (`pace_ms`, default 800 ms) | The pause keeps the pace reasonable; randomizing it to look human would be an attempt to evade bot detection, which the guardrails forbid |
+| Recipes signed over canonical JSON | The server signs the exact recipe bytes; the extension verifies `recipe_json` before parsing it | No canonicalization differences between Go and JavaScript |
+| Screenshots with masked areas | Screenshots only on failure or when a recipe asks for one, of the active Seller Centre tab | Masking needs real pages (Phase 6 has none) |
+| Capability `BROWSER` when the extension exists | `BROWSER` only when the organization has a paired, unrevoked device **and** an enabled, verified recipe for the shop's market; otherwise `MANUAL` with reason `browser_extension_unavailable` or `browser_recipe_unavailable` | A paired extension without verified steps cannot do anything |
+| Separate `needs-user`, `recipes` and `config` endpoints | Pauses are a heartbeat with `state: WAITING_USER`; the recipe comes with the claim; kill switches are checked on every claim | Fewer moving parts |
+| "Randomized" step timeouts, unattended retries | A failed task waits until someone presses "Run again in the extension" in the dashboard | The seller stays in control |
+
+### 11.2 Authentication
+
+- Dashboard (session): `POST /orgs/{org}/extension/pairing-codes` → `{code, expires_at}`. Needs `workflows.run`.
+- Extension: `POST /api/v1/ext/pair {code, device_name, extension_version}` → `{token, expires_at, device, org, user}`. Rate limited per IP and per code. A wrong or used code is `422 invalid_code`.
+- Every other `/api/v1/ext/*` call sends `Authorization: Bearer <token>`. No cookies; CORS allows only the origins in `EXTENSION_ORIGINS` (`chrome-extension://<id>`). The token's expiry slides (30 days from last use). `POST /ext/token/rotate` returns a new token and invalidates the old one. `DELETE /ext/device` unpairs.
+- A token whose device was revoked, whose user left the organization or lost `workflows.run`, or which expired, gets `401 device_unauthorized`; the extension then forgets it and shows the pairing screen.
+
+### 11.3 Tasks
+
+Statuses: `QUEUED → RUNNING → SUCCEEDED | FAILED`; `RUNNING ⇄ WAITING_USER` (paused on a login/verification/CAPTCHA page); `CANCELLED` when the workflow step is completed or cancelled another way. A `RUNNING`/`WAITING_USER` task whose lease expires returns to `QUEUED`.
+
+| Call | Body | Result |
+|---|---|---|
+| `GET /ext/me` | — | device, org, user |
+| `GET /ext/tasks` | — | the org's `QUEUED` tasks plus this device's `RUNNING`/`WAITING_USER` tasks: `{id, status, capability, title, shop {id, shopee_shop_id, name, region}, preview, created_at}` |
+| `POST /ext/tasks/{id}/claim` | — | `{lease_token, lease_expires_at, recipe {json, signature, key_id}, inputs, task {shopee_shop_id, region, capability}}`. `409 task_unavailable` if another device holds it or it is not queued; `409 recipe_disabled` / `capability_disabled` (kill switch, checked on every claim) |
+| `POST /ext/tasks/{id}/heartbeat` | `{lease_token, state: RUNNING\|WAITING_USER, message?}` | extends the lease by 10 minutes |
+| `POST /ext/tasks/{id}/screenshots` | multipart `file` (PNG/JPEG ≤ 5 MB) + `lease_token` | `{id}` |
+| `POST /ext/tasks/{id}/result` | `{lease_token, status: SUCCEEDED\|FAILED, error_code?, message?, steps: [{index, action, outcome: ok\|failed\|skipped, duration_ms, error?}], screenshot_ids?}` | `204`. A stale `lease_token` is `409 lease_lost` and the result is dropped |
+
+`inputs` maps each recipe input name to `{type: "text", value}` or `{type: "files", files: [{name, url, content_type, sha256}]}`; file URLs are presigned for 10 minutes. The extension checks that the recipe's `capability` and `market` equal the task's.
+
+### 11.4 Runner rules
+
+1. Verify the Ed25519 signature over `recipe.json` with the public key bundled at build time (`key_id` selects it); reject unknown keys.
+2. Validate the recipe against the schema; reject unknown actions.
+3. Act only in a tab whose origin is in `allowed_origins`; open `start_url` if needed.
+4. Before every action, check `stop_on`; a match sends `heartbeat(WAITING_USER)` and waits for the seller's "Continue".
+5. `assert_shop_id` must run (and match `task.shopee_shop_id`) before the first `click`, `fill`, `select` or `upload`; the server rejects recipes that do not.
+6. Pause `pace_ms` between actions; send a heartbeat at least every 2 minutes.
+7. One task at a time, in the tab the seller has open; never opens extra tabs in the background.
+8. Never reads cookies, storage, network traffic or page HTML beyond the elements a step targets. `stop_on.text_any` and `expect.text_any` check the visible page text inside the tab; that text is never sent anywhere.
+
+### 11.5 Recipe rules enforced on both sides
+
+The Go validator (`internal/browser/recipe.go`) and the extension (`extension/src/lib/recipe/`) apply the same rules, so a recipe an admin can enable is one the extension will run:
+
+- Exactly one action per step, from the fixed set; `timeout_ms` optional.
+- `assert_shop_id` before the first `click`, `fill`, `select` or `upload`; its `pattern` has exactly one capture group, and the captured value must equal the task's shop ID.
+- Templates (`{{task.shopee_shop_id}}`, `{{input.<name>}}`) only in `goto.url`, `fill.value`, `select.value` and `upload.files` (which must be exactly `{{input.<files input>}}`); `{{` anywhere else is rejected.
+- `verify` steps only read (no click, fill, select or upload).
+- `start_url` and every `goto` start with a literal allowed origin (https only).
+- Inputs are required unless `"required": false`. The server creates a browser task only when every required input can be filled from the approved change; otherwise the task stays manual.
+
+### 11.6 Failure attribution
+
+Only failures that point at the recipe count toward auto-disable (3 in a row). `stopped_by_user`, `shop_mismatch`, `tab_closed`, `navigation_interrupted`, input download/checksum errors and signature errors do not.

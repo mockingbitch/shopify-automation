@@ -36,9 +36,12 @@ func TestResolve(t *testing.T) {
 		{"api in production needs sandbox verification", api, nil, with(func(c *Context) { c.AppEnvironment = "production" }), ModeAPI, false, ReasonNotSandboxVerified},
 		{"verified api in production", verified, nil, with(func(c *Context) { c.AppEnvironment = "production" }), ModeAPI, true, ReasonOK},
 		{"shop not active", api, nil, with(func(c *Context) { c.ConnectionStatus = "RECONNECT_REQUIRED" }), ModeAPI, false, ReasonShopNotActive},
-		{"browser falls back to manual", browser, nil, sandbox, ModeManual, true, ReasonExtensionUnavailable},
-		{"browser with extension", browser, nil, with(func(c *Context) { c.ExtensionAvailable = true }), ModeBrowser, true, ReasonOK},
-		{"browser without fallback", browserNoFallback, nil, sandbox, ModeBrowser, false, ReasonExtensionUnavailable},
+		{"browser without recipe falls back to manual", browser, nil, with(func(c *Context) { c.ExtensionAvailable = true }), ModeManual, true, ReasonNoRecipe},
+		{"browser recipe but no extension", browser, nil, with(func(c *Context) { c.BrowserReady = map[string]bool{"shop.banner.upload": true} }), ModeManual, true, ReasonExtensionUnavailable},
+		{"browser with extension and recipe", browser, nil, with(func(c *Context) {
+			c.ExtensionAvailable, c.BrowserReady = true, map[string]bool{"shop.banner.upload": true}
+		}), ModeBrowser, true, ReasonOK},
+		{"browser without fallback", browserNoFallback, nil, with(func(c *Context) { c.BrowserReady = map[string]bool{"x.browser": true} }), ModeBrowser, false, ReasonExtensionUnavailable},
 		{"region allowed", regional, nil, sandbox, ModeAPI, true, ReasonOK},
 		{"region not allowed", regional, nil, with(func(c *Context) { c.Region = "TH" }), ModeAPI, false, ReasonRegion},
 		{"app type allowed", typed, nil, sandbox, ModeAPI, true, ReasonOK},

@@ -52,6 +52,15 @@ type Config struct {
 	// TrustProxyHeaders enables X-Forwarded-For for client IPs. Only set it
 	// when the server is reachable exclusively through the reverse proxy.
 	TrustProxyHeaders bool
+
+	// RecipeSigningKey is the base64 32-byte Ed25519 seed that signs browser
+	// recipes; RecipeSigningKeyID names it for the extension. Empty: the
+	// extension cannot claim tasks.
+	RecipeSigningKey   string
+	RecipeSigningKeyID string
+	// ExtensionOrigins are the browser extension origins allowed by CORS
+	// (chrome-extension://<id>), comma separated.
+	ExtensionOrigins []string
 }
 
 // IsProduction reports whether the process runs in production.
@@ -117,6 +126,17 @@ func Load(getenv Getenv) (Config, error) {
 		c.LogLevel = slog.LevelError
 	default:
 		l.fail("LOG_LEVEL", "must be debug, info, warn or error")
+	}
+
+	c.RecipeSigningKey = l.str("RECIPE_SIGNING_KEY", "")
+	c.RecipeSigningKeyID = l.str("RECIPE_SIGNING_KEY_ID", "k1")
+	for _, o := range strings.Split(l.str("EXTENSION_ORIGINS", ""), ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			if !strings.HasPrefix(o, "chrome-extension://") && c.IsProduction() {
+				l.fail("EXTENSION_ORIGINS", "must list chrome-extension:// origins in production")
+			}
+			c.ExtensionOrigins = append(c.ExtensionOrigins, o)
+		}
 	}
 
 	if c.SessionIdleTTL > c.SessionAbsoluteTTL {

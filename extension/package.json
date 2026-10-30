@@ -1,0 +1,36 @@
+{
+  "name": "shopee-automation-extension",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Runs signed Seller Centre recipes in the seller's own browser tab.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "build:test": "wxt build --mode test",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "@noble/ed25519": "3.2.0",
+    "vue": "3.5.44"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "24.19.2",
+    "@wxt-dev/module-vue": "1.0.3",
+    "ajv": "8.20.0",
+    "happy-dom": "21.0.4",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5",
+    "vue-tsc": "3.3.14",
+    "wxt": "0.21.5"
+  }
+}

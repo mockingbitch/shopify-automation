@@ -80,6 +80,8 @@ type ManualTask struct {
 	Instructions string `json:"instructions"`
 	Capability   string `json:"capability,omitempty"`
 	Data         any    `json:"data,omitempty"`
+	// BrowserTaskID is set when the browser extension can do the task.
+	BrowserTaskID string `json:"browser_task_id,omitempty"`
 }
 
 type resultKind int

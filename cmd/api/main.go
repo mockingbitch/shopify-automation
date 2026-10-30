@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"shopee-automation/internal/app"
+	"shopee-automation/internal/browser"
 	"shopee-automation/internal/identity"
 	"shopee-automation/internal/platform/clock"
 	"shopee-automation/internal/platform/config"
@@ -85,8 +86,24 @@ func run() error {
 	tasks := asynq.NewClientFromRedisClient(rdb)
 	defer func() { _ = tasks.Close() }()
 
+	// The system pool finds the organization of an extension token.
+	var system *db.DB
+	if cfg.DatabaseSystemURL != "" {
+		if system, err = db.Open(ctx, cfg.DatabaseSystemURL); err != nil {
+			return err
+		}
+		defer system.Close()
+	} else {
+		log.Warn("DATABASE_SYSTEM_URL is not set: the browser extension API is unavailable")
+	}
+	var signer *browser.Signer
+	if cfg.RecipeSigningKey != "" {
+		if signer, err = browser.NewSigner(cfg.RecipeSigningKeyID, cfg.RecipeSigningKey); err != nil {
+			return err
+		}
+	}
 	a := app.New(app.Deps{
-		Config: cfg, DB: database, Redis: rdb,
+		Config: cfg, DB: database, SystemDB: system, Redis: rdb, Signer: signer,
 		Limiter: limiter,
 		Mailer:  mail, Clock: clock.Real{}, Log: log,
 		Hasher: identity.Hasher{Params: identity.DefaultArgon2},

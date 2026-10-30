@@ -308,7 +308,7 @@ func TestTemplateOverridesAndPreview(t *testing.T) {
 	if desc, ok := ch["description.text"]; !ok || desc.Current != "Old description" || !desc.DefaultSelected {
 		t.Errorf("description: %+v", desc)
 	}
-	if b := ch["branding.banner_urls"]; b.Mode != "MANUAL" || b.CurrentKnown || b.Reason != "browser_extension_unavailable" {
+	if b := ch["branding.banner_urls"]; b.Mode != "MANUAL" || b.CurrentKnown || b.Reason != "browser_recipe_unavailable" {
 		t.Errorf("banner: %+v", b)
 	}
 	if l := ch["logistics.channels.50011"]; !l.Sensitive || l.DefaultSelected || l.CurrentKnown {

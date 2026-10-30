@@ -17,6 +17,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"shopee-automation/internal/app"
+	"shopee-automation/internal/browser"
 	"shopee-automation/internal/identity"
 	"shopee-automation/internal/platform/clock"
 	"shopee-automation/internal/platform/config"
@@ -95,8 +96,14 @@ func run() error {
 	tasks := asynq.NewClientFromRedisClient(rdb)
 	defer func() { _ = tasks.Close() }()
 
+	var signer *browser.Signer
+	if cfg.RecipeSigningKey != "" {
+		if signer, err = browser.NewSigner(cfg.RecipeSigningKeyID, cfg.RecipeSigningKey); err != nil {
+			return err
+		}
+	}
 	a := app.New(app.Deps{
-		Config: cfg, DB: database, SystemDB: system, Redis: rdb, Limiter: limiter,
+		Config: cfg, DB: database, SystemDB: system, Redis: rdb, Limiter: limiter, Signer: signer,
 		Mailer: mailer.Log{Logger: log}, Clock: clock.Real{}, Log: log,
 		Hasher: identity.Hasher{Params: identity.DefaultArgon2},
 		Keys:   keys, Shopee: shopee.NewClient(cfg, limiter), Queue: queue.Asynq{Client: tasks},

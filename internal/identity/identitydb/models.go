@@ -44,6 +44,59 @@ type AuditLogsDefault struct {
 	CreatedAt   time.Time
 }
 
+type BrowserRecipe struct {
+	ID                  uuid.UUID
+	CapabilityKey       string
+	Market              string
+	Version             int32
+	RecipeJson          string
+	Enabled             bool
+	DisabledReason      *string
+	VerifiedAt          *time.Time
+	VerifiedBy          *uuid.UUID
+	Notes               string
+	SuccessCount        int32
+	FailureCount        int32
+	ConsecutiveFailures int32
+	CreatedBy           *uuid.UUID
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+type BrowserTask struct {
+	ID               uuid.UUID
+	OrgID            uuid.UUID
+	ShopConnectionID uuid.UUID
+	RunID            uuid.UUID
+	StepID           uuid.UUID
+	TaskKey          string
+	CapabilityKey    string
+	Market           string
+	Title            string
+	Status           string
+	Input            []byte
+	Preview          []byte
+	RecipeID         *uuid.UUID
+	DeviceID         *uuid.UUID
+	LeaseToken       *uuid.UUID
+	LeaseExpiresAt   *time.Time
+	AttemptCount     int32
+	StatusMessage    *string
+	LastError        []byte
+	StepLog          []byte
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	FinishedAt       *time.Time
+}
+
+type BrowserTaskScreenshot struct {
+	ID         uuid.UUID
+	OrgID      uuid.UUID
+	TaskID     uuid.UUID
+	StorageKey string
+	CreatedAt  time.Time
+}
+
 type CapabilityDefinition struct {
 	Key              string
 	Title            string
@@ -70,6 +123,30 @@ type CapabilityOverride struct {
 	Enabled       *bool
 	Reason        string
 	CreatedAt     time.Time
+}
+
+type ExtensionDevice struct {
+	ID               uuid.UUID
+	OrgID            uuid.UUID
+	UserID           uuid.UUID
+	Name             string
+	ExtensionVersion string
+	TokenHash        []byte
+	ExpiresAt        time.Time
+	LastUsedAt       *time.Time
+	RevokedAt        *time.Time
+	RevokedBy        *uuid.UUID
+	CreatedAt        time.Time
+}
+
+type ExtensionPairingCode struct {
+	ID        uuid.UUID
+	OrgID     uuid.UUID
+	UserID    uuid.UUID
+	CodeHash  []byte
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	CreatedAt time.Time
 }
 
 type OauthState struct {

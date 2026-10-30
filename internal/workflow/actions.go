@@ -255,35 +255,89 @@ type CompleteInput struct {
 // CompleteManual marks a step's manual tasks as done.
 func (e *Engine) CompleteManual(ctx context.Context, p authctx.Principal, t authctx.Tenant, runID, stepID uuid.UUID, in CompleteInput) (RunView, error) {
 	return e.userAction(ctx, p, t, runID, "workflow.manual_task_completed", true, func(q *workflowdb.Queries, run workflowdb.WorkflowRun) error {
-		s, err := q.LockStep(ctx, workflowdb.LockStepParams{OrgID: t.OrgID, ID: stepID})
-		if err != nil || s.RunID != run.ID {
-			return wrap(err, errStepNotFound)
-		}
-		if s.Status != StepWaitingUser || waitReason(s.Output) != "manual_tasks" {
-			return apperr.Conflict("no_manual_task", "This step has no open manual task.")
-		}
-		next, err := Transition(s.Status, EvCompleteManual)
+		s, err := e.lockManualStep(ctx, q, t.OrgID, run.ID, stepID)
 		if err != nil {
 			return err
 		}
-		var out map[string]any
-		_ = json.Unmarshal(s.Output, &out)
-		if out == nil {
-			out = map[string]any{}
-		}
-		out["completed_by"] = p.UserID.String()
-		out["completed_at"] = e.now()
-		if in.Note != nil {
-			out["note"] = truncate(*in.Note, 1000)
-		}
-		now := e.now()
-		if _, err := q.SetStepStatus(ctx, workflowdb.SetStepStatusParams{Status: next, NextAttemptAt: now, Output: marshal(out),
-			FinishedAt: &now, OrgID: t.OrgID, ID: s.ID}); err != nil {
+		return e.completeManualStep(ctx, q, run, s, p, in.Note, "Manual tasks marked as done.", nil)
+	})
+}
+
+var errTasksOpen = apperr.Conflict("tasks_open", "Some tasks of this step are not done by the browser extension.")
+
+// CompleteFromExtension completes a manual step when every one of its
+// tasks has a browser task and all of them succeeded. Otherwise it does
+// nothing: the user finishes the remaining tasks and marks the step done.
+func (e *Engine) CompleteFromExtension(ctx context.Context, p authctx.Principal, t authctx.Tenant, runID, stepID uuid.UUID, succeeded []uuid.UUID) error {
+	done := map[string]bool{}
+	for _, id := range succeeded {
+		done[id.String()] = true
+	}
+	_, err := e.userAction(ctx, p, t, runID, "workflow.manual_task_completed", true, func(q *workflowdb.Queries, run workflowdb.WorkflowRun) error {
+		s, err := e.lockManualStep(ctx, q, t.OrgID, run.ID, stepID)
+		if err != nil {
 			return err
 		}
-		return e.event(ctx, q, run.OrgID, run.ID, &s.ID, "USER_ACTION_COMPLETED", "info", "Manual tasks marked as done.",
-			map[string]any{"step": s.StepKey, "by": p.UserID.String()})
+		var o struct {
+			Tasks []ManualTask `json:"tasks"`
+		}
+		_ = json.Unmarshal(s.Output, &o)
+		if len(o.Tasks) == 0 {
+			return errTasksOpen
+		}
+		for _, task := range o.Tasks {
+			if task.BrowserTaskID == "" || !done[task.BrowserTaskID] {
+				return errTasksOpen
+			}
+		}
+		return e.completeManualStep(ctx, q, run, s, p, nil, "All tasks were done by the browser extension.", map[string]any{"via": "browser_extension"})
 	})
+	if ae, ok := apperr.As(err); ok && (ae.Code == errTasksOpen.Code || ae.Code == "no_manual_task") {
+		return nil
+	}
+	return err
+}
+
+func (e *Engine) lockManualStep(ctx context.Context, q *workflowdb.Queries, orgID, runID, stepID uuid.UUID) (workflowdb.WorkflowStep, error) {
+	s, err := q.LockStep(ctx, workflowdb.LockStepParams{OrgID: orgID, ID: stepID})
+	if err != nil || s.RunID != runID {
+		return s, wrap(err, errStepNotFound)
+	}
+	if s.Status != StepWaitingUser || waitReason(s.Output) != "manual_tasks" {
+		return s, apperr.Conflict("no_manual_task", "This step has no open manual task.")
+	}
+	return s, nil
+}
+
+func (e *Engine) completeManualStep(ctx context.Context, q *workflowdb.Queries, run workflowdb.WorkflowRun, s workflowdb.WorkflowStep,
+	p authctx.Principal, note *string, message string, extra map[string]any) error {
+	next, err := Transition(s.Status, EvCompleteManual)
+	if err != nil {
+		return err
+	}
+	var out map[string]any
+	_ = json.Unmarshal(s.Output, &out)
+	if out == nil {
+		out = map[string]any{}
+	}
+	out["completed_by"] = p.UserID.String()
+	out["completed_at"] = e.now()
+	if note != nil {
+		out["note"] = truncate(*note, 1000)
+	}
+	for k, v := range extra {
+		out[k] = v
+	}
+	now := e.now()
+	if _, err := q.SetStepStatus(ctx, workflowdb.SetStepStatusParams{Status: next, NextAttemptAt: now, Output: marshal(out),
+		FinishedAt: &now, OrgID: run.OrgID, ID: s.ID}); err != nil {
+		return err
+	}
+	data := map[string]any{"step": s.StepKey, "by": p.UserID.String()}
+	for k, v := range extra {
+		data[k] = v
+	}
+	return e.event(ctx, q, run.OrgID, run.ID, &s.ID, "USER_ACTION_COMPLETED", "info", message, data)
 }
 
 func waitReason(output []byte) string {

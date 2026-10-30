@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/* Same tokens as the dashboard (web/app/assets/css/main.css). */
+:root {
+  --radius: 0.5rem;
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --primary: oklch(0.55 0.19 40);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted-foreground: oklch(0.45 0 0);
+  --destructive: oklch(0.55 0.22 27);
+  --warning: oklch(0.6 0.15 70);
+  --success: oklch(0.52 0.13 150);
+  --border: oklch(0.922 0 0);
+  --ring: oklch(0.55 0.19 40);
+}
+
+@theme inline {
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+}
+
+html,
+body {
+  width: 380px;
+  min-height: 200px;
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+  }
+  .btn-secondary {
+    @apply bg-secondary text-secondary-foreground border border-border hover:bg-secondary/70;
+  }
+  .btn-ghost {
+    @apply text-muted-foreground hover:text-foreground hover:bg-secondary;
+  }
+  .input {
+    @apply w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring;
+  }
+  .card {
+    @apply rounded-lg border border-border bg-card;
+  }
+}

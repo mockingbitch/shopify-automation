@@ -35,6 +35,7 @@ tags:
   - name: products
   - name: imports
   - name: webhooks
+  - name: extension
   - name: admin
 
 paths:
@@ -1849,6 +1850,418 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
 
+  /orgs/{orgID}/extension/pairing-codes:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    post:
+      tags: [extension]
+      summary: Create a one-time pairing code for the browser extension
+      description: The code is valid for 6 minutes and can be used once. It is bound to the caller and the organization.
+      x-permission: workflows.run
+      responses:
+        '201':
+          description: Code
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [code, expires_at]
+                    properties:
+                      code: {type: string, pattern: '^[A-Z2-9]{5}-[A-Z2-9]{5}$'}
+                      expires_at: {type: string, format: date-time}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/extension/devices:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [extension]
+      summary: Paired browsers of the organization
+      x-permission: workflows.read
+      responses:
+        '200':
+          description: Devices
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/ExtensionDevice'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/extension/devices/{deviceID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: deviceID, in: path, required: true, schema: {type: string}}
+    delete:
+      tags: [extension]
+      summary: Unpair a browser
+      description: Members can unpair their own browsers; members with `members.manage` any browser of the organization.
+      x-permission: workflows.run
+      responses:
+        '204': {description: Unpaired}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/workflows/{runID}/browser-tasks:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [extension]
+      summary: Browser tasks of a run, with the extension's step log
+      x-permission: workflows.read
+      responses:
+        '200':
+          description: Tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/BrowserTask'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/browser-tasks/{taskID}/requeue:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [extension]
+      summary: Queue a failed browser task again
+      x-permission: workflows.run
+      responses:
+        '204': {description: Queued}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/browser-tasks/{taskID}/screenshots/{screenshotID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+      - {name: screenshotID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [extension]
+      summary: Link to a screenshot taken by the extension (5 minutes; audited)
+      x-permission: workflows.read
+      responses:
+        '200':
+          description: Link
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [url, expires_at]
+                    properties:
+                      url: {type: string}
+                      expires_at: {type: string, format: date-time}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /ext/pair:
+    post:
+      tags: [extension]
+      summary: Pair the extension with a code from the dashboard
+      description: Returns the device token once. Rate limited per IP.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code: {type: string, maxLength: 20}
+                device_name: {type: string, maxLength: 200}
+                extension_version: {type: string, maxLength: 40}
+      responses:
+        '201': {$ref: '#/components/responses/Paired'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+
+  /ext/me:
+    get:
+      tags: [extension]
+      summary: The paired device, its organization and user
+      security: [{deviceToken: []}]
+      responses:
+        '200':
+          description: Device
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [device, org, user]
+                    properties:
+                      device: {$ref: '#/components/schemas/ExtensionDevice'}
+                      org: {$ref: '#/components/schemas/ExtensionOrg'}
+                      user: {$ref: '#/components/schemas/ExtensionUser'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+
+  /ext/token/rotate:
+    post:
+      tags: [extension]
+      summary: Replace the device token (the old one stops working)
+      security: [{deviceToken: []}]
+      responses:
+        '200': {$ref: '#/components/responses/Paired200'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+
+  /ext/device:
+    delete:
+      tags: [extension]
+      summary: Unpair this browser
+      security: [{deviceToken: []}]
+      responses:
+        '204': {description: Unpaired}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+
+  /ext/tasks:
+    get:
+      tags: [extension]
+      summary: Queued tasks of the organization and tasks this device holds
+      security: [{deviceToken: []}]
+      responses:
+        '200':
+          description: Tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/BrowserTask'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+
+  /ext/tasks/{taskID}/claim:
+    parameters: [{name: taskID, in: path, required: true, schema: {type: string}}]
+    post:
+      tags: [extension]
+      summary: Lease a task for 10 minutes and get its signed recipe and inputs
+      description: Kill switches (capability, recipe) are checked on every claim.
+      security: [{deviceToken: []}]
+      responses:
+        '200':
+          description: Claimed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/TaskClaim'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+
+  /ext/tasks/{taskID}/heartbeat:
+    parameters: [{name: taskID, in: path, required: true, schema: {type: string}}]
+    post:
+      tags: [extension]
+      summary: Extend the lease; report a pause for the seller (login, verification)
+      security: [{deviceToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [lease_token, state]
+              properties:
+                lease_token: {type: string, format: uuid}
+                state: {type: string, enum: [RUNNING, WAITING_USER]}
+                message: {type: string, maxLength: 500, nullable: true}
+      responses:
+        '204': {description: Extended}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /ext/tasks/{taskID}/screenshots:
+    parameters: [{name: taskID, in: path, required: true, schema: {type: string}}]
+    post:
+      tags: [extension]
+      summary: Upload a screenshot of the Seller Centre tab (PNG/JPEG, at most 5 MB, 10 per task)
+      security: [{deviceToken: []}]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, lease_token]
+              properties:
+                file: {type: string, format: binary}
+                lease_token: {type: string, format: uuid}
+      responses:
+        '201':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [id]
+                    properties:
+                      id: {type: string, format: uuid}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '413': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /ext/tasks/{taskID}/result:
+    parameters: [{name: taskID, in: path, required: true, schema: {type: string}}]
+    post:
+      tags: [extension]
+      summary: Finish a task
+      description: |
+        A stale `lease_token` is `409 lease_lost` and the result is dropped. When every browser
+        task of the workflow step has succeeded and the step has no other manual task, the step completes.
+      security: [{deviceToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [lease_token, status]
+              properties:
+                lease_token: {type: string, format: uuid}
+                status: {type: string, enum: [SUCCEEDED, FAILED]}
+                error_code: {type: string, maxLength: 60, nullable: true}
+                message: {type: string, maxLength: 500, nullable: true}
+                steps:
+                  type: array
+                  maxItems: 200
+                  items: {$ref: '#/components/schemas/BrowserStepLog'}
+      responses:
+        '204': {description: Recorded}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /admin/browser-recipes:
+    get:
+      tags: [admin]
+      summary: All recipe versions
+      responses:
+        '200':
+          description: Recipes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/BrowserRecipe'}
+        '404': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [admin]
+      summary: Add a recipe version (disabled and unverified)
+      description: The recipe is stored byte for byte, because those bytes are signed. `version` must be the next version for its capability and market.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [recipe]
+              properties:
+                recipe: {type: object, additionalProperties: true, description: 'See internal/browser/recipe.schema.json'}
+                notes: {type: string, maxLength: 2000}
+      responses:
+        '201': {$ref: '#/components/responses/BrowserRecipe201'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /admin/browser-recipes/{recipeID}:
+    parameters: [{name: recipeID, in: path, required: true, schema: {type: string}}]
+    patch:
+      tags: [admin]
+      summary: Verify, enable or disable a recipe version (kill switch)
+      description: Only a verified version can be enabled; enabling one disables the other versions of the same capability and market.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                verified: {type: boolean}
+                enabled: {type: boolean}
+                notes: {type: string, maxLength: 2000}
+      responses:
+        '200':
+          description: Recipe
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/BrowserRecipe'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
   /admin/shopee-apps:
     get:
       tags: [admin]
@@ -1916,6 +2329,10 @@ components:
       type: apiKey
       in: header
       name: X-CSRF-Token
+    deviceToken:
+      type: http
+      scheme: bearer
+      description: Browser extension device token from POST /ext/pair
 
   parameters:
     OrgID:
@@ -1950,6 +2367,33 @@ components:
       schema: {type: string}
 
   responses:
+    Paired:
+      description: Paired; the token is shown once
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/ExtensionPaired'}
+    Paired200:
+      description: New token
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/ExtensionPaired'}
+    BrowserRecipe201:
+      description: Recipe
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/BrowserRecipe'}
     Product:
       description: Product
       headers:
@@ -2101,6 +2545,136 @@ components:
               data: {$ref: '#/components/schemas/User'}
 
   schemas:
+    ExtensionDevice:
+      type: object
+      required: [id, name, extension_version, user_id, created_at, last_used_at, expires_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        extension_version: {type: string}
+        user_id: {type: string, format: uuid}
+        user_email: {type: string}
+        created_at: {type: string, format: date-time}
+        last_used_at: {type: string, format: date-time, nullable: true}
+        expires_at: {type: string, format: date-time}
+    ExtensionOrg:
+      type: object
+      required: [id, name]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+    ExtensionUser:
+      type: object
+      required: [id, email]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+    ExtensionPaired:
+      type: object
+      required: [token, expires_at, device, org, user]
+      properties:
+        token: {type: string, description: "Device token; send as `Authorization: Bearer <token>`"}
+        expires_at: {type: string, format: date-time}
+        device: {$ref: '#/components/schemas/ExtensionDevice'}
+        org: {$ref: '#/components/schemas/ExtensionOrg'}
+        user: {$ref: '#/components/schemas/ExtensionUser'}
+    BrowserStepLog:
+      type: object
+      additionalProperties: false
+      required: [index, action, outcome, duration_ms]
+      properties:
+        index: {type: integer, minimum: 0}
+        action: {type: string, maxLength: 40}
+        outcome: {type: string, enum: [ok, failed, skipped]}
+        duration_ms: {type: integer, minimum: 0}
+        error: {type: string, maxLength: 500, nullable: true}
+    BrowserTask:
+      type: object
+      required: [id, status, capability, title, shop, preview, run_id, attempt_count, status_message, last_error, created_at, finished_at]
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [QUEUED, RUNNING, WAITING_USER, SUCCEEDED, FAILED, CANCELLED]}
+        capability: {type: string}
+        title: {type: string}
+        shop:
+          type: object
+          required: [id, shopee_shop_id, name, region]
+          properties:
+            id: {type: string, format: uuid}
+            shopee_shop_id: {type: string}
+            name: {type: string, nullable: true}
+            region: {type: string}
+        preview: {type: object, additionalProperties: true, description: 'Input values; files as their names'}
+        run_id: {type: string, format: uuid}
+        attempt_count: {type: integer}
+        status_message: {type: string, nullable: true}
+        last_error: {nullable: true}
+        step_log:
+          type: array
+          items: {$ref: '#/components/schemas/BrowserStepLog'}
+        screenshot_ids:
+          type: array
+          items: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time, nullable: true}
+    TaskClaim:
+      type: object
+      required: [lease_token, lease_expires_at, recipe, inputs, task]
+      properties:
+        lease_token: {type: string, format: uuid}
+        lease_expires_at: {type: string, format: date-time}
+        recipe:
+          type: object
+          required: [json, signature, key_id]
+          properties:
+            json: {type: string, description: Exact recipe bytes; verify the signature before parsing}
+            signature: {type: string, description: Base64 Ed25519 signature of `json`}
+            key_id: {type: string}
+        inputs:
+          type: object
+          additionalProperties:
+            type: object
+            required: [type]
+            properties:
+              type: {type: string, enum: [text, files]}
+              value: {type: string}
+              files:
+                type: array
+                items:
+                  type: object
+                  required: [name, url, content_type, sha256]
+                  properties:
+                    name: {type: string}
+                    url: {type: string, description: Presigned for 10 minutes}
+                    content_type: {type: string}
+                    sha256: {type: string}
+        task:
+          type: object
+          required: [id, shopee_shop_id, region, capability]
+          properties:
+            id: {type: string, format: uuid}
+            shopee_shop_id: {type: string}
+            region: {type: string}
+            capability: {type: string}
+    BrowserRecipe:
+      type: object
+      required: [id, capability, market, version, recipe, enabled, disabled_reason, verified_at, notes, success_count, failure_count,
+        consecutive_failures, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        capability: {type: string}
+        market: {type: string}
+        version: {type: integer}
+        recipe: {type: object, additionalProperties: true}
+        enabled: {type: boolean}
+        disabled_reason: {type: string, nullable: true}
+        verified_at: {type: string, format: date-time, nullable: true}
+        notes: {type: string}
+        success_count: {type: integer}
+        failure_count: {type: integer}
+        consecutive_failures: {type: integer}
+        created_at: {type: string, format: date-time}
+
     Problem:
       type: object
       required: [type, title, status, code]
@@ -2315,7 +2889,7 @@ components:
           type: string
           description: Empty when enabled without caveats.
           enum: ['', not_supported, disabled_by_platform, region_not_supported, app_type_not_allowed,
-            shop_not_active, not_sandbox_verified, browser_extension_unavailable]
+            shop_not_active, not_sandbox_verified, browser_extension_unavailable, browser_recipe_unavailable]
         requires_approval: {type: boolean}
         sensitive: {type: boolean}
         verification: {type: string, enum: [DOC_VERIFIED, SANDBOX_VERIFIED]}

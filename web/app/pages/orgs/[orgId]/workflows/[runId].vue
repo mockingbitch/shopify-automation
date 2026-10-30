@@ -51,8 +51,38 @@ const itemResult = (s: WorkflowStep) => (s.item_key && s.status === 'SUCCEEDED' 
 const target = (c: Change) => (c.target ?? {}) as { sku?: string; name?: string; price?: string; category_id?: number }
 const report = computed(() => (run.value?.status && isTerminal(run.value.status) ? (run.value.output as Record<string, unknown>) : null))
 
+type BrowserTask = components['schemas']['BrowserTask']
+const browserTasks = ref<Record<string, BrowserTask>>({})
+const browserLabels: Record<BrowserTask['status'], string> = {
+  QUEUED: 'Waiting for the browser extension', RUNNING: 'Running in the browser extension', WAITING_USER: 'Paused: finish the page in Seller Centre',
+  SUCCEEDED: 'Done by the browser extension', FAILED: 'The browser extension could not finish', CANCELLED: 'Cancelled',
+}
+
+async function loadBrowserTasks() {
+  const hasBrowser = view.value?.steps.some((s) => ((s.output as WaitOutput | null)?.tasks ?? []).some((t) => t.browser_task_id))
+  if (!hasBrowser) return
+  const list = unwrap(await api.GET('/orgs/{orgID}/workflows/{runID}/browser-tasks', { params: { path: path.value } })).data
+  browserTasks.value = Object.fromEntries(list.map((t) => [t.id, t]))
+}
+
+const requeue = (id: string) => act(async () => {
+  unwrap(await api.POST('/orgs/{orgID}/browser-tasks/{taskID}/requeue', { params: { path: { orgID: orgId.value, taskID: id } } }))
+}, 'Queued again for the browser extension.')
+
+async function openScreenshot(taskID: string, screenshotID: string) {
+  try {
+    const res = unwrap(await api.GET('/orgs/{orgID}/browser-tasks/{taskID}/screenshots/{screenshotID}', {
+      params: { path: { orgID: orgId.value, taskID, screenshotID } },
+    }))
+    window.open(res.data.url, '_blank', 'noopener')
+  } catch (e) {
+    error.value = toApiError(e).message
+  }
+}
+
 async function load() {
   view.value = unwrap(await api.GET('/orgs/{orgID}/workflows/{runID}', { params: { path: path.value } })).data
+  await loadBrowserTasks().catch(() => { /* optional */ })
   if (approval.value && !selected.value.length) {
     selected.value = changes.value.filter((c) => c.default_selected).map((c) => c.path)
   }
@@ -329,6 +359,28 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
                   <p class="font-medium">{{ task.title }}</p>
                   <p class="text-muted-foreground">{{ task.instructions }}</p>
                   <p v-if="task.data" class="mt-1 break-words">{{ show(task.data) }}</p>
+                  <div v-if="task.browser_task_id && browserTasks[task.browser_task_id]" class="mt-2 space-y-1 border-t pt-2">
+                    <p class="flex flex-wrap items-center gap-2">
+                      <Badge :variant="browserTasks[task.browser_task_id]!.status === 'FAILED' ? 'destructive' : 'outline'">
+                        {{ browserLabels[browserTasks[task.browser_task_id]!.status] }}
+                      </Badge>
+                      <span v-if="browserTasks[task.browser_task_id]!.status_message" class="text-xs text-muted-foreground">{{ browserTasks[task.browser_task_id]!.status_message }}</span>
+                    </p>
+                    <p v-if="browserTasks[task.browser_task_id]!.status === 'QUEUED'" class="text-xs text-muted-foreground">
+                      Open Seller Centre for this shop and press Run in the extension popup, or do it by hand and mark the step as done.
+                    </p>
+                    <ol v-if="browserTasks[task.browser_task_id]!.status === 'FAILED' && browserTasks[task.browser_task_id]!.step_log?.length" class="list-decimal pl-5 text-xs">
+                      <li v-for="l in browserTasks[task.browser_task_id]!.step_log" :key="l.index" :class="l.outcome === 'failed' ? 'text-destructive' : 'text-muted-foreground'">
+                        {{ l.action }}: {{ l.outcome }}<template v-if="l.error"> ({{ l.error }})</template>
+                      </li>
+                    </ol>
+                    <div class="flex flex-wrap gap-2">
+                      <Button v-if="browserTasks[task.browser_task_id]!.status === 'FAILED' && can('workflows.run')" size="sm" variant="outline" :disabled="busy"
+                              @click="requeue(task.browser_task_id)">Run again in the extension</Button>
+                      <Button v-for="(sid, i) in browserTasks[task.browser_task_id]!.screenshot_ids ?? []" :key="sid" size="sm" variant="outline"
+                              @click="openScreenshot(task.browser_task_id, sid)">Screenshot {{ i + 1 }}</Button>
+                    </div>
+                  </div>
                 </div>
                 <div v-if="can('workflows.run')" class="flex flex-wrap items-end gap-2">
                   <div class="min-w-64 flex-1">

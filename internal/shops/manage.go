@@ -109,7 +109,7 @@ type Detail struct {
 // Get returns one shop.
 func (s *Service) Get(ctx context.Context, t authctx.Tenant, id uuid.UUID) (Detail, error) {
 	var d Detail
-	err := s.tx(ctx, db.Scope{OrgID: t.OrgID}, func(q *shopsdb.Queries, _ pgx.Tx) error {
+	err := s.tx(ctx, db.Scope{OrgID: t.OrgID}, func(q *shopsdb.Queries, tx pgx.Tx) error {
 		conn, err := q.GetConnection(ctx, shopsdb.GetConnectionParams{OrgID: t.OrgID, ID: id})
 		if err != nil {
 			return wrap(err, errShopNotFound)
@@ -124,7 +124,7 @@ func (s *Service) Get(ctx context.Context, t authctx.Tenant, id uuid.UUID) (Deta
 		} else if !db.IsNoRows(err) {
 			return err
 		}
-		if d.Capabilities, err = s.resolve(ctx, q, conn, app); err != nil {
+		if d.Capabilities, err = s.resolve(ctx, q, tx, conn, app); err != nil {
 			return err
 		}
 		hist, err := q.ListAuthorizations(ctx, shopsdb.ListAuthorizationsParams{OrgID: t.OrgID, ShopConnectionID: id, Lim: 20})
@@ -150,7 +150,7 @@ func toProfile(p shopsdb.ShopProfile) *Profile {
 // Capabilities returns the resolved capabilities of one shop.
 func (s *Service) Capabilities(ctx context.Context, t authctx.Tenant, id uuid.UUID) ([]capability.Resolved, error) {
 	var out []capability.Resolved
-	err := s.tx(ctx, db.Scope{OrgID: t.OrgID}, func(q *shopsdb.Queries, _ pgx.Tx) error {
+	err := s.tx(ctx, db.Scope{OrgID: t.OrgID}, func(q *shopsdb.Queries, tx pgx.Tx) error {
 		conn, err := q.GetConnection(ctx, shopsdb.GetConnectionParams{OrgID: t.OrgID, ID: id})
 		if err != nil {
 			return wrap(err, errShopNotFound)
@@ -159,13 +159,13 @@ func (s *Service) Capabilities(ctx context.Context, t authctx.Tenant, id uuid.UU
 		if err != nil {
 			return err
 		}
-		out, err = s.resolve(ctx, q, conn, app)
+		out, err = s.resolve(ctx, q, tx, conn, app)
 		return err
 	})
 	return out, wrap(err, nil)
 }
 
-func (s *Service) resolve(ctx context.Context, q *shopsdb.Queries, conn shopsdb.ShopConnection, app shopsdb.ShopeeApp) ([]capability.Resolved, error) {
+func (s *Service) resolve(ctx context.Context, q *shopsdb.Queries, tx pgx.Tx, conn shopsdb.ShopConnection, app shopsdb.ShopeeApp) ([]capability.Resolved, error) {
 	defs, err := q.ListCapabilityDefinitions(ctx)
 	if err != nil {
 		return nil, err
@@ -191,8 +191,14 @@ func (s *Service) resolve(ctx context.Context, q *shopsdb.Queries, conn shopsdb.
 		co = append(co, capability.Override{CapabilityKey: o.CapabilityKey, AppID: o.ShopeeAppID, Region: o.Region,
 			Mode: mode, Enabled: o.Enabled, Reason: o.Reason})
 	}
-	return capability.Resolve(cd, co, capability.Context{AppID: app.ID, AppType: app.AppType, AppEnvironment: app.Environment,
-		Region: deref(conn.Region, ""), ConnectionStatus: conn.Status}), nil
+	cctx := capability.Context{AppID: app.ID, AppType: app.AppType, AppEnvironment: app.Environment,
+		Region: deref(conn.Region, ""), ConnectionStatus: conn.Status}
+	if s.Extension != nil {
+		if cctx.ExtensionAvailable, cctx.BrowserReady, err = s.Extension.Ready(ctx, tx, conn.OrgID, cctx.Region); err != nil {
+			return nil, err
+		}
+	}
+	return capability.Resolve(cd, co, cctx), nil
 }
 
 // SyncJob is returned when a sync is queued.

@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"shopee-automation/internal/browser"
 	"shopee-automation/internal/capability"
 	"shopee-automation/internal/platform/authctx"
 	"shopee-automation/internal/shopee"
@@ -43,6 +44,14 @@ type Setup struct {
 	Shops     *shops.Service
 	Templates *templates.Service
 	Engine    *workflow.Engine
+	// Browser queues tasks for the browser extension. Nil: every task
+	// without an Open API stays a manual task.
+	Browser BrowserTasks
+}
+
+// BrowserTasks queues work for the browser extension.
+type BrowserTasks interface {
+	CreateTask(ctx context.Context, spec browser.TaskSpec) (uuid.UUID, bool, error)
 }
 
 // Definition returns SHOP_SETUP v1.
@@ -362,7 +371,7 @@ var taskText = map[string][2]string{
 
 // Step 7: everything selected that has no Open API (or whose extension
 // is not available yet) becomes a manual task.
-func (s *Setup) manualTasks(_ context.Context, sc *workflow.StepContext) workflow.Result {
+func (s *Setup) manualTasks(ctx context.Context, sc *workflow.StepContext) workflow.Result {
 	sel, err := selected(sc)
 	if err != nil {
 		return workflow.Permanent(err)
@@ -395,7 +404,34 @@ func (s *Setup) manualTasks(_ context.Context, sc *workflow.StepContext) workflo
 	if len(tasks) == 0 {
 		return workflow.Skip("no_manual_changes")
 	}
-	return workflow.Manual(tasks, map[string]any{"task_count": len(tasks)})
+	// Tasks the browser extension can do get a browser task; the rest stay
+	// manual. Either way the step waits until they are done.
+	browserTasks := 0
+	if s.Browser != nil {
+		var conn struct {
+			Region string `json:"region"`
+		}
+		_ = sc.Output("validate_connection", &conn)
+		for i, t := range tasks {
+			c, selectedChange := sel[t.Key]
+			if selectedChange && c.Mode != capability.ModeBrowser {
+				continue
+			}
+			id, ok, err := s.Browser.CreateTask(ctx, browser.TaskSpec{OrgID: sc.OrgID, ShopID: sc.ShopID, RunID: sc.RunID, StepID: sc.StepID,
+				Key: t.Key, Capability: t.Capability, Market: conn.Region, Title: t.Title, Target: t.Data})
+			if err != nil {
+				return workflow.Retryable(err)
+			}
+			if ok {
+				tasks[i].BrowserTaskID = id.String()
+				browserTasks++
+			}
+		}
+	}
+	if browserTasks > 0 {
+		sc.Log("info", fmt.Sprintf("%d of %d tasks can be done by the browser extension.", browserTasks, len(tasks)), nil)
+	}
+	return workflow.Manual(tasks, map[string]any{"task_count": len(tasks), "browser_tasks": browserTasks})
 }
 
 // Step 8.

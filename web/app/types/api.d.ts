@@ -3434,6 +3434,835 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/orgs/{orgID}/extension/pairing-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a one-time pairing code for the browser extension
+         * @description The code is valid for 6 minutes and can be used once. It is bound to the caller and the organization.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Code */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                code: string;
+                                /** Format: date-time */
+                                expires_at: string;
+                            };
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/extension/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        /** Paired browsers of the organization */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Devices */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["ExtensionDevice"][];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/extension/devices/{deviceID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                deviceID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unpair a browser
+         * @description Members can unpair their own browsers; members with `members.manage` any browser of the organization.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    deviceID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Unpaired */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/workflows/{runID}/browser-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                runID: string;
+            };
+            cookie?: never;
+        };
+        /** Browser tasks of a run, with the extension's step log */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    runID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Tasks */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["BrowserTask"][];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/browser-tasks/{taskID}/requeue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                taskID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue a failed browser task again */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    taskID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Queued */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/browser-tasks/{taskID}/screenshots/{screenshotID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                taskID: string;
+                screenshotID: string;
+            };
+            cookie?: never;
+        };
+        /** Link to a screenshot taken by the extension (5 minutes; audited) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    taskID: string;
+                    screenshotID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Link */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                url: string;
+                                /** Format: date-time */
+                                expires_at: string;
+                            };
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ext/pair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pair the extension with a code from the dashboard
+         * @description Returns the device token once. Rate limited per IP.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        code: string;
+                        device_name?: string;
+                        extension_version?: string;
+                    };
+                };
+            };
+            responses: {
+                201: components["responses"]["Paired"];
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ext/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The paired device, its organization and user */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Device */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                device: components["schemas"]["ExtensionDevice"];
+                                org: components["schemas"]["ExtensionOrg"];
+                                user: components["schemas"]["ExtensionUser"];
+                            };
+                        };
+                    };
+                };
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ext/token/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the device token (the old one stops working) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["Paired200"];
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ext/device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unpair this browser */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Unpaired */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ext/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Queued tasks of the organization and tasks this device holds */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Tasks */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["BrowserTask"][];
+                        };
+                    };
+                };
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ext/tasks/{taskID}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lease a task for 10 minutes and get its signed recipe and inputs
+         * @description Kill switches (capability, recipe) are checked on every claim.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    taskID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Claimed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["TaskClaim"];
+                        };
+                    };
+                };
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ext/tasks/{taskID}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Extend the lease; report a pause for the seller (login, verification) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    taskID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        lease_token: string;
+                        /** @enum {string} */
+                        state: "RUNNING" | "WAITING_USER";
+                        message?: string | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description Extended */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["Problem"];
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ext/tasks/{taskID}/screenshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload a screenshot of the Seller Centre tab (PNG/JPEG, at most 5 MB, 10 per task) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    taskID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /** Format: binary */
+                        file: string;
+                        /** Format: uuid */
+                        lease_token: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Stored */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                /** Format: uuid */
+                                id: string;
+                            };
+                        };
+                    };
+                };
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                413: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ext/tasks/{taskID}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish a task
+         * @description A stale `lease_token` is `409 lease_lost` and the result is dropped. When every browser
+         *     task of the workflow step has succeeded and the step has no other manual task, the step completes.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    taskID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        lease_token: string;
+                        /** @enum {string} */
+                        status: "SUCCEEDED" | "FAILED";
+                        error_code?: string | null;
+                        message?: string | null;
+                        steps?: components["schemas"]["BrowserStepLog"][];
+                    };
+                };
+            };
+            responses: {
+                /** @description Recorded */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["Problem"];
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/browser-recipes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** All recipe versions */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Recipes */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["BrowserRecipe"][];
+                        };
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Add a recipe version (disabled and unverified)
+         * @description The recipe is stored byte for byte, because those bytes are signed. `version` must be the next version for its capability and market.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description See internal/browser/recipe.schema.json */
+                        recipe: {
+                            [key: string]: unknown;
+                        };
+                        notes?: string;
+                    };
+                };
+            };
+            responses: {
+                201: components["responses"]["BrowserRecipe201"];
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/browser-recipes/{recipeID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recipeID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Verify, enable or disable a recipe version (kill switch)
+         * @description Only a verified version can be enabled; enabling one disables the other versions of the same capability and market.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    recipeID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        verified?: boolean;
+                        enabled?: boolean;
+                        notes?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Recipe */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["BrowserRecipe"];
+                        };
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        trace?: never;
+    };
     "/admin/shopee-apps": {
         parameters: {
             query?: never;
@@ -3548,6 +4377,132 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ExtensionDevice: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            extension_version: string;
+            /** Format: uuid */
+            user_id: string;
+            user_email?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_used_at: string | null;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        ExtensionOrg: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        ExtensionUser: {
+            /** Format: uuid */
+            id: string;
+            email: string;
+        };
+        ExtensionPaired: {
+            /** @description Device token; send as `Authorization: Bearer <token>` */
+            token: string;
+            /** Format: date-time */
+            expires_at: string;
+            device: components["schemas"]["ExtensionDevice"];
+            org: components["schemas"]["ExtensionOrg"];
+            user: components["schemas"]["ExtensionUser"];
+        };
+        BrowserStepLog: {
+            index: number;
+            action: string;
+            /** @enum {string} */
+            outcome: "ok" | "failed" | "skipped";
+            duration_ms: number;
+            error?: string | null;
+        };
+        BrowserTask: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "QUEUED" | "RUNNING" | "WAITING_USER" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+            capability: string;
+            title: string;
+            shop: {
+                /** Format: uuid */
+                id: string;
+                shopee_shop_id: string;
+                name: string | null;
+                region: string;
+            };
+            /** @description Input values; files as their names */
+            preview: {
+                [key: string]: unknown;
+            };
+            /** Format: uuid */
+            run_id: string;
+            attempt_count: number;
+            status_message: string | null;
+            last_error: unknown;
+            step_log?: components["schemas"]["BrowserStepLog"][];
+            screenshot_ids?: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            finished_at: string | null;
+        };
+        TaskClaim: {
+            /** Format: uuid */
+            lease_token: string;
+            /** Format: date-time */
+            lease_expires_at: string;
+            recipe: {
+                /** @description Exact recipe bytes; verify the signature before parsing */
+                json: string;
+                /** @description Base64 Ed25519 signature of `json` */
+                signature: string;
+                key_id: string;
+            };
+            inputs: {
+                [key: string]: {
+                    /** @enum {string} */
+                    type: "text" | "files";
+                    value?: string;
+                    files?: {
+                        name: string;
+                        /** @description Presigned for 10 minutes */
+                        url: string;
+                        content_type: string;
+                        sha256: string;
+                    }[];
+                };
+            };
+            task: {
+                /** Format: uuid */
+                id: string;
+                shopee_shop_id: string;
+                region: string;
+                capability: string;
+            };
+        };
+        BrowserRecipe: {
+            /** Format: uuid */
+            id: string;
+            capability: string;
+            market: string;
+            version: number;
+            recipe: {
+                [key: string]: unknown;
+            };
+            enabled: boolean;
+            disabled_reason: string | null;
+            /** Format: date-time */
+            verified_at: string | null;
+            notes: string;
+            success_count: number;
+            failure_count: number;
+            consecutive_failures: number;
+            /** Format: date-time */
+            created_at: string;
+        };
         Problem: {
             type: string;
             title: string;
@@ -3716,7 +4671,7 @@ export interface components {
              * @description Empty when enabled without caveats.
              * @enum {string}
              */
-            reason: "" | "not_supported" | "disabled_by_platform" | "region_not_supported" | "app_type_not_allowed" | "shop_not_active" | "not_sandbox_verified" | "browser_extension_unavailable";
+            reason: "" | "not_supported" | "disabled_by_platform" | "region_not_supported" | "app_type_not_allowed" | "shop_not_active" | "not_sandbox_verified" | "browser_extension_unavailable" | "browser_recipe_unavailable";
             requires_approval: boolean;
             sensitive: boolean;
             /** @enum {string} */
@@ -4139,6 +5094,39 @@ export interface components {
         };
     };
     responses: {
+        /** @description Paired; the token is shown once */
+        Paired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["ExtensionPaired"];
+                };
+            };
+        };
+        /** @description New token */
+        Paired200: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["ExtensionPaired"];
+                };
+            };
+        };
+        /** @description Recipe */
+        BrowserRecipe201: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["BrowserRecipe"];
+                };
+            };
+        };
         /** @description Product */
         Product: {
             headers: {

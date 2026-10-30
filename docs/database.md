@@ -502,6 +502,20 @@ erDiagram
   }
 ```
 
+### 2.5 As built (Phase 6)
+
+Migration `00006_extension.sql`:
+
+| Table | Notes |
+|---|---|
+| `extension_pairing_codes` | SHA-256 of the code, 6-minute expiry, `used_at`; FK to the membership |
+| `extension_devices` | SHA-256 of the token, sliding `expires_at`, `revoked_at`; FK to the membership (removing the member removes the device) |
+| `browser_recipes` | Platform-wide (no `org_id`, no RLS); `UNIQUE (capability_key, market, version)`; at most one enabled per capability and market; `CHECK (NOT enabled OR verified_at IS NOT NULL)`; success/failure counters |
+| `browser_tasks` | `UNIQUE (step_id, task_key)`; composite FKs to shop, run, step, device; lease token present exactly when `RUNNING`/`WAITING_USER`; input (text values, storage keys of files), preview, step log |
+| `browser_task_screenshots` | Storage keys of screenshots, at most 10 per task (enforced in code) |
+
+The app_system role may read only `(id, org_id, code_hash, expires_at, used_at)` of pairing codes and `(id, org_id, token_hash)` of devices.
+
 ## 3. Key constraints and indexes
 
 | Table | Constraint / index | Purpose |

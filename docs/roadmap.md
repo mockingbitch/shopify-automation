@@ -201,7 +201,43 @@ Goal: products can be created by hand or imported from CSV/XLSX, validated row b
 | 5.9 | Dashboard | Products list/detail/form, imports (upload, rows, fix, report), publish dialog | Type-check + Playwright |
 | 5.10 | Docs sync | | Reviewed |
 
-## 7. Definition of done (every phase)
+## 7. Phase 6 task breakdown
+
+**Status (2026-10-30): built and tested against local fixtures. No real Seller Centre recipe exists yet**, so every capability without an Open API is still a manual task in practice. Enabling one needs a recipe written and verified on a real seller account per market (E-1, E-2).
+
+Goal: operations without an Open API (banner, decoration, warehouse, address creation) run in the seller's own browser through an extension, with the seller present, after the workflow approval, and with the same guarantees as API steps (no double run, kill switch, audit).
+
+| # | Task | Output | Done when |
+|---|---|---|---|
+| 6.1 | Contract | browser-extension.md §11, `internal/browser/recipe.schema.json`, OpenAPI tag `extension` | Both sides build against it |
+| 6.2 | Schema | Migration `00006`: `extension_pairing_codes`, `extension_devices`, `browser_recipes`, `browser_tasks`, `browser_task_screenshots` | RLS (recipes are platform-wide), isolation suite |
+| 6.3 | Pairing and devices | One-time code, hashed device token, sliding 30-day expiry, rotation, revoke, membership/role re-checked on every call | Integration tests |
+| 6.4 | Recipes | Schema + semantic validation (shop check before any write, templates only in value fields, origins), Ed25519 signing, admin versions with verify/enable/disable, auto-disable after 3 recipe faults in a row | Unit + integration tests |
+| 6.5 | Task queue | Create from SHOP_SETUP manual step, list, claim with lease and kill switches, heartbeat/pause, screenshots, fenced result; step completes when all its tasks were done by the extension | Integration tests |
+| 6.6 | Capability resolution | `BROWSER` only with a paired device and an enabled recipe for the market; otherwise `MANUAL` with a reason | Resolver table test |
+| 6.7 | Extension | WXT MV3 + Vue popup: pairing, task list, runner (signature, validation, targeting, stop_on pause, shop-ID check, uploads, multi-page), token rotation | Vitest + Playwright with fixture pages |
+| 6.8 | Dashboard | Browser Extension page (pair, devices), task status in runs (retry, screenshots), admin recipes page | Type-check + Playwright |
+| 6.9 | Docs sync | | Reviewed |
+
+Verified locally: Go unit and integration tests (pairing, wrong/used/expired codes, rotation, revoke, role change, sliding expiry, CORS, full banner run with signature check, mixed manual/browser step, auto-disable and kill switch, cancellation when the step is finished by hand, cross-org isolation); extension 101 unit tests and 7 Playwright tests against a fake API and fixture pages; `go test -race`, `golangci-lint`, `sqlc diff`, migrations up/down/up, dashboard type-check, build and Playwright smoke, Docker build.
+
+Not verified:
+- Real Seller Centre pages, selectors and recipes (none exist; E-1, E-2).
+- Screenshots: `captureVisibleTab` needs the `activeTab` grant from a real toolbar click, which Playwright cannot produce (E-5). A refused screenshot is skipped.
+- The extension against the real Go API end to end (both sides are tested against the same contract: the API with OpenAPI contract tests, the extension with a fake API).
+- A service worker killed mid-run (the run is marked interrupted and not resumed blindly); Edge, Cốc Cốc and Brave.
+
+Deferred from Phase 6:
+
+| Item | Moves to |
+|---|---|
+| First real recipes (banner, address creation) per market, verified on a seller account | When E-1/E-2 are answered and a test seller account exists |
+| Extension store listing and privacy text (E-4); signed CRX/update channel | Before production |
+| "Release" a claimed task back to the queue (today Stop finishes it as FAILED `stopped_by_user`, which does not count against the recipe) | Phase 7 |
+| Notifications when a task waits for the extension | Phase 7 |
+| Recipe failure-rate alerting beyond auto-disable | Phase 8 |
+
+## 8. Definition of done (every phase)
 
 1. Code + tests merged; `go test -race ./...`, lint and type-check green.
 2. Integration tests run against real Postgres/Redis containers.
@@ -210,7 +246,7 @@ Goal: products can be created by hand or imported from CSV/XLSX, validated row b
 5. Docs in `docs/` updated in the same PR.
 6. No feature is reported as working against Shopee unless it was exercised in sandbox; otherwise it is labelled `DOC-VERIFIED` only.
 
-## 8. Decisions needed from the product owner
+## 9. Decisions needed from the product owner
 
 | ID | Decision | Needed by |
 |---|---|---|

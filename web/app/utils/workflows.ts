@@ -54,7 +54,7 @@ export const skipReasons: Record<string, string> = {
 export interface WaitOutput {
   reason?: string
   message?: string
-  tasks?: { key: string; title: string; instructions: string; capability?: string; data?: unknown }[]
+  tasks?: { key: string; title: string; instructions: string; capability?: string; data?: unknown; browser_task_id?: string }[]
   completed_by?: string
   note?: string
 }

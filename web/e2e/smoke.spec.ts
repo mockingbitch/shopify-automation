@@ -111,6 +111,12 @@ test('sign up, create an organization and invite a member', async ({ page, reque
   await expect(page.getByText('Category is required.')).toHaveCount(0)
   await expect(page.getByText('At least one image URL is required.')).toBeVisible()
 
+  // Browser extension: a one-time pairing code is shown.
+  await nav.getByRole('link', { name: 'Browser Extension' }).click()
+  await expect(page.getByRole('heading', { name: 'No browser paired' })).toBeVisible()
+  await page.getByRole('button', { name: 'Create pairing code' }).click()
+  await expect(page.getByText(/^[A-Z2-9]{5}-[A-Z2-9]{5}$/)).toBeVisible()
+
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page).toHaveURL(/\/login/)
 })

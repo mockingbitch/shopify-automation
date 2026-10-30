@@ -20,6 +20,7 @@ const nav = computed(() => {
     { label: 'Product Imports', to: `${base}/imports` },
     { label: 'Automation Workflows', to: `${base}/workflows` },
     { label: 'Execution Logs', to: `${base}/logs` },
+    { label: 'Browser Extension', to: `${base}/extension` },
     { label: 'Members', to: `${base}/members` },
     { label: 'Settings', to: `${base}/settings` },
   ]
@@ -116,6 +117,9 @@ async function resendVerification() {
           <p v-if="current" class="mt-1 text-xs text-muted-foreground">Role: {{ roleLabels[current.role] }}</p>
           <NuxtLink v-if="session.user?.is_platform_admin" to="/admin/shopee-apps" class="mt-2 block text-xs text-primary hover:underline">
             Platform admin: Shopee apps
+          </NuxtLink>
+          <NuxtLink v-if="session.user?.is_platform_admin" to="/admin/browser-recipes" class="mt-1 block text-xs text-primary hover:underline">
+            Platform admin: Browser recipes
           </NuxtLink>
           <Button variant="outline" size="sm" class="mt-3 w-full" @click="logout">Sign out</Button>
         </div>

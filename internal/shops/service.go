@@ -65,6 +65,15 @@ type Service struct {
 	BaseURL *url.URL
 	// AllowInsecureHosts permits http:// Shopee hosts (local tests only).
 	AllowInsecureHosts bool
+	// Extension reports browser-extension readiness for capability
+	// resolution. Nil means no extension support.
+	Extension ExtensionReadiness
+}
+
+// ExtensionReadiness tells whether an organization has a paired extension
+// and which capabilities have an enabled recipe for a market.
+type ExtensionReadiness interface {
+	Ready(ctx context.Context, tx pgx.Tx, orgID uuid.UUID, market string) (bool, map[string]bool, error)
 }
 
 func (s *Service) tx(ctx context.Context, scope db.Scope, fn func(q *shopsdb.Queries, tx pgx.Tx) error) error {

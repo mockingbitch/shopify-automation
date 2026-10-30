@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shopee-automation.local/schemas/recipe.json",
+  "title": "Browser recipe",
+  "description": "Declarative steps the browser extension runs in Seller Centre. Data only: the extension supports a fixed set of actions and never runs code from a recipe.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["capability", "version", "market", "start_url", "allowed_origins", "inputs", "steps", "stop_on"],
+  "properties": {
+    "capability": {"type": "string", "pattern": "^[a-z]+(\\.[a-z_]+)+$"},
+    "version": {"type": "integer", "minimum": 1},
+    "market": {"type": "string", "enum": ["VN", "SG", "MY", "TH", "PH", "ID", "TW"]},
+    "start_url": {"type": "string", "pattern": "^https://[^/]+/"},
+    "allowed_origins": {
+      "description": "The runner refuses to act on a page whose origin is not listed.",
+      "type": "array", "minItems": 1, "maxItems": 5,
+      "items": {"type": "string", "pattern": "^https://[a-z0-9.-]+(:[0-9]+)?$"}
+    },
+    "pace_ms": {"description": "Pause between actions (politeness, not disguise). Default 800.", "type": "integer", "minimum": 200, "maximum": 5000},
+    "inputs": {
+      "description": "Inputs the task must provide, by name.",
+      "type": "object",
+      "maxProperties": 20,
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_]{0,39}$"},
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": ["type"],
+        "properties": {"type": {"enum": ["text", "files"]}, "required": {"type": "boolean"}}
+      }
+    },
+    "steps": {"type": "array", "minItems": 1, "maxItems": 60, "items": {"$ref": "#/$defs/step"}},
+    "verify": {"type": "array", "maxItems": 10, "items": {"$ref": "#/$defs/step"}},
+    "stop_on": {
+      "description": "Conditions checked before every action. A match pauses the task and asks the seller to finish the page (login, verification, CAPTCHA).",
+      "type": "array", "minItems": 1, "maxItems": 20,
+      "items": {
+        "type": "object", "additionalProperties": false, "minProperties": 1, "maxProperties": 1,
+        "properties": {
+          "url_matches": {"type": "string", "maxLength": 200},
+          "text_any": {"$ref": "#/$defs/texts"},
+          "selector": {"type": "string", "maxLength": 300}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "texts": {"type": "array", "minItems": 1, "maxItems": 10, "items": {"type": "string", "minLength": 1, "maxLength": 200}},
+    "template": {"description": "A string that may contain {{task.shopee_shop_id}} or {{input.<name>}}.", "type": "string", "maxLength": 2000},
+    "target": {
+      "description": "How to find an element: accessible role and name first, then CSS as last resort.",
+      "type": "object", "additionalProperties": false, "minProperties": 1,
+      "properties": {
+        "role": {"type": "string", "enum": ["button", "link", "textbox", "combobox", "checkbox", "radio", "tab", "menuitem", "option", "heading", "img", "dialog"]},
+        "name_any": {"$ref": "#/$defs/texts"},
+        "selector": {"type": "string", "maxLength": 300},
+        "text_any": {"$ref": "#/$defs/texts"}
+      }
+    },
+    "timeout": {"type": "integer", "minimum": 100, "maximum": 60000},
+    "step": {
+      "type": "object", "minProperties": 1, "maxProperties": 2,
+      "properties": {
+        "goto": {"type": "object", "additionalProperties": false, "required": ["url"], "properties": {"url": {"$ref": "#/$defs/template"}}},
+        "wait_for": {"$ref": "#/$defs/target"},
+        "click": {"$ref": "#/$defs/target"},
+        "fill": {
+          "type": "object", "additionalProperties": false, "required": ["target", "value"],
+          "properties": {"target": {"$ref": "#/$defs/target"}, "value": {"$ref": "#/$defs/template"}}
+        },
+        "select": {
+          "type": "object", "additionalProperties": false, "required": ["target", "value"],
+          "properties": {"target": {"$ref": "#/$defs/target"}, "value": {"$ref": "#/$defs/template"}}
+        },
+        "upload": {
+          "type": "object", "additionalProperties": false, "required": ["target", "files"],
+          "properties": {"target": {"$ref": "#/$defs/target"}, "files": {"type": "string", "pattern": "^\\{\\{input\\.[a-z][a-z0-9_]*\\}\\}$"}}
+        },
+        "expect": {
+          "type": "object", "additionalProperties": false, "minProperties": 1, "maxProperties": 1,
+          "properties": {"text_any": {"$ref": "#/$defs/texts"}, "target": {"$ref": "#/$defs/target"}}
+        },
+        "assert_shop_id": {
+          "description": "Reads the logged-in shop ID from the page and compares it with the task's shop. Mandatory before the first write.",
+          "type": "object", "additionalProperties": false, "required": ["target", "pattern"],
+          "properties": {
+            "target": {"$ref": "#/$defs/target"},
+            "pattern": {"description": "Regular expression with one capture group for the numeric shop ID.", "type": "string", "maxLength": 200}
+          }
+        },
+        "screenshot": {"type": "object", "additionalProperties": false, "required": ["name"], "properties": {"name": {"type": "string", "pattern": "^[a-z0-9_-]{1,40}$"}}},
+        "timeout_ms": {"$ref": "#/$defs/timeout"}
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {"required": ["goto"]}, {"required": ["wait_for"]}, {"required": ["click"]}, {"required": ["fill"]},
+        {"required": ["select"]}, {"required": ["upload"]}, {"required": ["expect"]}, {"required": ["assert_shop_id"]},
+        {"required": ["screenshot"]}
+      ]
+    }
+  }
+}

@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +17,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"shopee-automation/internal/audit"
+	"shopee-automation/internal/browser"
 	"shopee-automation/internal/identity"
 	"shopee-automation/internal/platform/apperr"
 	"shopee-automation/internal/platform/authctx"
@@ -63,6 +65,11 @@ const (
 	// Webhook routes are called by Shopee. No session, no CSRF, no origin
 	// check; the handler verifies the request signature.
 	Webhook
+	// Extension routes are called by the browser extension with a device
+	// token (no cookies, no CSRF); CORS allows only extension origins.
+	Extension
+	// ExtensionPublic is the pairing route: CORS but no device token.
+	ExtensionPublic
 )
 
 // Route is one API endpoint under /api/v1.
@@ -93,6 +100,8 @@ type Deps struct {
 	Queue    queue.Enqueuer
 	Store    storage.Store
 	Fetcher  *media.Fetcher
+	// Signer signs browser recipes; nil disables task claims.
+	Signer *browser.Signer
 }
 
 // App is the assembled API.
@@ -112,6 +121,9 @@ type App struct {
 	publish  productpublish.Handler
 	// Publish is exposed so tests can shorten the variation delay.
 	Publish *productpublish.Workflow
+	browser browser.Handler
+	// Browser is exposed for tests.
+	Browser *browser.Service
 	// Engine is exposed for the worker and tests.
 	Engine *workflow.Engine
 	// Shops is exposed for the worker and tests.
@@ -153,7 +165,11 @@ func New(d Deps) *App {
 	a.Products = &products.Service{DB: d.DB, Clock: d.Clock, Audit: rec, Store: d.Store, Fetcher: d.Fetcher, Queue: d.Queue,
 		Log: d.Log, Templates: tplSvc}
 	a.prod = products.Handler{Svc: a.Products}
-	setup := &shopsetup.Setup{Shops: a.Shops, Templates: tplSvc, Engine: a.Engine}
+	a.Browser = &browser.Service{DB: d.DB, System: d.SystemDB, Clock: d.Clock, Audit: rec, Store: d.Store, Fetcher: d.Fetcher,
+		Signer: d.Signer, Steps: a.Engine, Log: d.Log}
+	a.Shops.Extension = a.Browser
+	a.browser = browser.Handler{Svc: a.Browser, Limiter: d.Limiter, Log: d.Log, Adapter: a.adapter, Origins: d.Config.ExtensionOrigins}
+	setup := &shopsetup.Setup{Shops: a.Shops, Templates: tplSvc, Engine: a.Engine, Browser: a.Browser}
 	a.Engine.Register(setup.Definition())
 	a.apply = shopsetup.Handler{Setup: setup, Audit: rec}
 	a.Publish = &productpublish.Workflow{Shops: a.Shops, Products: a.Products, Engine: a.Engine, VariationDelay: 5 * time.Second}
@@ -174,7 +190,7 @@ var templateRegistry = templates.LoadRegistry()
 
 // Routes returns the API route table.
 func (a *App) Routes() []Route {
-	id, tn, sh, tp, wf, pr := a.identity, a.tenancy, a.shops, a.tpl, a.wf, a.prod
+	id, tn, sh, tp, wf, pr, bx := a.identity, a.tenancy, a.shops, a.tpl, a.wf, a.prod, a.browser
 	return []Route{
 		{"POST", "/auth/register", Public, "", id.Register},
 		{"POST", "/auth/login", Public, "", id.Login},
@@ -261,6 +277,26 @@ func (a *App) Routes() []Route {
 		{"POST", "/orgs/{orgID}/imports/{batchID}/retry", Tenant, rbac.ImportsWrite, pr.Retry},
 		{"GET", "/orgs/{orgID}/imports/{batchID}/report", Tenant, rbac.ProductsRead, pr.Report},
 
+		{"POST", "/orgs/{orgID}/extension/pairing-codes", Tenant, rbac.WorkflowsRun, bx.CreatePairingCode},
+		{"GET", "/orgs/{orgID}/extension/devices", Tenant, rbac.WorkflowsRead, bx.ListDevices},
+		{"DELETE", "/orgs/{orgID}/extension/devices/{deviceID}", Tenant, rbac.WorkflowsRun, bx.RevokeDevice},
+		{"GET", "/orgs/{orgID}/workflows/{runID}/browser-tasks", Tenant, rbac.WorkflowsRead, bx.RunTasks},
+		{"POST", "/orgs/{orgID}/browser-tasks/{taskID}/requeue", Tenant, rbac.WorkflowsRun, bx.Requeue},
+		{"GET", "/orgs/{orgID}/browser-tasks/{taskID}/screenshots/{screenshotID}", Tenant, rbac.WorkflowsRead, bx.Screenshot},
+
+		{"POST", "/ext/pair", ExtensionPublic, "", bx.Pair},
+		{"GET", "/ext/me", Extension, "", bx.Me},
+		{"POST", "/ext/token/rotate", Extension, "", bx.Rotate},
+		{"DELETE", "/ext/device", Extension, "", bx.Unpair},
+		{"GET", "/ext/tasks", Extension, "", bx.Tasks},
+		{"POST", "/ext/tasks/{taskID}/claim", Extension, "", bx.Claim},
+		{"POST", "/ext/tasks/{taskID}/heartbeat", Extension, "", bx.Heartbeat},
+		{"POST", "/ext/tasks/{taskID}/screenshots", Extension, "", bx.AddScreenshot},
+		{"POST", "/ext/tasks/{taskID}/result", Extension, "", bx.Result},
+
+		{"GET", "/admin/browser-recipes", Admin, "", bx.ListRecipes},
+		{"POST", "/admin/browser-recipes", Admin, "", bx.CreateRecipe},
+		{"PATCH", "/admin/browser-recipes/{recipeID}", Admin, "", bx.UpdateRecipe},
 		{"GET", "/admin/shopee-apps", Admin, "", sh.ListApps},
 		{"POST", "/admin/shopee-apps", Admin, "", sh.CreateApp},
 		{"PATCH", "/admin/shopee-apps/{appID}", Admin, "", sh.UpdateApp},
@@ -285,10 +321,23 @@ func (a *App) Handler() http.Handler {
 	api.Use(httpx.SameOrigin(a.adapter, origin), a.identity.LoadSession)
 	api.NotFound(r.NotFoundHandler())
 	api.MethodNotAllowed(r.MethodNotAllowedHandler())
+	// Extension API: its own CORS and device-token auth, no session.
+	ext := chi.NewRouter()
+	ext.Use(a.browser.CORS)
+	ext.NotFound(r.NotFoundHandler())
+	ext.MethodNotAllowed(r.MethodNotAllowedHandler())
 	for _, rt := range a.Routes() {
 		if rt.Access == Webhook {
 			// Outside the API sub-router: no origin check, no session.
 			r.Method(rt.Method, "/api/v1"+rt.Path, a.adapter.H(rt.Handler))
+			continue
+		}
+		if rt.Access == Extension || rt.Access == ExtensionPublic {
+			h := a.adapter.H(rt.Handler)
+			if rt.Access == Extension {
+				h = a.browser.RequireDevice(h)
+			}
+			ext.Method(rt.Method, strings.TrimPrefix(rt.Path, "/ext"), h)
 			continue
 		}
 		var mw []func(http.Handler) http.Handler
@@ -304,6 +353,7 @@ func (a *App) Handler() http.Handler {
 		}
 		api.With(mw...).Method(rt.Method, rt.Path, a.adapter.H(rt.Handler))
 	}
+	r.Mount("/api/v1/ext", ext)
 	r.Mount("/api/v1", api)
 	return otelhttp.NewHandler(r, "http.server", otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
 		if rc := chi.RouteContext(r.Context()); rc != nil && rc.RoutePattern() != "" {

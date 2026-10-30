@@ -74,3 +74,15 @@ Workflow steps run on the worker. Without `make worker`, applied templates stay 
 ## Encryption keys
 
 `ENCRYPTION_KEYS` holds one or more `id:base64key` pairs; `ENCRYPTION_ACTIVE_KEY` chooses the key for new data. To rotate, add a new key, make it active and keep the old one until every row has been re-wrapped (job planned for Phase 8). Losing all keys makes stored Shopee tokens unreadable; shops then need to be reconnected.
+
+## Browser extension
+
+The extension lives in `extension/` (see its README). For local work:
+
+1. `go run ./cmd/admin gen-recipe-key` prints a `RECIPE_SIGNING_KEY` for `.env` and the public key for the extension build (`WXT_RECIPE_PUBLIC_KEYS={"<RECIPE_SIGNING_KEY_ID>":"<public key>"}`).
+2. Build with `WXT_API_ORIGIN=http://localhost:8080` and load `extension/.output/chrome-mv3` as an unpacked extension. Put its `chrome-extension://<id>` origin in `EXTENSION_ORIGINS`.
+3. Pair it from **Browser Extension** in the dashboard.
+4. Recipes are added under **Platform admin → Browser recipes**. They stay disabled until marked verified, which is only honest after a run on a real seller account. No real recipe ships with the code.
+
+Tests: `cd extension && npm test && npm run test:e2e` (fixture pages and a fake API; no Shopee account needed).
+

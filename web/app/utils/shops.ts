@@ -38,7 +38,8 @@ export const reasonText: Record<string, string> = {
   app_type_not_allowed: 'The Shopee app type does not allow this.',
   shop_not_active: 'Reconnect the shop to use this.',
   not_sandbox_verified: 'Waiting for verification in the Shopee sandbox.',
-  browser_extension_unavailable: 'No Open API exists. Until the browser extension ships, this becomes a manual task.',
+  browser_extension_unavailable: 'No Open API exists. Pair the browser extension (Settings) to do this automatically; until then it is a manual task.',
+  browser_recipe_unavailable: 'No Open API exists and no verified browser steps are available for this market yet, so this is a manual task.',
 }
 
 /** Messages for ?connect_error=<code> after the Shopee redirect. */

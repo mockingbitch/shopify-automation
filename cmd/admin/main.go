@@ -7,6 +7,9 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -28,11 +31,21 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: admin promote|demote -email <email> | gen-key")
+		return errors.New("usage: admin promote|demote -email <email> | gen-key | gen-recipe-key")
 	}
 	switch args[0] {
 	case "gen-key":
 		fmt.Println(envelope.GenerateKey())
+		return nil
+	case "gen-recipe-key":
+		// The seed goes to RECIPE_SIGNING_KEY on the server; the public key
+		// is bundled into the extension build (WXT_RECIPE_PUBLIC_KEYS).
+		seed := make([]byte, ed25519.SeedSize)
+		if _, err := rand.Read(seed); err != nil {
+			return err
+		}
+		pub := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+		fmt.Printf("RECIPE_SIGNING_KEY=%s\nrecipe public key: %s\n", base64.StdEncoding.EncodeToString(seed), base64.StdEncoding.EncodeToString(pub))
 		return nil
 	case "promote", "demote":
 		fs := flag.NewFlagSet(args[0], flag.ContinueOnError)

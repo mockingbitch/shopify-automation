@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -20,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"shopee-automation/internal/app"
+	"shopee-automation/internal/browser"
 	"shopee-automation/internal/identity"
 	"shopee-automation/internal/platform/clock"
 	"shopee-automation/internal/platform/config"
@@ -49,6 +51,12 @@ type env struct {
 	system *db.DB
 }
 
+// testExtensionOrigin is the extension origin allowed by CORS in tests.
+const testExtensionOrigin = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+
+// testRecipeSeed is the Ed25519 seed that signs recipes in tests.
+var testRecipeSeed = []byte("recipe-signing-seed-for-tests-32")
+
 // Test partner app credentials for the in-process Shopee fake.
 const testPartnerID = 2001887
 
@@ -74,8 +82,14 @@ func newEnv(t *testing.T) *env {
 	cfg := config.Config{
 		Env: "test", PublicBaseURL: base, CookieSecure: false,
 		SessionIdleTTL: 12 * time.Hour, SessionAbsoluteTTL: 7 * 24 * time.Hour,
+		ExtensionOrigins: []string{testExtensionOrigin},
+	}
+	signer, err := browser.NewSigner("test1", base64.StdEncoding.EncodeToString(testRecipeSeed))
+	if err != nil {
+		t.Fatal(err)
 	}
 	e.app = app.New(app.Deps{
+		Signer: signer,
 		Config: cfg, DB: d, SystemDB: e.system, Limiter: e.limits, Mailer: e.mail, Clock: e.clock,
 		Log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Hasher: identity.Hasher{Params: identity.Argon2Params{MemoryKiB: 64, Time: 1, Threads: 1, SaltLen: 16, KeyLen: 32}},

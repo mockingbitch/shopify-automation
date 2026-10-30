@@ -190,7 +190,7 @@ func TestConnectShopFlow(t *testing.T) {
 	if c := caps["shop.info.read"]; c.mode != "API" || !c.enabled {
 		t.Errorf("shop.info.read: %+v", c)
 	}
-	if c := caps["shop.banner.upload"]; c.mode != "MANUAL" || !c.enabled || c.reason != "browser_extension_unavailable" {
+	if c := caps["shop.banner.upload"]; c.mode != "MANUAL" || !c.enabled || c.reason != "browser_recipe_unavailable" {
 		t.Errorf("shop.banner.upload: %+v", c)
 	}
 	if c := caps["product.batch_create"]; c.enabled || c.reason != "not_supported" {

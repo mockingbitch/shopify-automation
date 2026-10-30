@@ -236,22 +236,27 @@ Step retries with explicit `step_ids` were not needed: retry resets every failed
 
 ### 3.9 Browser extension
 
-Auth **D** = extension device token (`Authorization: Bearer`). No cookies, no CSRF; CORS allows only the extension origin. See [browser-extension.md](browser-extension.md).
+As built in Phase 6. Auth **D** = extension device token (`Authorization: Bearer`). No cookies, no CSRF; CORS allows only `EXTENSION_ORIGINS`. See [browser-extension.md](browser-extension.md) §11.
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| POST | `/orgs/{org_id}/extension/pairing-codes` | S + `workflows.run` | Create one-time pairing code |
-| POST | `/ext/pair` | S (dashboard page) | Exchange pairing code → device token (returned once) |
-| GET | `/orgs/{org_id}/extension/devices` | S + `members.read` | List paired devices |
-| DELETE | `/orgs/{org_id}/extension/devices/{id}` | S (own device) or `members.manage` | Revoke |
-| POST | `/ext/token/refresh` | D | Rotate device token |
-| GET | `/ext/tasks` | D | Queued tasks for the device's org, grouped by shop |
-| POST | `/ext/tasks/{id}/claim` | D | Lease task; returns signed recipe + presigned input URLs; `409` if taken |
-| POST | `/ext/tasks/{id}/heartbeat` | D | Extend lease |
-| POST | `/ext/tasks/{id}/needs-user` | D | Paused for verification / wrong shop logged in |
-| POST | `/ext/tasks/{id}/result` | D | `{lease_token, status, steps[], screenshot_keys[]}` |
-| GET | `/ext/recipes/{key}/{version}` | D | Signed recipe (also returned by claim) |
-| GET | `/ext/config` | D | Kill switches, min extension version |
+| POST | `/orgs/{org_id}/extension/pairing-codes` | S + `workflows.run` | One-time code (`XXXXX-XXXXX`, 6 minutes) |
+| GET | `/orgs/{org_id}/extension/devices` | S + `workflows.read` | Paired browsers |
+| DELETE | `/orgs/{org_id}/extension/devices/{id}` | S + `workflows.run` (own device) or `members.manage` | Unpair |
+| GET | `/orgs/{org_id}/workflows/{run_id}/browser-tasks` | S + `workflows.read` | Tasks of a run with the extension's step log and screenshot IDs |
+| POST | `/orgs/{org_id}/browser-tasks/{id}/requeue` | S + `workflows.run` | Queue a failed task again |
+| GET | `/orgs/{org_id}/browser-tasks/{id}/screenshots/{sid}` | S + `workflows.read` | Presigned link (5 minutes, audited) |
+| POST | `/ext/pair` | none (rate limited) | Code → device token (returned once) |
+| GET | `/ext/me` | D | Device, org, user |
+| POST | `/ext/token/rotate` | D | New token; the old one stops working |
+| DELETE | `/ext/device` | D | Unpair this browser |
+| GET | `/ext/tasks` | D | Queued tasks of the org and tasks this device holds |
+| POST | `/ext/tasks/{id}/claim` | D | Lease (10 min) + signed recipe + presigned inputs; `409 task_unavailable \| recipe_disabled \| capability_disabled` |
+| POST | `/ext/tasks/{id}/heartbeat` | D | Extend lease; `state: RUNNING \| WAITING_USER` |
+| POST | `/ext/tasks/{id}/screenshots` | D | Multipart PNG/JPEG ≤ 5 MB, 10 per task |
+| POST | `/ext/tasks/{id}/result` | D | `{lease_token, status, error_code?, message?, steps[]}`; stale lease `409 lease_lost` |
+| GET/POST | `/admin/browser-recipes` | platform admin | List; add a version (validated, disabled) |
+| PATCH | `/admin/browser-recipes/{id}` | platform admin | Verify, enable (one per capability and market), disable (kill switch) |
 
 ## 4. Validation rules (examples)
 
