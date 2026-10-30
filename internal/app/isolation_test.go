@@ -75,7 +75,17 @@ func TestTenantIsolationHTTP(t *testing.T) {
 	_, aDevice := e.pair(alice, orgA)
 	aTask, aShot := insertBrowserTask(t, e, uuid.MustParse(orgA), uuid.MustParse(aRun), uuid.MustParse(aStep), uuid.MustParse(aShop))
 
-	ids := map[string]string{"{deviceID}": aDevice, "{taskID}": aTask.String(), "{screenshotID}": aShot.String(), "{productID}": aProduct, "{imageID}": aImage, "{batchID}": ab.Data.ID, "{rowID}": ar.Data[0].ID,
+	// Alice was notified about the approval.
+	var notes struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	alice.must(200, "GET", "/orgs/"+orgA+"/notifications", nil).json(t, &notes)
+	if len(notes.Data) == 0 {
+		t.Fatal("org A has no notification")
+	}
+	ids := map[string]string{"{notificationID}": notes.Data[0].ID, "{categoryID}": "100017", "{deviceID}": aDevice, "{taskID}": aTask.String(), "{screenshotID}": aShot.String(), "{productID}": aProduct, "{imageID}": aImage, "{batchID}": ab.Data.ID, "{rowID}": ar.Data[0].ID,
 		"{memberID}": aMember, "{invitationID}": inv.Data.ID, "{shopID}": aShop, "{stateID}": aSelection,
 		"{templateID}": aTpl, "{versionID}": aVersion, "{sectionKey}": "description",
 		"{runID}": aRun, "{stepID}": aStep, "{approvalID}": aApproval}
@@ -133,7 +143,7 @@ func TestTenantIsolationHTTP(t *testing.T) {
 				t.Errorf("%s (%s): status %d, want 404: %s", key, target.name, r.Status, r.Body)
 			}
 			if strings.Contains(string(r.Body), "Org A") || strings.Contains(string(r.Body), "alice@a.example") ||
-				strings.Contains(string(r.Body), "1001") || strings.Contains(string(r.Body), "Org A secret") {
+				strings.Contains(string(r.Body), `"1001"`) || strings.Contains(string(r.Body), "Org A secret") {
 				t.Errorf("%s (%s): response leaks org A data: %s", key, target.name, r.Body)
 			}
 			checked++
@@ -242,6 +252,13 @@ func TestTenantIsolationDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	insertBrowserTask(t, e, orgA, runA, stepA, shopA)
+	if err := e.db.Tx(ctx, db.Scope{OrgID: orgA}, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO shopee_catalog_cache (org_id, shop_connection_id, kind, cache_key, payload, fetched_at)
+			VALUES ($1, $2, 'categories', '', '[]', now())`, orgA, shopA)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	tenantTables := []string{"organizations", "organization_members", "organization_invitations", "audit_logs",
 		"shop_connections", "shop_credentials", "shop_authorizations", "shop_profiles", "oauth_states",
@@ -249,7 +266,8 @@ func TestTenantIsolationDatabase(t *testing.T) {
 		"workflow_runs", "workflow_steps", "workflow_step_attempts", "workflow_approvals", "workflow_events", "shop_config_snapshots",
 		"products", "product_variations", "product_images", "product_mappings", "product_image_uploads",
 		"product_import_batches", "product_import_rows",
-		"extension_pairing_codes", "extension_devices", "browser_tasks", "browser_task_screenshots"}
+		"extension_pairing_codes", "extension_devices", "browser_tasks", "browser_task_screenshots",
+		"notifications", "shopee_catalog_cache"}
 
 	// Every table with an org_id column has forced RLS and is listed above.
 	listed := map[string]bool{}
@@ -337,7 +355,9 @@ func TestTenantIsolationDatabase(t *testing.T) {
 // TestRouteTableRules guards the access declarations.
 func TestRouteTableRules(t *testing.T) {
 	e := newEnv(t)
-	selfAllowed := map[string]bool{"DELETE /orgs/{orgID}/members/{memberID}": true}
+	// Notifications are per user: the queries filter by the caller.
+	selfAllowed := map[string]bool{"DELETE /orgs/{orgID}/members/{memberID}": true, "GET /orgs/{orgID}/notifications": true,
+		"POST /orgs/{orgID}/notifications/read-all": true, "POST /orgs/{orgID}/notifications/{notificationID}/read": true}
 	seen := map[string]bool{}
 	for _, rt := range e.app.Routes() {
 		key := rt.Method + " " + rt.Path

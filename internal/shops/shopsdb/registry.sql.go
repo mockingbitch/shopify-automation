@@ -11,6 +11,51 @@ import (
 	"github.com/google/uuid"
 )
 
+const deleteOverride = `-- name: DeleteOverride :execrows
+DELETE FROM capability_overrides WHERE id = $1
+`
+
+func (q *Queries) DeleteOverride(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOverride, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listAllOverrides = `-- name: ListAllOverrides :many
+SELECT id, capability_key, shopee_app_id, region, mode, enabled, reason, created_at FROM capability_overrides ORDER BY capability_key, created_at
+`
+
+func (q *Queries) ListAllOverrides(ctx context.Context) ([]CapabilityOverride, error) {
+	rows, err := q.db.Query(ctx, listAllOverrides)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CapabilityOverride{}
+	for rows.Next() {
+		var i CapabilityOverride
+		if err := rows.Scan(
+			&i.ID,
+			&i.CapabilityKey,
+			&i.ShopeeAppID,
+			&i.Region,
+			&i.Mode,
+			&i.Enabled,
+			&i.Reason,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCapabilityDefinitions = `-- name: ListCapabilityDefinitions :many
 SELECT key, title, default_mode, fallback_mode, apis, required_app_types, supported_regions, requires_approval, sensitive, enabled, verification, doc_reference, last_verified_at, updated_at FROM capability_definitions ORDER BY key
 `
@@ -83,4 +128,45 @@ func (q *Queries) ListCapabilityOverrides(ctx context.Context, shopeeAppID *uuid
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertOverride = `-- name: UpsertOverride :one
+INSERT INTO capability_overrides (id, capability_key, shopee_app_id, region, mode, enabled, reason)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (capability_key, shopee_app_id, region) DO UPDATE SET mode = EXCLUDED.mode, enabled = EXCLUDED.enabled, reason = EXCLUDED.reason
+RETURNING id, capability_key, shopee_app_id, region, mode, enabled, reason, created_at
+`
+
+type UpsertOverrideParams struct {
+	ID            uuid.UUID
+	CapabilityKey string
+	ShopeeAppID   *uuid.UUID
+	Region        *string
+	Mode          *string
+	Enabled       *bool
+	Reason        string
+}
+
+func (q *Queries) UpsertOverride(ctx context.Context, arg UpsertOverrideParams) (CapabilityOverride, error) {
+	row := q.db.QueryRow(ctx, upsertOverride,
+		arg.ID,
+		arg.CapabilityKey,
+		arg.ShopeeAppID,
+		arg.Region,
+		arg.Mode,
+		arg.Enabled,
+		arg.Reason,
+	)
+	var i CapabilityOverride
+	err := row.Scan(
+		&i.ID,
+		&i.CapabilityKey,
+		&i.ShopeeAppID,
+		&i.Region,
+		&i.Mode,
+		&i.Enabled,
+		&i.Reason,
+		&i.CreatedAt,
+	)
+	return i, err
 }

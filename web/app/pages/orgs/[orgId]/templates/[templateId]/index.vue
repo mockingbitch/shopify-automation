@@ -199,7 +199,7 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
                         @click="activeKey = s.key">
                   {{ s.schema.title }}
                   <span v-if="sectionHasErrors(s.key)" class="text-destructive" aria-label="has errors">●</span>
-                  <span v-else-if="sectionFilled(s.key)" class="text-muted-foreground" aria-label="filled">✓</span>
+                  <span v-else-if="sectionFilled(s.key)" :class="activeKey === s.key ? '' : 'text-muted-foreground'" aria-label="filled">✓</span>
                 </button>
               </li>
             </ul>

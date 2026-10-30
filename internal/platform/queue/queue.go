@@ -26,6 +26,8 @@ const (
 	TypeStepSweep       = "workflow:sweep"
 	TypePartitions      = "maintenance:partitions"
 	TypeImport          = "products:import"
+	TypeMailSend        = "mail:send"
+	TypeMailSweep       = "mail:sweep"
 )
 
 // Options controls one enqueue.

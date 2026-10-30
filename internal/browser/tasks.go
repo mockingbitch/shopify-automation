@@ -471,6 +471,29 @@ func (s *Service) Heartbeat(ctx context.Context, dev Device, id uuid.UUID, in He
 	return wrapInternal(err)
 }
 
+// ReleaseInput gives a task back without a result (the seller pressed Stop).
+type ReleaseInput struct {
+	LeaseToken uuid.UUID `json:"lease_token"`
+}
+
+// Release returns a held task to the queue. It does not count as a run of
+// the recipe.
+func (s *Service) Release(ctx context.Context, dev Device, id uuid.UUID, in ReleaseInput) error {
+	msg := "Stopped in the browser; ready to run again."
+	err := s.tx(ctx, dev.OrgID, dev.UserID, func(q *browserdb.Queries, tx pgx.Tx) error {
+		n, err := q.ReleaseTask(ctx, browserdb.ReleaseTaskParams{StatusMessage: &msg, OrgID: dev.OrgID, ID: id, LeaseToken: &in.LeaseToken})
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return errLeaseLost
+		}
+		return s.Audit.Record(ctx, tx, audit.Entry{OrgID: &dev.OrgID, ActorUserID: &dev.UserID, Action: "browser_task.released",
+			TargetType: "browser_task", TargetID: &id, Metadata: map[string]any{"device_id": dev.ID.String()}})
+	})
+	return wrapInternal(err)
+}
+
 // AddScreenshot stores a screenshot of the Seller Centre tab.
 func (s *Service) AddScreenshot(ctx context.Context, dev Device, id, lease uuid.UUID, data []byte) (uuid.UUID, error) {
 	if len(data) > maxScreenshotSize {
@@ -525,6 +548,9 @@ type ResultInput struct {
 	ErrorCode  *string   `json:"error_code"`
 	Message    *string   `json:"message"`
 	Steps      []StepLog `json:"steps"`
+	// ScreenshotIDs repeats the screenshots uploaded for this run; they are
+	// already linked to the task, so the list is informational.
+	ScreenshotIDs []uuid.UUID `json:"screenshot_ids"`
 }
 
 // Result records the outcome. When every browser task of the step has

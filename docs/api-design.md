@@ -221,9 +221,17 @@ Step retries with explicit `step_ids` were not needed: retry resets every failed
 | Method | Path | Permission | Request | Response |
 |---|---|---|---|---|
 | GET | `/orgs/{org_id}/audit-logs` | `audit.read` | `?actor_id=&action=&target_type=&from=&to=` | list |
-| GET | `/orgs/{org_id}/dashboard` | `org.read` | — | counters for the overview page |
-| GET | `/notifications` | S | `?unread=true` | list across orgs |
-| POST | `/notifications/{id}/read` | S | — | `204` |
+| GET | `/orgs/{org_id}/overview` | `shops.read` | — | counters for the overview page (as built; replaces `/dashboard`) |
+| GET | `/orgs/{org_id}/shops/{id}/activity` | `shops.read` | — | last setup run, published products, run history |
+| GET | `/orgs/{org_id}/notifications` | member | `?unread=true&limit=` | the caller's notifications in this org + `unread` count (as built: per org, so RLS applies) |
+| POST | `/orgs/{org_id}/notifications/{id}/read` | member | — | `204` |
+| POST | `/orgs/{org_id}/notifications/read-all` | member | — | `204` |
+| GET | `/orgs/{org_id}/shopee-apps` | `shops.connect` | — | enabled apps to connect with (no secrets) |
+| GET | `/orgs/{org_id}/shops/{id}/catalog/categories` | `products.read` | `?refresh=true` | Shopee categories of the shop's market (cached 24 h) |
+| GET | `/orgs/{org_id}/shops/{id}/catalog/categories/{cat}/attributes` | `products.read` | — | attribute tree (cached 24 h) |
+| GET | `/orgs/{org_id}/shops/{id}/catalog/categories/{cat}/brands` | `products.read` | — | brands, first 1,000 (cached 24 h) |
+
+Platform admin (Phase 7): `GET /admin/capabilities`, `PUT /admin/capability-overrides` (upsert per capability + app + market; `enabled: false` is a kill switch), `DELETE /admin/capability-overrides/{id}`. Extension: `POST /ext/tasks/{id}/release` gives a held task back to the queue (Stop).
 
 ### 3.8 Platform admin
 

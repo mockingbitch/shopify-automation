@@ -18,7 +18,10 @@ import (
 
 	"shopee-automation/internal/audit"
 	"shopee-automation/internal/browser"
+	"shopee-automation/internal/catalog"
 	"shopee-automation/internal/identity"
+	"shopee-automation/internal/notify"
+	"shopee-automation/internal/overview"
 	"shopee-automation/internal/platform/apperr"
 	"shopee-automation/internal/platform/authctx"
 	"shopee-automation/internal/platform/clock"
@@ -120,8 +123,13 @@ type App struct {
 	apply    shopsetup.Handler
 	publish  productpublish.Handler
 	// Publish is exposed so tests can shorten the variation delay.
-	Publish *productpublish.Workflow
-	browser browser.Handler
+	Publish  *productpublish.Workflow
+	browser  browser.Handler
+	notes    notify.Handler
+	overview overview.Handler
+	catalog  catalog.Handler
+	// Outbox sends email from a retried task (nil without a keyring).
+	Outbox *notify.Outbox
 	// Browser is exposed for tests.
 	Browser *browser.Service
 	// Engine is exposed for the worker and tests.
@@ -133,6 +141,11 @@ type App struct {
 // New assembles the application.
 func New(d Deps) *App {
 	rec := audit.Recorder{Clock: d.Clock}
+	var outbox *notify.Outbox
+	if d.Keys != nil && d.Queue != nil {
+		outbox = &notify.Outbox{DB: d.DB, System: d.SystemDB, Keys: d.Keys, Queue: d.Queue, Mailer: d.Mailer, Clock: d.Clock, Log: d.Log}
+		d.Mailer = outbox
+	}
 	idSvc := &identity.Service{
 		DB: d.DB, Clock: d.Clock, Mailer: d.Mailer, Audit: rec, Log: d.Log, Hasher: d.Hasher,
 		BaseURL: d.Config.PublicBaseURL, IdleTTL: d.Config.SessionIdleTTL, AbsoluteTTL: d.Config.SessionAbsoluteTTL,
@@ -168,6 +181,10 @@ func New(d Deps) *App {
 	a.Browser = &browser.Service{DB: d.DB, System: d.SystemDB, Clock: d.Clock, Audit: rec, Store: d.Store, Fetcher: d.Fetcher,
 		Signer: d.Signer, Steps: a.Engine, Log: d.Log}
 	a.Shops.Extension = a.Browser
+	a.Outbox = outbox
+	a.notes = notify.Handler{Svc: &notify.Service{DB: d.DB, Clock: d.Clock}}
+	a.overview = overview.Handler{Svc: &overview.Service{DB: d.DB, Clock: d.Clock}}
+	a.catalog = catalog.Handler{Svc: &catalog.Service{DB: d.DB, Shops: a.Shops, Clock: d.Clock}}
 	a.browser = browser.Handler{Svc: a.Browser, Limiter: d.Limiter, Log: d.Log, Adapter: a.adapter, Origins: d.Config.ExtensionOrigins}
 	setup := &shopsetup.Setup{Shops: a.Shops, Templates: tplSvc, Engine: a.Engine, Browser: a.Browser}
 	a.Engine.Register(setup.Definition())
@@ -293,6 +310,20 @@ func (a *App) Routes() []Route {
 		{"POST", "/ext/tasks/{taskID}/heartbeat", Extension, "", bx.Heartbeat},
 		{"POST", "/ext/tasks/{taskID}/screenshots", Extension, "", bx.AddScreenshot},
 		{"POST", "/ext/tasks/{taskID}/result", Extension, "", bx.Result},
+		{"POST", "/ext/tasks/{taskID}/release", Extension, "", bx.Release},
+
+		{"GET", "/orgs/{orgID}/overview", Tenant, rbac.ShopsRead, a.overview.Org},
+		{"GET", "/orgs/{orgID}/shops/{shopID}/activity", Tenant, rbac.ShopsRead, a.overview.Shop},
+		{"GET", "/orgs/{orgID}/notifications", TenantSelf, "", a.notes.List},
+		{"POST", "/orgs/{orgID}/notifications/read-all", TenantSelf, "", a.notes.ReadAll},
+		{"POST", "/orgs/{orgID}/notifications/{notificationID}/read", TenantSelf, "", a.notes.Read},
+		{"GET", "/orgs/{orgID}/shopee-apps", Tenant, rbac.ShopsConnect, sh.AppOptions},
+		{"GET", "/orgs/{orgID}/shops/{shopID}/catalog/categories", Tenant, rbac.ProductsRead, a.catalog.Categories},
+		{"GET", "/orgs/{orgID}/shops/{shopID}/catalog/categories/{categoryID}/attributes", Tenant, rbac.ProductsRead, a.catalog.Attributes},
+		{"GET", "/orgs/{orgID}/shops/{shopID}/catalog/categories/{categoryID}/brands", Tenant, rbac.ProductsRead, a.catalog.Brands},
+		{"GET", "/admin/capabilities", Admin, "", sh.Registry},
+		{"PUT", "/admin/capability-overrides", Admin, "", sh.PutOverride},
+		{"DELETE", "/admin/capability-overrides/{overrideID}", Admin, "", sh.DeleteOverride},
 
 		{"GET", "/admin/browser-recipes", Admin, "", bx.ListRecipes},
 		{"POST", "/admin/browser-recipes", Admin, "", bx.CreateRecipe},

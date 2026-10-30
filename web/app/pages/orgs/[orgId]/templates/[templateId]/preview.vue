@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { labelOf, type JsonObject } from '~/utils/schema'
+import type { SectionSchema } from '~/composables/useTemplateSchemas'
 import type { components } from '~/types/api'
 import { modeLabels, reasonText, statusLabels, type Shop } from '~/utils/shops'
 
@@ -23,11 +25,49 @@ const previews = ref<Preview[]>([])
 const error = ref('')
 const busy = ref(false)
 
-// Overrides editor (JSON) for one shop at a time.
+// Overrides editor for one shop at a time: a form per section (generated
+// from the section schema), or raw JSON for advanced edits.
 const overrideShop = ref<string>('')
 const overrideText = ref('')
 const overrideErrors = ref<string[]>([])
+const overrideFields = ref<Record<string, string>>({})
 const overrideNotice = ref('')
+const overrideData = ref<Record<string, JsonObject>>({})
+const overrideSection = ref('')
+const overrideMode = ref<'form' | 'json'>('form')
+const schemas = ref<SectionSchema[]>([])
+onMounted(async () => {
+  try {
+    schemas.value = (await useTemplateSchemas()).filter((x) => x.applies_to === 'shop')
+  } catch { /* JSON mode still works */ }
+})
+const sectionSchema = computed(() => schemas.value.find((x) => x.key === overrideSection.value)?.schema)
+
+// clean drops empty values so an override only holds what was set.
+function clean(v: unknown): unknown {
+  if (Array.isArray(v)) return v.length ? v : undefined
+  if (v && typeof v === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, x] of Object.entries(v)) {
+      const c = clean(x)
+      if (c !== undefined) out[k] = c
+    }
+    return Object.keys(out).length ? out : undefined
+  }
+  return v === '' || v === null ? undefined : v
+}
+function switchMode(m: 'form' | 'json') {
+  if (m === 'json') overrideText.value = JSON.stringify(clean(overrideData.value) ?? {}, null, 2)
+  else {
+    try {
+      overrideData.value = JSON.parse(overrideText.value || '{}')
+    } catch {
+      overrideErrors.value = ['Fix the JSON before switching back to the form.']
+      return
+    }
+  }
+  overrideMode.value = m
+}
 
 onMounted(async () => {
   try {
@@ -89,7 +129,10 @@ async function editOverrides(shopId: string) {
       params: { path: { ...path.value, shopID: shopId } },
     })).data
     overrideShop.value = shopId
+    overrideData.value = (res.overrides ?? {}) as Record<string, JsonObject>
     overrideText.value = JSON.stringify(res.overrides, null, 2)
+    overrideSection.value = Object.keys(overrideData.value)[0] ?? schemas.value[0]?.key ?? ''
+    overrideMode.value = 'form'
   } catch (e) {
     error.value = toApiError(e).message
   }
@@ -98,12 +141,17 @@ async function editOverrides(shopId: string) {
 async function saveOverrides() {
   overrideErrors.value = []
   overrideNotice.value = ''
+  overrideFields.value = {}
   let parsed: Record<string, Record<string, unknown>>
-  try {
-    parsed = JSON.parse(overrideText.value || '{}')
-  } catch {
-    overrideErrors.value = ['This is not valid JSON.']
-    return
+  if (overrideMode.value === 'form') {
+    parsed = (clean(overrideData.value) ?? {}) as Record<string, Record<string, unknown>>
+  } else {
+    try {
+      parsed = JSON.parse(overrideText.value || '{}')
+    } catch {
+      overrideErrors.value = ['This is not valid JSON.']
+      return
+    }
   }
   try {
     unwrap(await api.PUT('/orgs/{orgID}/templates/{templateID}/shops/{shopID}/overrides', {
@@ -113,6 +161,7 @@ async function saveOverrides() {
     if (previews.value.length) await run()
   } catch (e) {
     const err = toApiError(e)
+    overrideFields.value = err.fields
     overrideErrors.value = Object.keys(err.fields).length ? Object.entries(err.fields).map(([f, m]) => `${f}: ${m}`) : [err.message]
   }
 }
@@ -223,13 +272,38 @@ function rowNote(c: Change): string {
       <CardHeader>
         <CardTitle as="h2" class="text-base">Overrides for {{ shopName(overrideShop) }}</CardTitle>
         <CardDescription>
-          Partial sections merged on top of the template for this shop only. Objects merge field by field; lists replace the template’s list.
-          Example: <code>{"general": {"shop_name": "Minh An HN"}}</code>
+          Values set here replace the template’s values for this shop only. Leave a field empty to keep the template’s value.
+          Objects merge field by field; lists replace the template’s list.
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-3">
-        <Label for="override-json" class="sr-only">Overrides JSON</Label>
-        <textarea id="override-json" v-model="overrideText" rows="10" spellcheck="false" class="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm" />
+        <div class="flex flex-wrap items-end gap-3">
+          <div v-if="overrideMode === 'form'" class="space-y-1.5">
+            <Label for="override-section">Section</Label>
+            <select id="override-section" v-model="overrideSection" class="h-9 rounded-md border bg-background px-3 text-sm">
+              <option v-for="sch in schemas" :key="sch.key" :value="sch.key">
+                {{ labelOf(sch.key, sch.schema) }}{{ overrideData[sch.key] && Object.keys(overrideData[sch.key]!).length ? ' (overridden)' : '' }}
+              </option>
+            </select>
+          </div>
+          <div role="group" aria-label="Editor" class="flex gap-1">
+            <Button size="sm" :variant="overrideMode === 'form' ? 'default' : 'outline'" :aria-pressed="overrideMode === 'form'" @click="switchMode('form')">Form</Button>
+            <Button size="sm" :variant="overrideMode === 'json' ? 'default' : 'outline'" :aria-pressed="overrideMode === 'json'" @click="switchMode('json')">JSON</Button>
+          </div>
+        </div>
+        <template v-if="overrideMode === 'form' && sectionSchema">
+          <SchemaForm :key="overrideShop + overrideSection" :schema="sectionSchema" :model-value="overrideData[overrideSection] ?? {}"
+                      :path="`overrides.${overrideSection}`" :id-prefix="`ov-${overrideSection}`" :errors="overrideFields"
+                      @update:model-value="(v) => (overrideData = { ...overrideData, [overrideSection]: v })" />
+          <Button v-if="overrideData[overrideSection]" variant="link" size="sm" class="h-auto p-0"
+                  @click="() => { const { [overrideSection]: _, ...rest } = overrideData; overrideData = rest }">
+            Remove the override of this section
+          </Button>
+        </template>
+        <template v-else-if="overrideMode === 'json'">
+          <Label for="override-json">Overrides as JSON</Label>
+          <textarea id="override-json" v-model="overrideText" rows="10" spellcheck="false" class="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm" />
+        </template>
         <ul v-if="overrideErrors.length" class="list-disc pl-5 text-sm text-destructive" role="alert">
           <li v-for="m in overrideErrors" :key="m">{{ m }}</li>
         </ul>

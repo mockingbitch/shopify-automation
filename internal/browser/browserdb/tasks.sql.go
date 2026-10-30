@@ -355,6 +355,31 @@ func (q *Queries) LockTask(ctx context.Context, arg LockTaskParams) (BrowserTask
 	return i, err
 }
 
+const releaseTask = `-- name: ReleaseTask :execrows
+UPDATE browser_tasks SET status = 'QUEUED', lease_token = NULL, lease_expires_at = NULL, device_id = NULL, status_message = $1
+WHERE org_id = $2 AND id = $3 AND lease_token = $4 AND status IN ('RUNNING', 'WAITING_USER')
+`
+
+type ReleaseTaskParams struct {
+	StatusMessage *string
+	OrgID         uuid.UUID
+	ID            uuid.UUID
+	LeaseToken    *uuid.UUID
+}
+
+func (q *Queries) ReleaseTask(ctx context.Context, arg ReleaseTaskParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseTask,
+		arg.StatusMessage,
+		arg.OrgID,
+		arg.ID,
+		arg.LeaseToken,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const runExists = `-- name: RunExists :one
 SELECT EXISTS (SELECT 1 FROM workflow_runs WHERE org_id = $1 AND id = $2)
 `

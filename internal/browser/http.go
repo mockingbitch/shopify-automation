@@ -323,6 +323,22 @@ func (h Handler) Heartbeat(w http.ResponseWriter, r *http.Request) error {
 	return httpx.NoContent(w)
 }
 
+// Release handles POST /ext/tasks/{taskID}/release.
+func (h Handler) Release(w http.ResponseWriter, r *http.Request) error {
+	id, err := idParam(r, "taskID", "Task")
+	if err != nil {
+		return err
+	}
+	var in ReleaseInput
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	if err := h.Svc.Release(r.Context(), mustDevice(r), id, in); err != nil {
+		return err
+	}
+	return httpx.NoContent(w)
+}
+
 // AddScreenshot handles POST /ext/tasks/{taskID}/screenshots (multipart).
 func (h Handler) AddScreenshot(w http.ResponseWriter, r *http.Request) error {
 	id, err := idParam(r, "taskID", "Task")

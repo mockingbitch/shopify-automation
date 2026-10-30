@@ -14,7 +14,7 @@ const pendingApprovals = ref(0)
 const next = ref<string | null>(null)
 const loading = ref(true)
 const error = ref('')
-const status = ref<RunStatus | ''>('')
+const status = ref<RunStatus | ''>(typeof route.query.status === 'string' && route.query.status in runStatusLabels ? route.query.status as RunStatus : '')
 const batch = computed(() => (typeof route.query.batch === 'string' ? route.query.batch : undefined))
 
 async function load(more = false) {

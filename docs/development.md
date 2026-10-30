@@ -86,3 +86,11 @@ The extension lives in `extension/` (see its README). For local work:
 
 Tests: `cd extension && npm test && npm run test:e2e` (fixture pages and a fake API; no Shopee account needed).
 
+
+## Email and notifications
+
+All email (verification, password reset, invitations) is stored encrypted in `email_outbox` and sent by the **worker** (`mail:send`), so run `make worker` to receive mail in Mailpit (http://localhost:8025). In-app notifications appear under the bell at the top of each organization page.
+
+If repeated local test runs hit the sign-up rate limit (10 per hour per IP), clear the `rl:*` keys in the dev Redis.
+
+Accessibility: `cd web && npx playwright test e2e/a11y.spec.ts` (needs the API, worker and Mailpit) runs axe-core over every main page.

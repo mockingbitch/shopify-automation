@@ -251,3 +251,46 @@ func (h Handler) UpdateApp(w http.ResponseWriter, r *http.Request) error {
 	}
 	return httpx.JSON(w, http.StatusOK, httpx.Data[App]{Data: a})
 }
+
+// AppOptions handles GET /orgs/{orgID}/shopee-apps.
+func (h Handler) AppOptions(w http.ResponseWriter, r *http.Request) error {
+	out, err := h.Svc.AppOptions(r.Context(), authctx.MustTenant(r.Context()))
+	if err != nil {
+		return err
+	}
+	return httpx.JSON(w, http.StatusOK, httpx.Data[[]AppOption]{Data: out})
+}
+
+// Registry handles GET /admin/capabilities.
+func (h Handler) Registry(w http.ResponseWriter, r *http.Request) error {
+	out, err := h.Svc.Registry(r.Context(), authctx.MustPrincipal(r.Context()))
+	if err != nil {
+		return err
+	}
+	return httpx.JSON(w, http.StatusOK, httpx.Data[[]CapabilityDef]{Data: out})
+}
+
+// PutOverride handles PUT /admin/capability-overrides.
+func (h Handler) PutOverride(w http.ResponseWriter, r *http.Request) error {
+	var in OverrideInput
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	out, err := h.Svc.PutOverride(r.Context(), authctx.MustPrincipal(r.Context()), in)
+	if err != nil {
+		return err
+	}
+	return httpx.JSON(w, http.StatusOK, httpx.Data[Override]{Data: out})
+}
+
+// DeleteOverride handles DELETE /admin/capability-overrides/{overrideID}.
+func (h Handler) DeleteOverride(w http.ResponseWriter, r *http.Request) error {
+	id, err := uuid.Parse(chi.URLParam(r, "overrideID"))
+	if err != nil {
+		return apperr.NotFound("Override not found.")
+	}
+	if err := h.Svc.DeleteOverride(r.Context(), authctx.MustPrincipal(r.Context()), id); err != nil {
+		return err
+	}
+	return httpx.NoContent(w)
+}

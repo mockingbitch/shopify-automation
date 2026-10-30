@@ -116,3 +116,9 @@ func UniqueViolation(err error) string {
 	}
 	return ""
 }
+
+// IsForeignKeyViolation reports whether err is a foreign key violation.
+func IsForeignKeyViolation(err error) bool {
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && pg.Code == "23503"
+}

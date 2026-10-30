@@ -102,9 +102,14 @@ func run() error {
 			return err
 		}
 	}
+	// The worker delivers queued emails (notify.Outbox), so it needs SMTP.
+	var mail mailer.Mailer = mailer.Log{Logger: log}
+	if cfg.SMTPAddr != "" {
+		mail = mailer.SMTP{Addr: cfg.SMTPAddr, From: cfg.SMTPFrom}
+	}
 	a := app.New(app.Deps{
 		Config: cfg, DB: database, SystemDB: system, Redis: rdb, Limiter: limiter, Signer: signer,
-		Mailer: mailer.Log{Logger: log}, Clock: clock.Real{}, Log: log,
+		Mailer: mail, Clock: clock.Real{}, Log: log,
 		Hasher: identity.Hasher{Params: identity.DefaultArgon2},
 		Keys:   keys, Shopee: shopee.NewClient(cfg, limiter), Queue: queue.Asynq{Client: tasks},
 		Store: store, Fetcher: media.NewFetcher(30*time.Second, false),
@@ -126,6 +131,11 @@ func run() error {
 	})
 	mux.Handle(queue.TypeStepExecute, a.Engine.HandleExecute)
 	mux.Handle(queue.TypeImport, a.Products.HandleImport)
+	mux.Handle(queue.TypeMailSend, a.Outbox.HandleSend)
+	mux.Handle(queue.TypeMailSweep, func(ctx context.Context, _ []byte) error {
+		_, err := a.Outbox.Sweep(ctx)
+		return err
+	})
 	mux.Handle(queue.TypeStepSweep, func(ctx context.Context, _ []byte) error {
 		n, err := a.Engine.Sweep(ctx)
 		if n > 0 {
@@ -159,6 +169,9 @@ func run() error {
 			return err
 		}
 		// Monthly partitions for audit_logs and workflow_events, 3 months ahead.
+		if _, err := sched.Register("*/5 * * * *", asynq.NewTask(queue.TypeMailSweep, nil), asynq.Unique(4*time.Minute)); err != nil {
+			return err
+		}
 		if _, err := sched.Register("17 3 * * *", asynq.NewTask(queue.TypePartitions, nil), asynq.Unique(time.Hour)); err != nil {
 			return err
 		}

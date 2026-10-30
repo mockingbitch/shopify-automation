@@ -15,6 +15,7 @@ import (
 	"shopee-automation/internal/platform/db"
 	"shopee-automation/internal/platform/envelope"
 	"shopee-automation/internal/platform/queue"
+	"shopee-automation/internal/rbac"
 	"shopee-automation/internal/shopee"
 	"shopee-automation/internal/shops/shopsdb"
 )
@@ -182,6 +183,9 @@ func (s *Service) markReconnectRequired(ctx context.Context, q *shopsdb.Queries,
 		return err
 	}
 	meta["reason"] = code
+	if err := s.notifyReconnect(ctx, q, conn, "Shopee no longer accepts this shop's authorization. Reconnect it to keep automation running."); err != nil {
+		return err
+	}
 	return s.Audit.Record(ctx, tx, audit.Entry{OrgID: &conn.OrgID, ActorType: audit.ActorSystem, Action: "shop.reconnect_required",
 		TargetType: "shop_connection", TargetID: &conn.ID, Metadata: meta})
 }
@@ -232,4 +236,16 @@ func (s *Service) EnqueueDueRefreshes(ctx context.Context) (int, error) {
 		n++
 	}
 	return n, nil
+}
+
+// notifyReconnect tells members who can connect shops that a shop needs a
+// new authorization.
+func (s *Service) notifyReconnect(ctx context.Context, q *shopsdb.Queries, conn shopsdb.ShopConnection, body string) error {
+	name := "Shop " + strconv.FormatInt(conn.ShopeeShopID, 10)
+	if conn.ShopName != nil && *conn.ShopName != "" {
+		name = *conn.ShopName
+	}
+	return q.NotifyMembers(ctx, shopsdb.NotifyMembersParams{Kind: "shop_reconnect_required", Title: name + ": reconnect required",
+		Body: body, Link: "/orgs/" + conn.OrgID.String() + "/shops/" + conn.ID.String(), DedupeKey: "reconnect:" + conn.ID.String(),
+		CreatedAt: s.now(), OrgID: conn.OrgID, Roles: rbac.RolesWith(rbac.ShopsConnect), UserIds: []uuid.UUID{}})
 }

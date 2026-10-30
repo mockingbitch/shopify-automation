@@ -136,6 +136,7 @@ async function startRun(taskId: string): Promise<Reply> {
       heartbeat: (state, message) => api.heartbeat(taskId, lease, state, message),
       screenshot: (png, name) => api.screenshot(taskId, lease, png, name),
       result: (body) => api.result(taskId, { lease_token: lease, ...body }),
+      release: () => api.release(taskId, lease),
     },
     fetchFile: async (f) => {
       const res = await fetch(f.url, { credentials: 'omit', cache: 'no-store' });

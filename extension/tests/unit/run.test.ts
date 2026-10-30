@@ -56,7 +56,7 @@ function fakeSite(shopId: string, opts: { verifyFirst?: boolean } = {}) {
 }
 
 function fakeApi(opts: { leaseLostOnHeartbeat?: (state: string) => boolean } = {}) {
-  const calls = { heartbeats: [] as string[], results: [] as Omit<ResultBody, 'lease_token'>[], screenshots: [] as string[] };
+  const calls = { heartbeats: [] as string[], results: [] as Omit<ResultBody, 'lease_token'>[], screenshots: [] as string[], releases: 0 };
   return {
     calls,
     api: {
@@ -70,6 +70,9 @@ function fakeApi(opts: { leaseLostOnHeartbeat?: (state: string) => boolean } = {
       },
       result: async (b: Omit<ResultBody, 'lease_token'>) => {
         calls.results.push(b);
+      },
+      release: async () => {
+        calls.releases++;
       },
     },
   };
@@ -211,7 +214,7 @@ describe('TaskRun against a fake DOM', () => {
     expect(site.hits).not.toContain('/portal/decoration');
   });
 
-  it('Stop while paused reports stopped_by_user', async () => {
+  it('Stop while paused releases the task instead of failing it', async () => {
     const site = fakeSite('123456', { verifyFirst: true });
     const api = fakeApi();
     const { run, states } = makeRun(claimFor(json), site, api);
@@ -219,7 +222,8 @@ describe('TaskRun against a fake DOM', () => {
     await waitFor(() => states.at(-1)?.phase === 'paused');
     run.stop();
     expect(await done).toMatchObject({ phase: 'stopped', errorCode: 'stopped_by_user' });
-    expect(api.calls.results[0]).toMatchObject({ status: 'FAILED', error_code: 'stopped_by_user' });
+    expect(api.calls.results).toHaveLength(0);
+    expect(api.calls.releases).toBe(1);
   });
 
   it('fails with missing_input when a required input is absent', async () => {

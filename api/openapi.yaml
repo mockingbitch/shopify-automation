@@ -2180,6 +2180,10 @@ paths:
                   type: array
                   maxItems: 200
                   items: {$ref: '#/components/schemas/BrowserStepLog'}
+                screenshot_ids:
+                  type: array
+                  maxItems: 10
+                  items: {type: string, format: uuid}
       responses:
         '204': {description: Recorded}
         '400': {$ref: '#/components/responses/Problem'}
@@ -2261,6 +2265,346 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '415': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/overview:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [organizations]
+      summary: Dashboard numbers
+      x-permission: shops.read
+      responses:
+        '200':
+          description: Counts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/Overview'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/notifications:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [organizations]
+      summary: The caller's notifications in this organization, newest first
+      description: Any member; each user sees only their own notifications.
+      parameters:
+        - {name: unread, in: query, schema: {type: boolean}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 30}}
+      responses:
+        '200':
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, unread]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Notification'}
+                  unread: {type: integer}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/notifications/read-all:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    post:
+      tags: [organizations]
+      summary: Mark all of the caller's notifications as read
+      responses:
+        '204': {description: Marked}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/notifications/{notificationID}/read:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: notificationID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [organizations]
+      summary: Mark a notification as read
+      responses:
+        '204': {description: Marked}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shopee-apps:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [shops]
+      summary: Enabled Shopee apps to connect a shop with (no secrets)
+      x-permission: shops.connect
+      responses:
+        '200':
+          description: Apps
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, environment]
+                      properties:
+                        id: {type: string, format: uuid}
+                        name: {type: string}
+                        environment: {type: string, enum: [sandbox, production]}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shops/{shopID}/activity:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/ShopID'}
+    get:
+      tags: [shops]
+      summary: Configuration status, published products and run history of a shop
+      x-permission: shops.read
+      responses:
+        '200':
+          description: Activity
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [last_setup, published_products, products_needing_attention, runs]
+                    properties:
+                      last_setup:
+                        allOf: [{$ref: '#/components/schemas/RunRef'}]
+                        nullable: true
+                      published_products: {type: integer}
+                      products_needing_attention: {type: integer}
+                      runs:
+                        type: array
+                        items: {$ref: '#/components/schemas/RunRef'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shops/{shopID}/catalog/categories:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/ShopID'}
+    get:
+      tags: [products]
+      summary: Shopee categories of the shop's market (cached for a day)
+      x-permission: products.read
+      parameters:
+        - {name: refresh, in: query, schema: {type: boolean}, description: Read from Shopee even if cached}
+      responses:
+        '200':
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [category_id, parent_category_id, original_category_name, has_children]
+                      properties:
+                        category_id: {type: integer, format: int64}
+                        parent_category_id: {type: integer, format: int64}
+                        original_category_name: {type: string}
+                        display_category_name: {type: string}
+                        has_children: {type: boolean}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '424': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shops/{shopID}/catalog/categories/{categoryID}/attributes:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/ShopID'}
+      - {name: categoryID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [products]
+      summary: Attribute tree of a category (cached for a day)
+      x-permission: products.read
+      responses:
+        '200':
+          description: Attributes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [attribute_id, mandatory, name]
+                      properties:
+                        attribute_id: {type: integer, format: int64}
+                        mandatory: {type: boolean}
+                        name: {type: string}
+                        attribute_value_list:
+                          type: array
+                          nullable: true
+                          items:
+                            type: object
+                            properties:
+                              value_id: {type: integer, format: int64}
+                              name: {type: string}
+                        attribute_info: {type: object, nullable: true, additionalProperties: true}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '424': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shops/{shopID}/catalog/categories/{categoryID}/brands:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/ShopID'}
+      - {name: categoryID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [products]
+      summary: Brands of a category (first 1,000; cached for a day)
+      x-permission: products.read
+      responses:
+        '200':
+          description: Brands
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [brand_list, is_mandatory]
+                    properties:
+                      is_mandatory: {type: boolean}
+                      has_next_page: {type: boolean}
+                      next_offset: {type: integer}
+                      brand_list:
+                        type: array
+                        items:
+                          type: object
+                          required: [brand_id, original_brand_name]
+                          properties:
+                            brand_id: {type: integer, format: int64}
+                            original_brand_name: {type: string}
+                            display_brand_name: {type: string}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '424': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+
+  /ext/tasks/{taskID}/release:
+    parameters: [{name: taskID, in: path, required: true, schema: {type: string}}]
+    post:
+      tags: [extension]
+      summary: Give a held task back to the queue without a result (the seller pressed Stop)
+      description: Does not count as a run of the recipe.
+      security: [{deviceToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [lease_token]
+              properties:
+                lease_token: {type: string, format: uuid}
+      responses:
+        '204': {description: Released}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /admin/capabilities:
+    get:
+      tags: [admin]
+      summary: Capability registry with overrides
+      responses:
+        '200':
+          description: Capabilities
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [key, title, default_mode, fallback_mode, enabled, verification, overrides]
+                      properties:
+                        key: {type: string}
+                        title: {type: string}
+                        default_mode: {type: string}
+                        fallback_mode: {type: string, nullable: true}
+                        enabled: {type: boolean}
+                        verification: {type: string}
+                        overrides:
+                          type: array
+                          items: {$ref: '#/components/schemas/CapabilityOverride'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /admin/capability-overrides:
+    put:
+      tags: [admin]
+      summary: Create or replace the override of one scope (capability + app + market); enabled false is a kill switch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [capability_key, reason]
+              properties:
+                capability_key: {type: string}
+                shopee_app_id: {type: string, format: uuid, nullable: true}
+                region: {type: string, nullable: true}
+                mode: {type: string, nullable: true, enum: [API, BROWSER, MANUAL, UNSUPPORTED, null]}
+                enabled: {type: boolean, nullable: true}
+                reason: {type: string, minLength: 3, maxLength: 300}
+      responses:
+        '200':
+          description: Override
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/CapabilityOverride'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /admin/capability-overrides/{overrideID}:
+    parameters: [{name: overrideID, in: path, required: true, schema: {type: string}}]
+    delete:
+      tags: [admin]
+      summary: Remove an override
+      responses:
+        '204': {description: Removed}
+        '404': {$ref: '#/components/responses/Problem'}
 
   /admin/shopee-apps:
     get:
@@ -2545,6 +2889,55 @@ components:
               data: {$ref: '#/components/schemas/User'}
 
   schemas:
+    Overview:
+      type: object
+      required: [connected_shops, active_shops, disconnected_shops, reconnect_required, running_workflows, waiting_workflows,
+        failed_workflows_30d, completed_setups, pending_approvals, queued_browser_tasks, products, published_products]
+      properties:
+        connected_shops: {type: integer, description: Shops not disconnected}
+        active_shops: {type: integer}
+        disconnected_shops: {type: integer, description: Disconnected or needing a new authorization}
+        reconnect_required: {type: integer}
+        running_workflows: {type: integer}
+        waiting_workflows: {type: integer, description: Waiting for approval or a user}
+        failed_workflows_30d: {type: integer, description: Failed or partially completed in the last 30 days}
+        completed_setups: {type: integer}
+        pending_approvals: {type: integer}
+        queued_browser_tasks: {type: integer}
+        products: {type: integer}
+        published_products: {type: integer, description: Products verified on at least one shop}
+    Notification:
+      type: object
+      required: [id, kind, title, body, link, created_at, read_at]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [approval_requested, run_needs_user, run_failed, shop_reconnect_required]}
+        title: {type: string}
+        body: {type: string}
+        link: {type: string, description: Dashboard path}
+        created_at: {type: string, format: date-time}
+        read_at: {type: string, format: date-time, nullable: true}
+    RunRef:
+      type: object
+      required: [id, definition, status, input, created_at, finished_at]
+      properties:
+        id: {type: string, format: uuid}
+        definition: {type: string}
+        status: {$ref: '#/components/schemas/RunStatus'}
+        input: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time, nullable: true}
+    CapabilityOverride:
+      type: object
+      required: [id, shopee_app_id, region, mode, enabled, reason, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        shopee_app_id: {type: string, format: uuid, nullable: true}
+        region: {type: string, nullable: true}
+        mode: {type: string, nullable: true}
+        enabled: {type: boolean, nullable: true}
+        reason: {type: string}
+        created_at: {type: string, format: date-time}
     ExtensionDevice:
       type: object
       required: [id, name, extension_version, user_id, created_at, last_used_at, expires_at]
@@ -2887,9 +3280,10 @@ components:
         enabled: {type: boolean}
         reason:
           type: string
-          description: Empty when enabled without caveats.
-          enum: ['', not_supported, disabled_by_platform, region_not_supported, app_type_not_allowed,
-            shop_not_active, not_sandbox_verified, browser_extension_unavailable, browser_recipe_unavailable]
+          description: |
+            Empty when enabled without caveats. One of `not_supported`, `disabled_by_platform`, `region_not_supported`,
+            `app_type_not_allowed`, `shop_not_active`, `not_sandbox_verified`, `browser_extension_unavailable`,
+            `browser_recipe_unavailable`, or the free-text reason of a platform override.
         requires_approval: {type: boolean}
         sensitive: {type: boolean}
         verification: {type: string, enum: [DOC_VERIFIED, SANDBOX_VERIFIED]}

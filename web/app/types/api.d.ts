@@ -4111,6 +4111,7 @@ export interface paths {
                         error_code?: string | null;
                         message?: string | null;
                         steps?: components["schemas"]["BrowserStepLog"][];
+                        screenshot_ids?: string[];
                     };
                 };
             };
@@ -4263,6 +4264,662 @@ export interface paths {
         };
         trace?: never;
     };
+    "/orgs/{orgID}/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        /** Dashboard numbers */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Counts */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["Overview"];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The caller's notifications in this organization, newest first
+         * @description Any member; each user sees only their own notifications.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    unread?: boolean;
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Notifications */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["Notification"][];
+                            unread: number;
+                        };
+                    };
+                };
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark all of the caller's notifications as read */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Marked */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/notifications/{notificationID}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                notificationID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark a notification as read */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    notificationID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Marked */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/shopee-apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        /** Enabled Shopee apps to connect a shop with (no secrets) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Apps */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                /** Format: uuid */
+                                id: string;
+                                name: string;
+                                /** @enum {string} */
+                                environment: "sandbox" | "production";
+                            }[];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/shops/{shopID}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                shopID: components["parameters"]["ShopID"];
+            };
+            cookie?: never;
+        };
+        /** Configuration status, published products and run history of a shop */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    shopID: components["parameters"]["ShopID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Activity */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                last_setup: components["schemas"]["RunRef"] | null;
+                                published_products: number;
+                                products_needing_attention: number;
+                                runs: components["schemas"]["RunRef"][];
+                            };
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/shops/{shopID}/catalog/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                shopID: components["parameters"]["ShopID"];
+            };
+            cookie?: never;
+        };
+        /** Shopee categories of the shop's market (cached for a day) */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Read from Shopee even if cached */
+                    refresh?: boolean;
+                };
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    shopID: components["parameters"]["ShopID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Categories */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                /** Format: int64 */
+                                category_id: number;
+                                /** Format: int64 */
+                                parent_category_id: number;
+                                original_category_name: string;
+                                display_category_name?: string;
+                                has_children: boolean;
+                            }[];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                424: components["responses"]["Problem"];
+                502: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/shops/{shopID}/catalog/categories/{categoryID}/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                shopID: components["parameters"]["ShopID"];
+                categoryID: string;
+            };
+            cookie?: never;
+        };
+        /** Attribute tree of a category (cached for a day) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    shopID: components["parameters"]["ShopID"];
+                    categoryID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Attributes */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                /** Format: int64 */
+                                attribute_id: number;
+                                mandatory: boolean;
+                                name: string;
+                                attribute_value_list?: {
+                                    /** Format: int64 */
+                                    value_id?: number;
+                                    name?: string;
+                                }[] | null;
+                                attribute_info?: {
+                                    [key: string]: unknown;
+                                } | null;
+                            }[];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                424: components["responses"]["Problem"];
+                502: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/shops/{shopID}/catalog/categories/{categoryID}/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                shopID: components["parameters"]["ShopID"];
+                categoryID: string;
+            };
+            cookie?: never;
+        };
+        /** Brands of a category (first 1,000; cached for a day) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    shopID: components["parameters"]["ShopID"];
+                    categoryID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Brands */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                is_mandatory: boolean;
+                                has_next_page?: boolean;
+                                next_offset?: number;
+                                brand_list: {
+                                    /** Format: int64 */
+                                    brand_id: number;
+                                    original_brand_name: string;
+                                    display_brand_name?: string;
+                                }[];
+                            };
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                424: components["responses"]["Problem"];
+                502: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ext/tasks/{taskID}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give a held task back to the queue without a result (the seller pressed Stop)
+         * @description Does not count as a run of the recipe.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    taskID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        lease_token: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Released */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["Problem"];
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Capability registry with overrides */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Capabilities */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                key: string;
+                                title: string;
+                                default_mode: string;
+                                fallback_mode: string | null;
+                                enabled: boolean;
+                                verification: string;
+                                overrides: components["schemas"]["CapabilityOverride"][];
+                            }[];
+                        };
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/capability-overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Create or replace the override of one scope (capability + app + market); enabled false is a kill switch */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        capability_key: string;
+                        /** Format: uuid */
+                        shopee_app_id?: string | null;
+                        region?: string | null;
+                        /** @enum {string|null} */
+                        mode?: "API" | "BROWSER" | "MANUAL" | "UNSUPPORTED" | null;
+                        enabled?: boolean | null;
+                        reason: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Override */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["CapabilityOverride"];
+                        };
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/capability-overrides/{overrideID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                overrideID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an override */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    overrideID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/shopee-apps": {
         parameters: {
             query?: never;
@@ -4377,6 +5034,64 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Overview: {
+            /** @description Shops not disconnected */
+            connected_shops: number;
+            active_shops: number;
+            /** @description Disconnected or needing a new authorization */
+            disconnected_shops: number;
+            reconnect_required: number;
+            running_workflows: number;
+            /** @description Waiting for approval or a user */
+            waiting_workflows: number;
+            /** @description Failed or partially completed in the last 30 days */
+            failed_workflows_30d: number;
+            completed_setups: number;
+            pending_approvals: number;
+            queued_browser_tasks: number;
+            products: number;
+            /** @description Products verified on at least one shop */
+            published_products: number;
+        };
+        Notification: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "approval_requested" | "run_needs_user" | "run_failed" | "shop_reconnect_required";
+            title: string;
+            body: string;
+            /** @description Dashboard path */
+            link: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            read_at: string | null;
+        };
+        RunRef: {
+            /** Format: uuid */
+            id: string;
+            definition: string;
+            status: components["schemas"]["RunStatus"];
+            input: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            finished_at: string | null;
+        };
+        CapabilityOverride: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            shopee_app_id: string | null;
+            region: string | null;
+            mode: string | null;
+            enabled: boolean | null;
+            reason: string;
+            /** Format: date-time */
+            created_at: string;
+        };
         ExtensionDevice: {
             /** Format: uuid */
             id: string;
@@ -4668,10 +5383,11 @@ export interface components {
             mode: "API" | "BROWSER" | "MANUAL" | "UNSUPPORTED";
             enabled: boolean;
             /**
-             * @description Empty when enabled without caveats.
-             * @enum {string}
+             * @description Empty when enabled without caveats. One of `not_supported`, `disabled_by_platform`, `region_not_supported`,
+             *     `app_type_not_allowed`, `shop_not_active`, `not_sandbox_verified`, `browser_extension_unavailable`,
+             *     `browser_recipe_unavailable`, or the free-text reason of a platform override.
              */
-            reason: "" | "not_supported" | "disabled_by_platform" | "region_not_supported" | "app_type_not_allowed" | "shop_not_active" | "not_sandbox_verified" | "browser_extension_unavailable" | "browser_recipe_unavailable";
+            reason: string;
             requires_approval: boolean;
             sensitive: boolean;
             /** @enum {string} */

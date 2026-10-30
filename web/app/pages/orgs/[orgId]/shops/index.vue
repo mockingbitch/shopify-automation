@@ -13,7 +13,8 @@ const shops = ref<Shop[]>([])
 const loading = ref(true)
 const error = ref('')
 const connecting = ref(false)
-const filter = reactive<{ status: ConnectionStatus | ''; q: string }>({ status: '', q: '' })
+const initialStatus = typeof route.query.status === 'string' && route.query.status in statusLabels ? route.query.status as ConnectionStatus : ''
+const filter = reactive<{ status: ConnectionStatus | ''; q: string }>({ status: initialStatus, q: '' })
 
 // Errors from the Shopee redirect arrive as ?connect_error=<code>.
 const connectError = computed(() => {
@@ -45,11 +46,24 @@ watch(() => [filter.status, filter.q], () => {
   timer = setTimeout(load, 250)
 })
 
+// With several enabled Shopee apps (e.g. sandbox and production), the user
+// chooses one; with one, it is used directly.
+const apps = ref<{ id: string; name: string; environment: string }[]>([])
+const appId = ref('')
+onMounted(async () => {
+  if (!can('shops.connect')) return
+  try {
+    apps.value = unwrap(await api.GET('/orgs/{orgID}/shopee-apps', { params: { path: { orgID: orgId.value } } })).data
+    appId.value = apps.value[0]?.id ?? ''
+  } catch { /* the connect call reports problems */ }
+})
+
 async function connect() {
   connecting.value = true
   error.value = ''
   try {
-    const res = unwrap(await api.POST('/orgs/{orgID}/shops/connect', { params: { path: { orgID: orgId.value } }, body: {} }))
+    const body = apps.value.length > 1 && appId.value ? { shopee_app_id: appId.value } : {}
+    const res = unwrap(await api.POST('/orgs/{orgID}/shops/connect', { params: { path: { orgID: orgId.value } }, body }))
     // Leave the dashboard: the seller signs in on Shopee and is sent back.
     window.location.assign(res.data.authorization_url)
   } catch (e) {
@@ -72,6 +86,12 @@ const date = (iso: string | null) => (iso ? fmt.format(new Date(iso)) : '—')
   <div class="mx-auto max-w-6xl space-y-6">
     <PageHeader title="Shops" description="Shopee shops connected to this organization.">
       <template #actions>
+        <div v-if="can('shops.connect') && apps.length > 1" class="flex items-center gap-2">
+          <Label for="connect-app" class="text-sm">Shopee app</Label>
+          <select id="connect-app" v-model="appId" class="h-9 rounded-md border bg-background px-3 text-sm">
+            <option v-for="a in apps" :key="a.id" :value="a.id">{{ a.name }} ({{ a.environment }})</option>
+          </select>
+        </div>
         <Button v-if="can('shops.connect')" :disabled="connecting" @click="connect">
           {{ connecting ? 'Opening Shopee…' : 'Connect shop' }}
         </Button>

@@ -158,3 +158,6 @@ func upstreamError(err error, showDetails bool) error {
 	}
 	return out
 }
+
+// UpstreamError converts a Shopee error for API responses (other modules).
+func UpstreamError(err error, showDetails bool) error { return upstreamError(err, showDetails) }

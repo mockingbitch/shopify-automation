@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { runStatusLabels, runVariant } from '~/utils/workflows'
 import type { components } from '~/types/api'
 import { daysUntil, modeLabels, needsReconnect, reasonText, statusLabels, statusVariant } from '~/utils/shops'
 
@@ -12,6 +13,13 @@ const { orgId, can } = useOrg()
 const shopId = computed(() => String(route.params.shopId))
 
 const detail = ref<Detail>()
+type Activity = components['schemas']['RunRef']
+const activity = ref<{ last_setup: Activity | null; published_products: number; products_needing_attention: number; runs: Activity[] }>()
+const runTitle = (r: Activity) => {
+  const i = r.input as { template_name?: string; version_no?: number; product_ids?: string[] }
+  if (r.definition === 'PRODUCT_PUBLISH') return `Publish ${i.product_ids?.length ?? 0} products`
+  return i.template_name ? `Setup: ${i.template_name} v${i.version_no}` : 'Shop setup'
+}
 const loading = ref(true)
 const error = ref('')
 const notice = ref(route.query.connected === '1' ? 'Shop connected. Shop information is being synced.' : '')
@@ -26,7 +34,12 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    detail.value = unwrap(await api.GET('/orgs/{orgID}/shops/{shopID}', { params: { path: path.value } })).data
+    const [d, a] = await Promise.all([
+      api.GET('/orgs/{orgID}/shops/{shopID}', { params: { path: path.value } }),
+      api.GET('/orgs/{orgID}/shops/{shopID}/activity', { params: { path: path.value } }),
+    ])
+    detail.value = unwrap(d).data
+    activity.value = unwrap(a).data
   } catch (e) {
     error.value = toApiError(e).message
   } finally {
@@ -145,6 +158,55 @@ const eventLabels: Record<string, string> = {
           </CardContent>
         </Card>
       </div>
+
+      <section v-if="activity" aria-labelledby="config-heading" class="grid gap-4 md:grid-cols-3">
+        <h2 id="config-heading" class="sr-only">Configuration and products</h2>
+        <Card>
+          <CardHeader class="pb-2">
+            <CardDescription>Configuration</CardDescription>
+            <CardTitle class="text-base">
+              <template v-if="activity.last_setup">
+                <Badge :variant="runVariant(activity.last_setup.status)">{{ runStatusLabels[activity.last_setup.status] }}</Badge>
+              </template>
+              <template v-else>Never set up</template>
+            </CardTitle>
+          </CardHeader>
+          <CardContent class="text-sm text-muted-foreground">
+            <NuxtLink v-if="activity.last_setup" :to="`/orgs/${orgId}/workflows/${activity.last_setup.id}`" class="underline">
+              {{ runTitle(activity.last_setup) }}, {{ date(activity.last_setup.finished_at ?? activity.last_setup.created_at) }}
+            </NuxtLink>
+            <span v-else>Apply a template to configure this shop.</span>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader class="pb-2">
+            <CardDescription>Products published</CardDescription>
+            <CardTitle class="text-3xl">{{ activity.published_products }}</CardTitle>
+          </CardHeader>
+          <CardContent v-if="activity.products_needing_attention" class="text-sm text-destructive">
+            {{ activity.products_needing_attention }} need attention (failed or unclear)
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader class="pb-2">
+            <CardDescription>Last synchronization</CardDescription>
+            <CardTitle class="text-base">{{ date(detail?.shop.last_synced_at) }}</CardTitle>
+          </CardHeader>
+        </Card>
+      </section>
+
+      <section v-if="activity?.runs.length" aria-labelledby="runs-heading" class="space-y-2">
+        <h2 id="runs-heading" class="text-lg font-semibold">Setup history</h2>
+        <ul class="divide-y rounded-lg border bg-background text-sm">
+          <li v-for="r in activity.runs" :key="r.id" class="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
+            <NuxtLink :to="`/orgs/${orgId}/workflows/${r.id}`" class="underline-offset-4 hover:underline">{{ runTitle(r) }}</NuxtLink>
+            <span class="flex items-center gap-2">
+              <Badge :variant="runVariant(r.status)">{{ runStatusLabels[r.status] }}</Badge>
+              <span class="text-xs text-muted-foreground">{{ date(r.created_at) }}</span>
+            </span>
+          </li>
+        </ul>
+      </section>
 
       <section aria-labelledby="cap-heading" class="space-y-3">
         <div>

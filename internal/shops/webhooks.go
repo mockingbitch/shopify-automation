@@ -233,6 +233,9 @@ func (s *Service) applyToConnection(ctx context.Context, c shopsdb.SystemFindCon
 			if err := s.recordAuthorization(ctx, q, c.OrgID, c.ID, event, "push", meta); err != nil {
 				return err
 			}
+			if err := s.notifyReconnect(ctx, q, conn, "The seller's authorization ended on Shopee. Reconnect the shop to keep automation running."); err != nil {
+				return err
+			}
 			return s.Audit.Record(ctx, tx, audit.Entry{OrgID: &c.OrgID, ActorType: audit.ActorShopee, Action: action,
 				TargetType: "shop_connection", TargetID: &c.ID, Metadata: meta})
 		case PushAuthExpiresSoon:

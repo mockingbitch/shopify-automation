@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"strings"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +18,7 @@ import (
 	"shopee-automation/internal/platform/clock"
 	"shopee-automation/internal/platform/db"
 	"shopee-automation/internal/platform/queue"
+	"shopee-automation/internal/rbac"
 	"shopee-automation/internal/workflow/workflowdb"
 )
 
@@ -706,8 +709,68 @@ func (e *Engine) event(ctx context.Context, q *workflowdb.Queries, orgID, runID 
 	if data == nil {
 		data = map[string]any{}
 	}
-	return q.InsertEvent(ctx, workflowdb.InsertEventParams{ID: db.NewID(), OrgID: orgID, RunID: runID, StepID: stepID,
-		Type: typ, Level: level, Message: truncate(msg, 1000), Data: marshal(data), CreatedAt: e.now()})
+	if err := q.InsertEvent(ctx, workflowdb.InsertEventParams{ID: db.NewID(), OrgID: orgID, RunID: runID, StepID: stepID,
+		Type: typ, Level: level, Message: truncate(msg, 1000), Data: marshal(data), CreatedAt: e.now()}); err != nil {
+		return err
+	}
+	return e.notify(ctx, q, orgID, runID, stepID, typ, msg, data)
+}
+
+// definitionTitles names runs in notifications.
+var definitionTitles = map[string]string{"SHOP_SETUP": "Shop setup", "PRODUCT_PUBLISH": "Product publishing"}
+
+// notify writes in-app notifications for events someone must act on, in
+// the same transaction as the event.
+func (e *Engine) notify(ctx context.Context, q *workflowdb.Queries, orgID, runID uuid.UUID, stepID *uuid.UUID, typ, msg string, data map[string]any) error {
+	var kind, title, dedupe string
+	var roles []string
+	var users []uuid.UUID
+	run, err := q.GetRun(ctx, workflowdb.GetRunParams{OrgID: orgID, ID: runID})
+	if err != nil {
+		return err
+	}
+	name := definitionTitles[run.DefinitionKey]
+	if name == "" {
+		name = run.DefinitionKey
+	}
+	step := ""
+	if stepID != nil {
+		step = stepID.String()
+	}
+	creatorOrRunners := func() {
+		if run.CreatedBy != nil {
+			users = []uuid.UUID{*run.CreatedBy}
+		} else {
+			roles = rbac.RolesWith(rbac.WorkflowsRun)
+		}
+	}
+	switch typ {
+	case "APPROVAL_REQUESTED":
+		kind, title, dedupe = "approval_requested", name+": approval needed", "approval:"+step
+		roles = rbac.RolesWith(rbac.ApprovalsDecide)
+	case "USER_ACTION_REQUESTED":
+		kind, title, dedupe = "run_needs_user", name+": waiting for you", "needs_user:"+step
+		creatorOrRunners()
+	case "RUN_STATUS_CHANGED":
+		to, _ := data["to"].(string)
+		if to != RunFailed && to != RunPartiallyCompleted {
+			return nil
+		}
+		kind, title, dedupe = "run_failed", name+": "+strings.ToLower(strings.ReplaceAll(to, "_", " ")), "run_failed:"+runID.String()
+		msg = "Open the run to see what failed and retry."
+		creatorOrRunners()
+	default:
+		return nil
+	}
+	if roles == nil {
+		roles = []string{}
+	}
+	if users == nil {
+		users = []uuid.UUID{}
+	}
+	return q.NotifyMembers(ctx, workflowdb.NotifyMembersParams{Kind: kind, Title: truncate(title, 200), Body: truncate(msg, 1000),
+		Link: "/orgs/" + orgID.String() + "/workflows/" + runID.String(), DedupeKey: dedupe, CreatedAt: e.now(),
+		OrgID: orgID, Roles: roles, UserIds: users})
 }
 
 // syncRun recomputes the run status from its steps.

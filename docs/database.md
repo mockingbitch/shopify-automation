@@ -502,6 +502,18 @@ erDiagram
   }
 ```
 
+### 2.6 As built (Phase 7)
+
+Migration `00007_dashboard.sql`:
+
+| Table | Notes |
+|---|---|
+| `notifications` | Tenant table (RLS). `kind` ∈ approval_requested, run_needs_user, run_failed, shop_reconnect_required; `link` must be a dashboard path; partial unique `(org_id, user_id, dedupe_key) WHERE read_at IS NULL` |
+| `email_outbox` | Platform table without `org_id`. Recipient, subject and body sealed together (`message_enc`, per-row DEK); deleted after sending. The system role reads only `(id, attempts, failed_at, next_attempt_at)` |
+| `shopee_catalog_cache` | Tenant table (RLS); PK `(shop_connection_id, kind, cache_key)` |
+
+`capability_overrides` gained INSERT/UPDATE/DELETE for `app_rw` (platform admin page).
+
 ### 2.5 As built (Phase 6)
 
 Migration `00006_extension.sql`:

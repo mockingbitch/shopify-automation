@@ -198,7 +198,8 @@ Statuses: `QUEUED → RUNNING → SUCCEEDED | FAILED`; `RUNNING ⇄ WAITING_USER
 | `POST /ext/tasks/{id}/claim` | — | `{lease_token, lease_expires_at, recipe {json, signature, key_id}, inputs, task {shopee_shop_id, region, capability}}`. `409 task_unavailable` if another device holds it or it is not queued; `409 recipe_disabled` / `capability_disabled` (kill switch, checked on every claim) |
 | `POST /ext/tasks/{id}/heartbeat` | `{lease_token, state: RUNNING\|WAITING_USER, message?}` | extends the lease by 10 minutes |
 | `POST /ext/tasks/{id}/screenshots` | multipart `file` (PNG/JPEG ≤ 5 MB) + `lease_token` | `{id}` |
-| `POST /ext/tasks/{id}/result` | `{lease_token, status: SUCCEEDED\|FAILED, error_code?, message?, steps: [{index, action, outcome: ok\|failed\|skipped, duration_ms, error?}], screenshot_ids?}` | `204`. A stale `lease_token` is `409 lease_lost` and the result is dropped |
+| `POST /ext/tasks/{id}/release` | `{lease_token}` | `204`; the task goes back to `QUEUED` (Stop). Not counted as a run of the recipe (Phase 7) |
+| `POST /ext/tasks/{id}/result` | `{lease_token, status: SUCCEEDED\|FAILED, error_code?, message?, steps: [{index, action, outcome: ok\|failed\|skipped, duration_ms, error?}], screenshot_ids?}` (`screenshot_ids` accepted since Phase 7; screenshots are already linked by the upload) | `204`. A stale `lease_token` is `409 lease_lost` and the result is dropped |
 
 `inputs` maps each recipe input name to `{type: "text", value}` or `{type: "files", files: [{name, url, content_type, sha256}]}`; file URLs are presigned for 10 minutes. The extension checks that the recipe's `capability` and `market` equal the task's.
 

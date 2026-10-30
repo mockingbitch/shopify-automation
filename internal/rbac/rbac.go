@@ -120,3 +120,15 @@ func CanManageMember(actor, member Role) bool {
 	}
 	return member.Rank() < actor.Rank()
 }
+
+// RolesWith returns the roles granted p, as strings for SQL.
+func RolesWith(p Permission) []string {
+	var out []string
+	for r, ps := range grants {
+		if slices.Contains(ps, p) {
+			out = append(out, string(r))
+		}
+	}
+	slices.Sort(out)
+	return out
+}

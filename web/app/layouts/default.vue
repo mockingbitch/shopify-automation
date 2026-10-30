@@ -121,12 +121,18 @@ async function resendVerification() {
           <NuxtLink v-if="session.user?.is_platform_admin" to="/admin/browser-recipes" class="mt-1 block text-xs text-primary hover:underline">
             Platform admin: Browser recipes
           </NuxtLink>
+          <NuxtLink v-if="session.user?.is_platform_admin" to="/admin/capabilities" class="mt-1 block text-xs text-primary hover:underline">
+            Platform admin: Capabilities
+          </NuxtLink>
           <Button variant="outline" size="sm" class="mt-3 w-full" @click="logout">Sign out</Button>
         </div>
       </div>
     </aside>
 
     <main id="main" class="min-w-0 flex-1 p-4 md:p-8">
+      <div v-if="orgId" class="mb-4 flex justify-end">
+        <NotificationBell :org-id="orgId" />
+      </div>
       <div
         v-if="session.user && !session.user.email_verified"
         role="status"

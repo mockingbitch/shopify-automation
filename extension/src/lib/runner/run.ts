@@ -35,6 +35,8 @@ export interface RunApi {
   heartbeat(state: 'RUNNING' | 'WAITING_USER', message?: string): Promise<unknown>;
   screenshot(png: Blob, name: string): Promise<string>;
   result(body: Omit<ResultBody, 'lease_token'>): Promise<void>;
+  /** Gives the task back to the queue without a result (Stop). */
+  release(): Promise<void>;
 }
 
 export type RunPhase = 'preparing' | 'running' | 'paused' | 'succeeded' | 'failed' | 'lease_lost' | 'stopped';
@@ -209,7 +211,10 @@ export class TaskRun {
     // Screenshot on failure, only once the recipe was trusted and we are on an allowed page.
     if (this.recipe && code !== 'stopped_by_user') await this.takeScreenshot('failure').catch(() => undefined);
     try {
-      await this.finish({ status: 'FAILED', error_code: code, message: message.slice(0, 500) });
+      // Stop is not a failure: the task goes back to the queue and does not
+      // count against the recipe.
+      if (code === 'stopped_by_user') await this.deps.api.release();
+      else await this.finish({ status: 'FAILED', error_code: code, message: message.slice(0, 500) });
     } catch (err) {
       if (isLeaseLost(err)) {
         this.set({ phase: 'lease_lost', message: 'This task was taken over.', errorCode: 'lease_lost' });

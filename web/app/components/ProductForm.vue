@@ -36,6 +36,17 @@ function row(index: number[]): Row {
   return rows[key]!
 }
 
+function pickCategory(id: string, label: string) {
+  f.category = id
+  if (!f.categoryLabel) f.categoryLabel = label
+}
+function pickAttribute(attributeId: number, valueId: number, name: string) {
+  const row = { id: String(attributeId), value: String(valueId), name, unit: '' }
+  const i = attributes.value.findIndex((a) => a.id === row.id)
+  if (i >= 0) attributes.value[i] = row
+  else attributes.value.push(row)
+}
+
 const err = (k: string) => props.errors?.[k]
 const variationError = computed(() => Object.entries(props.errors ?? {}).filter(([k]) => k.startsWith('variations') || k.startsWith('tiers')).map(([, v]) => v).join(' '))
 const attributeError = computed(() => Object.entries(props.errors ?? {}).filter(([k]) => k.startsWith('attributes')).map(([, v]) => v).join(' '))
@@ -76,6 +87,9 @@ const inputClass = 'w-full rounded-md border bg-background px-3 py-2 text-sm'
           <FormField id="pf-desc" label="Description" :error="err('description')">
             <textarea id="pf-desc" v-model="f.description" rows="5" maxlength="10000" :class="inputClass" />
           </FormField>
+        </div>
+        <div class="sm:col-span-2">
+          <CatalogPicker v-if="!readonly" :category-id="f.category" @category="pickCategory" @attribute="pickAttribute" @brand="(b) => (f.brand = b)" />
         </div>
         <FormField id="pf-cat" label="Shopee category ID" :error="err('shopee_category_id')" hint="A leaf category of the shop's market.">
           <Input id="pf-cat" v-model="f.category" inputmode="numeric" />

@@ -28,7 +28,7 @@ Deferred from Phase 1, tracked for later phases:
 
 | Item | Moves to |
 |---|---|
-| Emails through a retried background job | Phase 7 (moved) |
+| Emails through a retried background job | Done in Phase 7 (`notify.Outbox`) |
 | Breached-password check (k-anonymity range API) | Phase 8 |
 | TOTP / MFA (Q-5) | Phase 8 |
 | Platform admin endpoints (`/admin/*`) | Done in Phase 2 (`/admin/shopee-apps`) |
@@ -73,8 +73,8 @@ Deferred from Phase 2:
 |---|---|
 | Sandbox E2E run and `SANDBOX-VERIFIED` statuses | When S-1 is done |
 | Lost-token recovery via `get_token_by_resend_code` (S-3) | After the FAQ is read and tested in sandbox |
-| Dashboard picker when several Shopee apps are enabled (the API already accepts `shopee_app_id`) | Phase 7 |
-| Admin UI for capability overrides (table and resolver exist) | Phase 7 |
+| Dashboard picker when several Shopee apps are enabled (the API already accepts `shopee_app_id`) | Done in Phase 7 |
+| Admin UI for capability overrides (table and resolver exist) | Done in Phase 7 |
 | Notifications for `RECONNECT_REQUIRED` / expiring authorizations (shown in the dashboard today) | Phase 4 (notifications) |
 | Daily `public.get_shops_by_partner` reconciliation and `push.get_lost_push_message` recovery | Phase 4 (scheduler) |
 | KEK rotation job (`envelope.Keyring.Rewrap` exists) | Phase 8 |
@@ -113,7 +113,7 @@ Deferred from Phase 3:
 | Apply endpoint (`…/apply`), snapshots `BEFORE_APPLY`/`AFTER_APPLY`, blocking delete while runs are active | Phase 4 |
 | Live current values for logistics, addresses and warehouses in the preview (read with `get_channel_list`, `get_address_list`, `get_warehouse_detail` in the workflow's `fetch_current_config` step) | Phase 4 |
 | Market-specific limits (`get_item_limit`, days-to-ship ranges, channel weight limits) | Phase 5 |
-| Form-based overrides editor (JSON editor today) and a picker for channel/category IDs | Phase 7 |
+| Form-based overrides editor (JSON editor today) and a picker for channel/category IDs | Done in Phase 7 (overrides form; category picker in the product form) |
 
 Goal: an operator builds a versioned shop template, admins publish it, shop-specific overrides are stored, and a preview shows per shop which fields would change, through which capability and mode, and which changes are sensitive. Applying a template is a workflow and comes in Phase 4.
 
@@ -144,7 +144,7 @@ Deferred from Phase 4:
 |---|---|
 | Steps 9–11 (products) and fan-out per item | Phase 5 |
 | Shop logo upload through the API (S-4); today a manual task | When S-4 is verified |
-| Emails through a retried job; in-app notifications (approval waiting, reconnect required) | Phase 7 |
+| Emails through a retried job; in-app notifications (approval waiting, reconnect required) | Done in Phase 7 |
 | Per-org concurrency limit and per-class queues (critical/default/bulk/low) | Phase 8 (load tests decide the numbers) |
 | Compensation (restore from `BEFORE_APPLY`) | Later; needs product decision |
 | Purge of deleted organizations; daily `get_shops_by_partner` reconciliation; `get_lost_push_message` recovery; trace propagation into tasks | Phase 8 |
@@ -179,7 +179,7 @@ Deferred from Phase 5:
 | Item | Moves to |
 |---|---|
 | Sandbox verification of every product endpoint and of the add_item → init_tier_variation delay | When S-1 is available |
-| Category, attribute and brand pickers in the dashboard (today: IDs typed by hand; the publish check lists what is missing) | Phase 7 |
+| Category, attribute and brand pickers in the dashboard (today: IDs typed by hand; the publish check lists what is missing) | Done in Phase 7 |
 | Channels with `fee_type = SIZE_SELECTION` (need a `size_id` per item) | Later; needs a product decision |
 | Updating items that already exist on Shopee (price, stock, description); deleting items | Later phase (sync) |
 | Pre-order (`pre_order.days_to_ship`), wholesale, video, size chart, GTIN | Later |
@@ -233,11 +233,37 @@ Deferred from Phase 6:
 |---|---|
 | First real recipes (banner, address creation) per market, verified on a seller account | When E-1/E-2 are answered and a test seller account exists |
 | Extension store listing and privacy text (E-4); signed CRX/update channel | Before production |
-| "Release" a claimed task back to the queue (today Stop finishes it as FAILED `stopped_by_user`, which does not count against the recipe) | Phase 7 |
-| Notifications when a task waits for the extension | Phase 7 |
+| "Release" a claimed task back to the queue (today Stop finishes it as FAILED `stopped_by_user`, which does not count against the recipe) | Done in Phase 7 |
+| Notifications when a task waits for the extension | Done in Phase 7 (waiting-for-you notification; the overview counts queued extension tasks) |
 | Recipe failure-rate alerting beyond auto-disable | Phase 8 |
 
-## 8. Definition of done (every phase)
+## 8. Phase 7 task breakdown
+
+**Status (2026-10-30): done.** Verified locally: Go integration tests (overview counts; notifications to the right roles and users, dedupe, read/read-all, another user's notification unreachable; email outbox survives a mail outage, stores no plaintext, sends after recovery and deletes the row; catalog cache hit, refresh and expiry, cross-org 404; capability override kill switch and removal, admin-only; app options without secrets; extension release), extension unit + Playwright tests, dashboard type-check, build, Playwright smoke and an axe-core audit of every main page (0 WCAG A/AA violations), `go test -race`, `golangci-lint`, `sqlc diff`, migrations up/down/up, Docker build. The isolation suites now include the new tables and routes.
+
+| # | Task | Output |
+|---|---|---|
+| 7.1 | Overview | `GET /orgs/{org}/overview`; stat cards (linked to filtered lists) and a "Needs attention" list |
+| 7.2 | Shop detail | Configuration status (last setup), products published / needing attention, last sync, setup history |
+| 7.3 | Notifications | In-app notifications written with the event (approval, waiting for you, failed, reconnect required); bell with unread count |
+| 7.4 | Email outbox | Encrypted outbox + retried `mail:send` task + sweeper (Phase 1/4 deferral) |
+| 7.5 | Pickers | Category search, mandatory attributes and brands from a connected shop, cached |
+| 7.6 | Extension Stop | `POST /ext/tasks/{id}/release`; Stop no longer finishes the task as FAILED |
+| 7.7 | Admin | Capability overrides page; Shopee app picker on connect; form editor for template overrides (JSON kept as an option) |
+| 7.8 | Accessibility | axe-core audit in Playwright; contrast fix |
+| 7.9 | Docs sync | |
+
+Found and fixed during Phase 7: the worker had no SMTP mailer (it only logged emails), which would have silently dropped every verification email once email moved to the worker; the HTTP isolation test could fail at random when a request ID contained the shop ID it searches for.
+
+Deferred from Phase 7:
+
+| Item | Moves to |
+|---|---|
+| Email notifications and per-user notification preferences | Later; needs a product decision on what is worth an email |
+| Live updates (server-sent events) instead of polling | Phase 8 if load tests show polling is too costly |
+| Manual screen-reader pass (NVDA/VoiceOver) beyond the automated audit | Before production |
+
+## 9. Definition of done (every phase)
 
 1. Code + tests merged; `go test -race ./...`, lint and type-check green.
 2. Integration tests run against real Postgres/Redis containers.
@@ -246,7 +272,7 @@ Deferred from Phase 6:
 5. Docs in `docs/` updated in the same PR.
 6. No feature is reported as working against Shopee unless it was exercised in sandbox; otherwise it is labelled `DOC-VERIFIED` only.
 
-## 9. Decisions needed from the product owner
+## 10. Decisions needed from the product owner
 
 | ID | Decision | Needed by |
 |---|---|---|

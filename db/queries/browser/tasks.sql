@@ -82,3 +82,7 @@ FROM capability_definitions d WHERE d.key = @key;
 
 -- name: RunExists :one
 SELECT EXISTS (SELECT 1 FROM workflow_runs WHERE org_id = @org_id AND id = @id);
+
+-- name: ReleaseTask :execrows
+UPDATE browser_tasks SET status = 'QUEUED', lease_token = NULL, lease_expires_at = NULL, device_id = NULL, status_message = @status_message
+WHERE org_id = @org_id AND id = @id AND lease_token = @lease_token AND status IN ('RUNNING', 'WAITING_USER');

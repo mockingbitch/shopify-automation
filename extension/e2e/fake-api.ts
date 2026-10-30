@@ -40,6 +40,7 @@ export class FakeApi {
   codeUsed = false;
   tasks = new Map<string, FakeTask>();
   results: ResultRecord[] = [];
+  releases: string[] = [];
   heartbeats: { taskId: string; state: string; message?: string }[] = [];
   screenshots: { taskId: string; bytes: number; leaseOk: boolean }[] = [];
   requests: string[] = [];
@@ -51,6 +52,7 @@ export class FakeApi {
     this.codeUsed = false;
     this.tasks.clear();
     this.results = [];
+    this.releases = [];
     this.heartbeats = [];
     this.screenshots = [];
     this.requests = [];
@@ -147,7 +149,7 @@ export class FakeApi {
       return this.json(res, 200, { data });
     }
 
-    const m = /^\/tasks\/([^/]+)\/(claim|heartbeat|screenshots|result)$/.exec(p);
+    const m = /^\/tasks\/([^/]+)\/(claim|heartbeat|screenshots|result|release)$/.exec(p);
     if (!m || req.method !== 'POST') return this.problem(res, 404, 'not_found');
     const task = this.tasks.get(decodeURIComponent(m[1]!));
     if (!task) return this.problem(res, 404, 'not_found');
@@ -186,6 +188,13 @@ export class FakeApi {
       this.heartbeats.push({ taskId: task.id, state: b.state, message: b.message });
       task.status = b.state;
       return this.json(res, 200, { lease_expires_at: new Date(Date.now() + 600_000).toISOString() });
+    }
+    if (op === 'release') {
+      this.releases.push(task.id);
+      task.status = 'QUEUED';
+      task.leaseToken = undefined;
+      res.writeHead(204).end();
+      return;
     }
     // result
     this.results.push({ taskId: task.id, body: b });

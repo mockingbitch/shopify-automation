@@ -269,7 +269,14 @@ func TestExtensionBannerTaskEndToEnd(t *testing.T) {
 
 	steps := []map[string]any{{"index": 0, "action": "assert_shop_id", "outcome": "ok", "duration_ms": 120},
 		{"index": 1, "action": "click", "outcome": "ok", "duration_ms": 900}}
-	e.extMust(204, b.token, "POST", "/ext/tasks/"+id+"/result", map[string]any{"lease_token": lease, "status": "SUCCEEDED", "steps": steps})
+	var uploaded struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(sb, &uploaded)
+	e.extMust(204, b.token, "POST", "/ext/tasks/"+id+"/result", map[string]any{"lease_token": lease, "status": "SUCCEEDED", "steps": steps,
+		"screenshot_ids": []string{uploaded.Data.ID}})
 	if code := e.extMust(409, b.token, "POST", "/ext/tasks/"+id+"/result", map[string]any{"lease_token": lease, "status": "FAILED"}).code(t); code != "lease_lost" {
 		t.Fatalf("result twice: %s", code)
 	}

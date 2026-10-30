@@ -89,4 +89,7 @@ export class ExtApi {
   result(id: string, body: ResultBody): Promise<void> {
     return this.request('POST', `/tasks/${encodeURIComponent(id)}/result`, body);
   }
+  release(id: string, leaseToken: string): Promise<void> {
+    return this.request('POST', `/tasks/${encodeURIComponent(id)}/release`, { lease_token: leaseToken });
+  }
 }

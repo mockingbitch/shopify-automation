@@ -3,6 +3,7 @@ package mailer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"mime"
@@ -69,13 +70,25 @@ func (l Log) Send(ctx context.Context, m Message) error {
 type Memory struct {
 	mu   sync.Mutex
 	Sent []Message
+	// Fail makes Send fail (a mail server outage in tests).
+	Fail bool
 }
 
 func (m *Memory) Send(_ context.Context, msg Message) error {
 	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Fail {
+		return errors.New("mailer: server unavailable")
+	}
 	m.Sent = append(m.Sent, msg)
-	m.mu.Unlock()
 	return nil
+}
+
+// SetFail turns the simulated outage on or off.
+func (m *Memory) SetFail(v bool) {
+	m.mu.Lock()
+	m.Fail = v
+	m.mu.Unlock()
 }
 
 // Last returns the last message sent to addr, if any.

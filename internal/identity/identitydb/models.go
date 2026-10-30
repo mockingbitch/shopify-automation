@@ -125,6 +125,18 @@ type CapabilityOverride struct {
 	CreatedAt     time.Time
 }
 
+type EmailOutbox struct {
+	ID            uuid.UUID
+	KekID         string
+	DekWrapped    []byte
+	MessageEnc    []byte
+	Attempts      int32
+	LastError     *string
+	FailedAt      *time.Time
+	CreatedAt     time.Time
+	NextAttemptAt time.Time
+}
+
 type ExtensionDevice struct {
 	ID               uuid.UUID
 	OrgID            uuid.UUID
@@ -147,6 +159,19 @@ type ExtensionPairingCode struct {
 	ExpiresAt time.Time
 	UsedAt    *time.Time
 	CreatedAt time.Time
+}
+
+type Notification struct {
+	ID        uuid.UUID
+	OrgID     uuid.UUID
+	UserID    uuid.UUID
+	Kind      string
+	Title     string
+	Body      string
+	Link      string
+	DedupeKey string
+	CreatedAt time.Time
+	ReadAt    *time.Time
 }
 
 type OauthState struct {
@@ -470,6 +495,15 @@ type ShopeeApp struct {
 	Enabled         bool
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+}
+
+type ShopeeCatalogCache struct {
+	OrgID            uuid.UUID
+	ShopConnectionID uuid.UUID
+	Kind             string
+	CacheKey         string
+	Payload          []byte
+	FetchedAt        time.Time
 }
 
 type User struct {
