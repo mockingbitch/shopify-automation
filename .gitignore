@@ -10,3 +10,6 @@ node_modules/
 .output/
 dist/
 .DS_Store
+
+# graphify: local cache (the graph itself is committed)
+graphify-out/cache/
