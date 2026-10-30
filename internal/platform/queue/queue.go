@@ -25,6 +25,7 @@ const (
 	TypeStepExecute     = "workflow:step"
 	TypeStepSweep       = "workflow:sweep"
 	TypePartitions      = "maintenance:partitions"
+	TypeImport          = "products:import"
 )
 
 // Options controls one enqueue.
@@ -215,6 +216,14 @@ func (q *Inline) ResetIDs() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.ids = map[string]bool{}
+}
+
+// FinalAttempt reports whether a failing handler will not be retried, so it
+// can record a final state. Outside asynq (the inline queue) every run is final.
+func FinalAttempt(ctx context.Context) bool {
+	n, ok1 := asynq.GetRetryCount(ctx)
+	limit, ok2 := asynq.GetMaxRetry(ctx)
+	return !ok1 || !ok2 || n >= limit
 }
 
 // Decode unmarshals a payload strictly.

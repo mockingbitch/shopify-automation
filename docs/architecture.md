@@ -27,7 +27,7 @@ flowchart LR
   worker -->|SQL + RLS| pg
   worker -->|signed HTTPS| shopee
   api -->|signed HTTPS| shopee
-  worker --> s3[(S3 / MinIO)]
+  worker --> s3[(S3-compatible storage)]
   api --> s3
   ext[Browser extension<br/>in seller's browser] -->|HTTPS, device token| nginx
   ext -->|UI actions in Seller Centre tab| shopee
@@ -239,7 +239,7 @@ Likelihood × impact on a 1–3 scale. "Score" = L × I.
 
 ## 7. Deployment (initial)
 
-Docker Compose for local development and a single-host staging setup: `nginx`, `api`, `worker`, `scheduler`, `postgres:17`, `redis:7`, `minio`, `otel-collector`, `mailpit` (dev only), `clamav`. Production target is the same images on a managed container platform with managed Postgres and Redis (decided in Phase 8).
+Docker Compose for local development and a single-host staging setup: `nginx`, `api`, `worker`, `scheduler`, `postgres:17`, `redis:7`, S3-compatible storage (SeaweedFS in development), `otel-collector`, `mailpit` (dev only), `clamav`. Production target is the same images on a managed container platform with managed Postgres and Redis (decided in Phase 8).
 
 ## 8. Phase 1 implementation notes
 
@@ -289,7 +289,19 @@ Docker Compose for local development and a single-host staging setup: `nginx`, `
 | Shopee auth during runs | A rejected access token triggers one forced refresh; a rejected refresh marks the shop `RECONNECT_REQUIRED` and the run waits for reconnect + resume. |
 | Partitions | `maintenance.EnsurePartitions` runs daily on the system pool (the only role allowed to create partitions), three months ahead, for `audit_logs` and `workflow_events`. |
 
-## 12. Conventions
+## 12. Phase 5 implementation notes
+
+| Topic | As built |
+|---|---|
+| Packages | `internal/products` (catalog, images, imports, publish state), `internal/workflows/productpublish` (PRODUCT_PUBLISH and the publish endpoint), `internal/workflows/shopstep` (connection check and Shopee error mapping shared with SHOP_SETUP), `internal/platform/storage` (S3 API) and `internal/platform/media` (fetch and sanitize images). |
+| Object storage | S3 API through minio-go. Development uses SeaweedFS (MinIO stopped publishing public images). Keys are `orgs/<org>/…`; downloads are presigned GET URLs (15 minutes for images, 10 for reports). |
+| Images | Fetched over HTTPS only; the dialer checks every resolved IP (no private, loopback or link-local, also after redirects). Type by magic bytes; ≤ 10 MB and ≤ 40 MP checked from the header before decoding; re-encoded to JPEG or PNG, which drops metadata and appended payloads. |
+| Money | `numeric(14,2)` in Postgres, a decimal string in Go and JSON; converted to a float only in the Shopee request body. |
+| Imports | Upload stores the file, a task parses it with row and size caps, inserts rows in chunks, validates every row, materializes valid groups (rows with the same SKU form one product with variations) and writes a formula-safe CSV report. A task that fails on its last attempt marks the batch `FAILED`; Retry reads the file again if no rows exist. |
+| Fan-out | A step handler returns `Expand(items)`; the engine inserts one item step per item at the same position. Items run in parallel, each with its own attempts; the parent finishes when all items are done. User retry reruns only failed items and the report step. |
+| Publishing | One run per shop. Prepare reads the shop's categories, attribute tree, brands, limits, channels and standardised variations, and blocks products with a reason. Approval selects products. Each product runs the `add_item` protocol (workflow-design.md §5) under the per-shop mutating lock. |
+
+## 13. Conventions
 
 - Go: `gofmt`, `go vet`, `golangci-lint` (errcheck, staticcheck, gosec, revive, contextcheck). `context.Context` is the first parameter of every function that does I/O.
 - Errors: wrap with `%w`; domain errors are typed (`ErrNotFound`, `ErrConflict`, `ValidationError`) and mapped to HTTP only in `httpx`.

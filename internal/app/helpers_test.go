@@ -26,8 +26,10 @@ import (
 	"shopee-automation/internal/platform/db"
 	"shopee-automation/internal/platform/envelope"
 	"shopee-automation/internal/platform/mailer"
+	"shopee-automation/internal/platform/media"
 	"shopee-automation/internal/platform/queue"
 	"shopee-automation/internal/platform/ratelimit"
+	"shopee-automation/internal/platform/storage"
 	"shopee-automation/internal/platform/testdb"
 	"shopee-automation/internal/shopee"
 	"shopee-automation/internal/shopee/shopeefake"
@@ -42,6 +44,7 @@ type env struct {
 	clock  *clock.Fake
 	limits *ratelimit.Memory
 	queue  *queue.Inline
+	store  *storage.Memory
 	fake   *shopeefake.Server
 	system *db.DB
 }
@@ -54,7 +57,7 @@ var testPartnerKey = []byte("fake-partner-key-for-tests-only-0123456789")
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	d := testdb.New(t)
-	e := &env{t: t, db: d, mail: &mailer.Memory{}, clock: clock.NewFake(time.Now()), limits: &ratelimit.Memory{}, queue: &queue.Inline{}}
+	e := &env{t: t, db: d, mail: &mailer.Memory{}, clock: clock.NewFake(time.Now()), limits: &ratelimit.Memory{}, queue: &queue.Inline{}, store: &storage.Memory{}}
 	if os.Getenv("TEST_DATABASE_SYSTEM_URL") != "" {
 		e.system = testdb.System(t, d)
 	}
@@ -80,12 +83,14 @@ func newEnv(t *testing.T) *env {
 		Shopee: &shopee.Client{HTTP: &http.Client{Timeout: 5 * time.Second}, Clock: e.clock,
 			Sleep: func(context.Context, time.Duration) error { return nil }},
 		Queue: e.queue,
+		Store: e.store, Fetcher: media.NewTestFetcher(),
 	})
 	e.queue.Handlers = map[string]queue.Handler{
 		queue.TypeShopSync:       e.app.Shops.HandleSync,
 		queue.TypeTokenRefresh:   e.app.Shops.HandleRefresh,
 		queue.TypeWebhookProcess: e.app.Shops.HandleWebhook,
 		queue.TypeStepExecute:    e.app.Engine.HandleExecute,
+		queue.TypeImport:         e.app.Products.HandleImport,
 	}
 	e.srv = httptest.NewServer(e.app.Handler())
 	t.Cleanup(e.srv.Close)

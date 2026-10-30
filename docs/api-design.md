@@ -174,23 +174,28 @@ Merge rule for overrides: objects merge key by key, arrays and scalars replace.
 
 ### 3.5 Products and imports
 
+As built in Phase 5 (`api/openapi.yaml` is the contract).
+
 | Method | Path | Permission | Request | Response |
 |---|---|---|---|---|
-| GET | `/orgs/{org_id}/products` | `products.read` | `?q=&category_id=&shop_id=&publish_state=` | list |
-| POST | `/orgs/{org_id}/products` | `products.write` | product JSON | `201 {product}` |
-| GET | `/orgs/{org_id}/products/{id}` | `products.read` | — | `{product, variations[], images[], mappings[]}` |
-| PATCH | `/orgs/{org_id}/products/{id}` | `products.write` | partial + `If-Match` | `{product}` |
+| GET | `/orgs/{org_id}/products` | `products.read` | `?q=&batch_id=&limit=&cursor=` | list with images and per-shop mappings |
+| POST | `/orgs/{org_id}/products` | `products.write` | product JSON (tiers ≤ 2, variations ≤ 50) | `201 {product}` + `ETag` |
+| GET | `/orgs/{org_id}/products/{id}` | `products.read` | — | `{product}` with variations, images (presigned URLs), mappings |
+| PUT | `/orgs/{org_id}/products/{id}` | `products.write` | full product + `If-Match` | `{product}`; `412` on a stale ETag |
 | DELETE | `/orgs/{org_id}/products/{id}` | `products.write` | — | `204` (soft; does **not** delete on Shopee) |
-| POST | `/orgs/{org_id}/products/{id}/images` | `products.write` | multipart `file`, `role`, `position` | `201 {image}`; `413`, `422` bad type |
+| POST | `/orgs/{org_id}/products/{id}/images` | `products.write` | multipart `file` (JPEG/PNG/WebP, ≤ 10 MB, ≤ 40 MP) | `201 {image}`; `413`, `422` |
 | DELETE | `/orgs/{org_id}/products/{id}/images/{image_id}` | `products.write` | — | `204` |
-| POST | `/orgs/{org_id}/imports` | `imports.write` | multipart `file` (CSV/XLSX), optional `images.zip`, `{template_version_id?}` | `202 {batch}` |
-| GET | `/orgs/{org_id}/imports` | `products.read` | — | list of batches |
-| GET | `/orgs/{org_id}/imports/{batch_id}` | `products.read` | — | `{batch, counts}` |
-| GET | `/orgs/{org_id}/imports/{batch_id}/rows` | `products.read` | `?status=INVALID` | rows with `errors[]` |
-| PATCH | `/orgs/{org_id}/imports/{batch_id}/rows/{row_id}` | `imports.write` | corrected fields | `{row}` revalidated |
-| POST | `/orgs/{org_id}/imports/{batch_id}/retry` | `imports.write` | `{row_ids?}` | `202` |
-| GET | `/orgs/{org_id}/imports/{batch_id}/report` | `products.read` | `?format=csv` | presigned URL `{url, expires_at}` |
-| GET | `/orgs/{org_id}/imports/template.csv` | `products.read` | — | sample file |
+| POST | `/orgs/{org_id}/products/publish` | `workflows.run` | `{product_ids[] \| import_batch_id, shop_ids[] (≤ 50), item_status?}` + optional `Idempotency-Key` | `202 {batch_id, workflow_run_ids[], replayed}` |
+| POST | `/orgs/{org_id}/imports` | `imports.write` | multipart `file` (CSV/XLSX ≤ 20 MB), `template_id?`, `template_version_id?` | `202 {batch}` |
+| GET | `/orgs/{org_id}/imports` | `products.read` | — | recent batches |
+| GET | `/orgs/{org_id}/imports/sample.csv` | `products.read` | — | sample file |
+| GET | `/orgs/{org_id}/imports/{batch_id}` | `products.read` | — | `{batch}` with counts |
+| GET | `/orgs/{org_id}/imports/{batch_id}/rows` | `products.read` | `?status=&limit=&cursor=` | rows with `errors[]` |
+| PATCH | `/orgs/{org_id}/imports/{batch_id}/rows/{row_id}` | `imports.write` | `{values}` (empty value removes a cell) | `{row}` revalidated |
+| POST | `/orgs/{org_id}/imports/{batch_id}/retry` | `imports.write` | — | `202 {batch}`; imports fixed and failed rows, or reads the file again after a `FAILED` batch |
+| GET | `/orgs/{org_id}/imports/{batch_id}/report` | `products.read` | — | `{url, expires_at}` (presigned CSV) |
+
+Run views include `item_key` on fan-out item steps (the product ID for PRODUCT_PUBLISH).
 
 ### 3.6 Workflows and approvals
 

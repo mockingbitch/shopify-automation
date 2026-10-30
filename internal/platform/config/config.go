@@ -38,6 +38,13 @@ type Config struct {
 	EncryptionKeys      string
 	EncryptionActiveKey string
 
+	S3Endpoint  string
+	S3AccessKey string
+	S3SecretKey string
+	S3Bucket    string
+	S3Region    string
+	S3UseSSL    bool
+
 	ShopeeHTTPTimeout time.Duration
 	ShopeeRatePerApp  int
 	ShopeeRatePerShop int
@@ -74,6 +81,12 @@ func Load(getenv Getenv) (Config, error) {
 		EncryptionKeys:      l.required("ENCRYPTION_KEYS"),
 		EncryptionActiveKey: l.str("ENCRYPTION_ACTIVE_KEY", ""),
 		ShopeeHTTPTimeout:   l.duration("SHOPEE_HTTP_TIMEOUT", 15*time.Second),
+		S3Endpoint:          l.required("S3_ENDPOINT"),
+		S3AccessKey:         l.required("S3_ACCESS_KEY"),
+		S3SecretKey:         l.required("S3_SECRET_KEY"),
+		S3Bucket:            l.str("S3_BUCKET", "shopee-automation"),
+		S3Region:            l.str("S3_REGION", "us-east-1"),
+		S3UseSSL:            l.boolean("S3_USE_SSL", true),
 		ShopeeRatePerApp:    l.integer("SHOPEE_RATE_PER_APP", 50),
 		ShopeeRatePerShop:   l.integer("SHOPEE_RATE_PER_SHOP", 5),
 	}
@@ -112,6 +125,9 @@ func Load(getenv Getenv) (Config, error) {
 	if c.IsProduction() {
 		if !c.CookieSecure {
 			l.fail("COOKIE_SECURE", "must be true in production")
+		}
+		if !c.S3UseSSL {
+			l.fail("S3_USE_SSL", "must be true in production")
 		}
 		if c.PublicBaseURL != nil && c.PublicBaseURL.Scheme != "https" {
 			l.fail("PUBLIC_BASE_URL", "must use https in production")

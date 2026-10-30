@@ -37,6 +37,18 @@ const template = computed(() => {
   const i = (run.value?.input ?? {}) as { template_name?: string; version_no?: number; template_id?: string }
   return i
 })
+const isPublish = computed(() => run.value?.definition === 'PRODUCT_PUBLISH')
+// product_id -> SKU, from the prepare step (labels fan-out item steps).
+const skus = computed<Record<string, string>>(() => {
+  const prep = view.value?.steps.find((s) => s.key === 'prepare_products')?.output as { plans?: { product_id: string; sku: string }[] } | null
+  return Object.fromEntries((prep?.plans ?? []).map((p) => [p.product_id, p.sku]))
+})
+const stepTitle = (s: WorkflowStep) => {
+  const base = stepLabels[s.key] ?? s.key
+  return s.item_key ? `${base}: ${skus.value[s.item_key] ?? s.item_key}` : base
+}
+const itemResult = (s: WorkflowStep) => (s.item_key && s.status === 'SUCCEEDED' ? (s.output as { shopee_item_id?: string; models?: number; adopted?: boolean } | null) : null)
+const target = (c: Change) => (c.target ?? {}) as { sku?: string; name?: string; price?: string; category_id?: number }
 const report = computed(() => (run.value?.status && isTerminal(run.value.status) ? (run.value.output as Record<string, unknown>) : null))
 
 async function load() {
@@ -147,7 +159,17 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
     <FormError :message="error" />
 
     <template v-if="view && run">
-      <PageHeader :title="`Shop setup: ${shopName}`"
+      <PageHeader v-if="isPublish" :title="`Publish products: ${shopName}`"
+                  :description="`${((run.input as { product_ids?: string[] }).product_ids ?? []).length} products · started ${fmt.format(new Date(run.created_at))}`">
+        <template #actions>
+          <Button v-if="(run.status === 'FAILED' || run.status === 'PARTIALLY_COMPLETED') && can('workflows.retry')" :disabled="busy" @click="retry">Retry failed products</Button>
+          <ConfirmDialog v-if="!isTerminal(run.status) && !run.cancel_requested && can('workflows.cancel')" title="Cancel this run?"
+                         description="Products not created yet are skipped. Items already created on Shopee stay." confirm-label="Cancel run" @confirm="cancel">
+            <template #trigger><Button variant="outline" :disabled="busy">Cancel run</Button></template>
+          </ConfirmDialog>
+        </template>
+      </PageHeader>
+      <PageHeader v-else :title="`Shop setup: ${shopName}`"
                   :description="`${template.template_name ?? run.definition} v${template.version_no ?? ''} · started ${fmt.format(new Date(run.created_at))}`">
         <template #actions>
           <Button v-if="hasResumable && can('workflows.run')" :disabled="busy" @click="resume">Resume</Button>
@@ -167,8 +189,59 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
         <Alert v-if="notice"><AlertDescription>{{ notice }}</AlertDescription></Alert>
       </div>
 
+      <!-- Product approval -->
+      <Card v-if="approval && isPublish">
+        <CardHeader>
+          <CardTitle as="h2" class="text-base">Approve products</CardTitle>
+          <CardDescription>
+            Ticked products are created on Shopee. Products that failed the checks are listed with the reason; fix them and publish again.
+          </CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <div class="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead><span class="sr-only">Publish</span></TableHead>
+                  <TableHead>Product</TableHead><TableHead>Price</TableHead><TableHead>Category</TableHead><TableHead>Notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="c in changes" :key="c.path">
+                  <TableCell><input v-model="selected" type="checkbox" class="size-4" :value="c.path" :disabled="!canDecide" :aria-label="`Publish ${target(c).sku}`"></TableCell>
+                  <TableCell><div class="font-medium">{{ target(c).name }}</div><div class="text-xs text-muted-foreground">{{ target(c).sku }}</div></TableCell>
+                  <TableCell>{{ target(c).price }}</TableCell>
+                  <TableCell>{{ target(c).category_id }}</TableCell>
+                  <TableCell class="max-w-72 whitespace-normal text-xs text-muted-foreground">{{ c.note }}</TableCell>
+                </TableRow>
+                <TableRow v-for="c in blocked" :key="c.path" class="bg-destructive/5">
+                  <TableCell />
+                  <TableCell><div class="font-medium">{{ target(c).name || 'Deleted product' }}</div><div class="text-xs text-muted-foreground">{{ target(c).sku }}</div></TableCell>
+                  <TableCell>{{ target(c).price }}</TableCell>
+                  <TableCell>{{ target(c).category_id || '—' }}</TableCell>
+                  <TableCell class="max-w-72 whitespace-normal text-xs text-destructive">{{ c.note }}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+          <template v-if="canDecide">
+            <div>
+              <Label for="approval-comment-p">Comment (optional)</Label>
+              <Input id="approval-comment-p" v-model="comment" maxlength="1000" />
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <Button :disabled="busy || !selected.length" @click="decide('APPROVE')">Publish {{ selected.length }} product{{ selected.length === 1 ? '' : 's' }}</Button>
+              <ConfirmDialog title="Reject?" description="The run is cancelled and nothing is created." confirm-label="Reject" @confirm="decide('REJECT')">
+                <template #trigger><Button variant="outline" :disabled="busy">Reject</Button></template>
+              </ConfirmDialog>
+            </div>
+          </template>
+          <p v-else class="text-sm text-muted-foreground">Someone with approval rights must decide.</p>
+        </CardContent>
+      </Card>
+
       <!-- Approval -->
-      <Card v-if="approval">
+      <Card v-else-if="approval">
         <CardHeader>
           <CardTitle as="h2" class="text-base">Approve changes</CardTitle>
           <CardDescription>
@@ -238,13 +311,16 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
           <li v-for="s in view.steps" :key="s.id" class="rounded-lg border bg-background p-3">
             <div class="flex flex-wrap items-center gap-2">
               <span aria-hidden="true" class="w-4 text-center">{{ stepIcon[s.status] }}</span>
-              <span class="font-medium">{{ stepLabels[s.key] ?? s.key }}</span>
+              <span class="font-medium">{{ stepTitle(s) }}</span>
               <Badge variant="outline">{{ s.status.replace('_', ' ').toLowerCase() }}</Badge>
               <span v-if="s.attempt_count > 1 && (errMsg(s) || s.next_attempt_at)" class="text-xs text-muted-foreground">attempt {{ s.attempt_count }} of {{ s.max_attempts }}</span>
               <span v-if="s.next_attempt_at" class="text-xs text-muted-foreground">next try {{ fmt.format(new Date(s.next_attempt_at)) }}</span>
             </div>
             <p v-if="s.skip_reason" class="ml-6 mt-1 text-sm text-muted-foreground">{{ skipReasons[s.skip_reason] ?? s.skip_reason }}</p>
             <p v-if="errMsg(s)" class="ml-6 mt-1 text-sm text-destructive">{{ errMsg(s) }}</p>
+            <p v-if="itemResult(s)" class="ml-6 mt-1 text-sm text-muted-foreground">
+              Shopee item {{ itemResult(s)!.shopee_item_id }}<template v-if="itemResult(s)!.models">, {{ itemResult(s)!.models }} variations</template><template v-if="itemResult(s)!.adopted"> (found by SKU after an unclear response; not created twice)</template>
+            </p>
 
             <div v-if="waiting(s)" class="ml-6 mt-2 space-y-3">
               <p class="text-sm">{{ waiting(s)!.message }}</p>
@@ -271,7 +347,19 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
       </section>
 
       <!-- Report -->
-      <Card v-if="report && Object.keys(report).length">
+      <Card v-if="report && isPublish && Object.keys(report).length">
+        <CardHeader><CardTitle as="h2" class="text-base">Report</CardTitle></CardHeader>
+        <CardContent>
+          <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+            <dt class="text-muted-foreground">Products checked</dt><dd>{{ report.products }}</dd>
+            <dt class="text-muted-foreground">Approved</dt><dd>{{ report.approved }}</dd>
+            <dt class="text-muted-foreground">Published</dt><dd>{{ report.published }}</dd>
+            <dt class="text-muted-foreground">Failed</dt><dd>{{ report.failed }}</dd>
+            <dt class="text-muted-foreground">Not ready</dt><dd>{{ (report.blocked as unknown[] | undefined)?.length ?? 0 }}</dd>
+          </dl>
+        </CardContent>
+      </Card>
+      <Card v-else-if="report && Object.keys(report).length">
         <CardHeader><CardTitle as="h2" class="text-base">Report</CardTitle></CardHeader>
         <CardContent>
           <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">

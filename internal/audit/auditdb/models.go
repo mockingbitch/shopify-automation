@@ -132,6 +132,116 @@ type Permission struct {
 	Description string
 }
 
+type Product struct {
+	ID               uuid.UUID
+	OrgID            uuid.UUID
+	Sku              string
+	Name             string
+	Description      string
+	ShopeeCategoryID *int64
+	CategoryLabel    *string
+	BrandName        *string
+	Condition        *string
+	Attributes       []byte
+	Price            pgtype.Numeric
+	Currency         string
+	Stock            int32
+	WeightKg         pgtype.Numeric
+	PackageCm        []byte
+	DaysToShip       *int32
+	Tiers            []byte
+	Source           string
+	ImportBatchID    *uuid.UUID
+	CreatedBy        *uuid.UUID
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	DeletedAt        *time.Time
+}
+
+type ProductImage struct {
+	ID          uuid.UUID
+	OrgID       uuid.UUID
+	ProductID   uuid.UUID
+	Position    int32
+	StorageKey  string
+	ContentType string
+	Sha256      []byte
+	Width       int32
+	Height      int32
+	SourceUrl   *string
+	CreatedAt   time.Time
+}
+
+type ProductImageUpload struct {
+	ID               uuid.UUID
+	OrgID            uuid.UUID
+	ProductImageID   uuid.UUID
+	ShopConnectionID uuid.UUID
+	ShopeeImageID    string
+	ShopeeImageUrl   *string
+	UploadedAt       time.Time
+}
+
+type ProductImportBatch struct {
+	ID                uuid.UUID
+	OrgID             uuid.UUID
+	Source            string
+	Filename          string
+	FileStorageKey    string
+	FileSha256        []byte
+	Status            string
+	TemplateID        *uuid.UUID
+	TemplateVersionID *uuid.UUID
+	TotalRows         int32
+	ValidRows         int32
+	InvalidRows       int32
+	ImportedRows      int32
+	FailedRows        int32
+	ReportStorageKey  *string
+	Error             *string
+	CreatedBy         *uuid.UUID
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+type ProductImportRow struct {
+	ID        uuid.UUID
+	OrgID     uuid.UUID
+	BatchID   uuid.UUID
+	RowNumber int32
+	Raw       []byte
+	Status    string
+	Errors    []byte
+	ProductID *uuid.UUID
+	UpdatedAt time.Time
+}
+
+type ProductMapping struct {
+	ID               uuid.UUID
+	OrgID            uuid.UUID
+	ShopConnectionID uuid.UUID
+	ProductID        uuid.UUID
+	PublishState     string
+	IdempotencyKey   string
+	ItemSku          string
+	ShopeeItemID     *int64
+	Models           []byte
+	LastError        []byte
+	LastRunID        *uuid.UUID
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type ProductVariation struct {
+	ID        uuid.UUID
+	OrgID     uuid.UUID
+	ProductID uuid.UUID
+	TierIndex []int32
+	Sku       *string
+	Price     pgtype.Numeric
+	Stock     int32
+}
+
 type Role struct {
 	Key  string
 	Rank int32

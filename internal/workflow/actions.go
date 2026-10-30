@@ -190,9 +190,23 @@ func (e *Engine) Retry(ctx context.Context, p authctx.Principal, t authctx.Tenan
 		if err != nil {
 			return err
 		}
+		firstFailed := int32(-1)
 		for _, s := range steps {
 			if s.Status == StepFailed {
+				if firstFailed < 0 || s.Position < firstFailed {
+					firstFailed = s.Position
+				}
 				if err := q.ResetStepForRetry(ctx, workflowdb.ResetStepForRetryParams{Now: e.now(), OrgID: run.OrgID, ID: s.ID}); err != nil {
+					return err
+				}
+			}
+		}
+		// Report steps after a retried step run again, so the run output
+		// reflects the final outcome.
+		def := e.defs[run.DefinitionKey]
+		for _, s := range steps {
+			if spec, ok := def.step(s.StepKey); ok && spec.Report && s.ItemKey == "" && s.Position > firstFailed && firstFailed >= 0 {
+				if err := q.ResetSucceededStep(ctx, workflowdb.ResetSucceededStepParams{Now: e.now(), OrgID: run.OrgID, ID: s.ID}); err != nil {
 					return err
 				}
 			}

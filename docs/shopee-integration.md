@@ -246,6 +246,7 @@ Implemented and tested against an in-process fake that follows the documented co
 | Error mapping | Table of documented codes (from the error lists of `auth/token/get`, `auth/access_token/get`, `shop/get_shop_info` and the common list) → transient, rate limited, auth, authorization lost, app config, permission, validation, not found | `internal/shopee/errors.go` |
 | Endpoints | `auth/token/get` (shop or main account), `auth/access_token/get`, `shop/get_shop_info`, `shop/get_profile`, auth link, push signature | `internal/shopee/api.go` |
 | Endpoints (Phase 4) | `logistics/get_channel_list`, `logistics/get_address_list`, `shop/update_profile`, `logistics/update_channel`, `logistics/update_address`, `logistics/set_address_config` (set-value calls, retried on transient errors) | `internal/shopee/logistics.go` |
+| Endpoints (Phase 5) | `product/get_category`, `product/get_attribute_tree`, `product/get_brand_list`, `product/get_item_limit`, `product/get_variation_tree`, `media_space/upload_image` (multipart), `product/add_item` (never retried after sending), `product/init_tier_variation`, `product/search_item` (by `item_sku`), `product/get_item_base_info`, `product/get_model_list` | `internal/shopee/products.go` |
 | Flows | Connect, reconnect (same shop only), main-account selection, just-in-time and scheduled refresh, sync, disconnect, pushes 1/2/12 | `internal/shops` |
 
 Findings while reading the reference (handled in code, to confirm in sandbox):
@@ -256,6 +257,11 @@ Findings while reading the reference (handled in code, to confirm in sandbox):
 - `logistics/set_address_config` documents the address type `PICKUP_ADDRESS`, while `logistics/get_address_list` returns `PICK_UP_ADDRESS`. Templates use the set-side value; the Phase 4 reader must accept both.
 - `get_channel_list` documents `cod_enabled` as "this channel supports COD", not "COD is on", so the current COD state of a channel is treated as unknown. `get_address_list` has no recipient name or phone, so those cannot be verified after `update_address`.
 - `shop.avatar.upload` runs as a manual task until S-4 (logo `scene`, whether `update_profile.shop_logo` accepts a media_space URL) is verified.
+- Products: `tier_variation` in `add_item`/`init_tier_variation` is deprecated since 2025-09-12; `standardise_tier_variation` with IDs from `get_variation_tree` is used instead. Products whose variations are not in the category's standard list are blocked before anything is created.
+- `get_variation_tree` is documented at `/api/v2/product/get_variation_tree` and returns its payload under `data`, not `response`.
+- List parameters are encoded inconsistently across product pages (`category_id_list` for `get_attribute_tree`, comma-separated `item_id_list` for `get_item_base_info`). The client follows each page; see S-10.
+- `add_item` has no client idempotency key. The protocol in workflow-design.md §5 relies on a unique `item_sku` per product and shop and on `search_item` by SKU.
+- The product guide asks to wait after `add_item` before `init_tier_variation`; the workflow waits 5 seconds (configurable).
 - Push delivery: timeout 3 s, retries after 300, 1800 and 10800 seconds (push reference metadata). The receiver stores and answers before any processing.
 
 ## 11. Open items
@@ -270,4 +276,6 @@ Findings while reading the reference (handled in code, to confirm in sandbox):
 | S-6 | Confirm whether an `image_id` is reusable across shops | Image upload cost |
 | S-7 | Recipe verification per market (E-1…E-4 in browser-extension.md) | Phase 6 |
 | S-8 | Check whether the Console's push URL verification request carries a valid `Authorization` signature. The receiver answers `401` to unsigned requests, which could make the Console's "Verify" button fail | Push setup in sandbox |
+| S-10 | Confirm list parameter encodings of the product endpoints (comma-separated vs repeated), the `get_variation_tree` response envelope, and how quickly `search_item` sees a new item (reconciliation depends on it) | Sandbox |
+| S-11 | Confirm the wait needed between `add_item` and `init_tier_variation`, and `add_item` quotas per shop | Sandbox |
 | S-9 | Confirm the `expire_in` unit of `token/get` and the `shopid` key in code 2 pushes | Sandbox |

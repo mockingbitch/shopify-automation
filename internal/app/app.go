@@ -25,8 +25,11 @@ import (
 	"shopee-automation/internal/platform/envelope"
 	"shopee-automation/internal/platform/httpx"
 	"shopee-automation/internal/platform/mailer"
+	"shopee-automation/internal/platform/media"
 	"shopee-automation/internal/platform/queue"
 	"shopee-automation/internal/platform/ratelimit"
+	"shopee-automation/internal/platform/storage"
+	"shopee-automation/internal/products"
 	"shopee-automation/internal/rbac"
 	"shopee-automation/internal/shopee"
 	"shopee-automation/internal/shops"
@@ -34,6 +37,7 @@ import (
 	"shopee-automation/internal/tenancy"
 	"shopee-automation/internal/workflow"
 	"shopee-automation/internal/workflow/workflowdb"
+	"shopee-automation/internal/workflows/productpublish"
 	"shopee-automation/internal/workflows/shopsetup"
 )
 
@@ -87,6 +91,8 @@ type Deps struct {
 	Keys     *envelope.Keyring
 	Shopee   *shopee.Client
 	Queue    queue.Enqueuer
+	Store    storage.Store
+	Fetcher  *media.Fetcher
 }
 
 // App is the assembled API.
@@ -99,7 +105,13 @@ type App struct {
 	shops    shops.Handler
 	tpl      templates.Handler
 	wf       workflow.Handler
+	prod     products.Handler
+	// Products is exposed for the worker and tests.
+	Products *products.Service
 	apply    shopsetup.Handler
+	publish  productpublish.Handler
+	// Publish is exposed so tests can shorten the variation delay.
+	Publish *productpublish.Workflow
 	// Engine is exposed for the worker and tests.
 	Engine *workflow.Engine
 	// Shops is exposed for the worker and tests.
@@ -138,9 +150,15 @@ func New(d Deps) *App {
 			return n, err
 		}}
 	a.tpl = templates.Handler{Svc: tplSvc}
+	a.Products = &products.Service{DB: d.DB, Clock: d.Clock, Audit: rec, Store: d.Store, Fetcher: d.Fetcher, Queue: d.Queue,
+		Log: d.Log, Templates: tplSvc}
+	a.prod = products.Handler{Svc: a.Products}
 	setup := &shopsetup.Setup{Shops: a.Shops, Templates: tplSvc, Engine: a.Engine}
 	a.Engine.Register(setup.Definition())
 	a.apply = shopsetup.Handler{Setup: setup, Audit: rec}
+	a.Publish = &productpublish.Workflow{Shops: a.Shops, Products: a.Products, Engine: a.Engine, VariationDelay: 5 * time.Second}
+	a.Engine.Register(a.Publish.Definition())
+	a.publish = productpublish.Handler{Workflow: a.Publish, Audit: rec}
 	a.wf = workflow.Handler{Engine: a.Engine, Policy: approvalPolicy(tSvc)}
 	a.identity = identity.Handler{
 		Svc: idSvc, Limiter: d.Limiter, Log: d.Log, CookieSecure: d.Config.CookieSecure,
@@ -156,7 +174,7 @@ var templateRegistry = templates.LoadRegistry()
 
 // Routes returns the API route table.
 func (a *App) Routes() []Route {
-	id, tn, sh, tp, wf := a.identity, a.tenancy, a.shops, a.tpl, a.wf
+	id, tn, sh, tp, wf, pr := a.identity, a.tenancy, a.shops, a.tpl, a.wf, a.prod
 	return []Route{
 		{"POST", "/auth/register", Public, "", id.Register},
 		{"POST", "/auth/login", Public, "", id.Login},
@@ -225,6 +243,23 @@ func (a *App) Routes() []Route {
 		{"GET", "/orgs/{orgID}/approvals", Tenant, rbac.WorkflowsRead, wf.ListApprovals},
 		{"GET", "/orgs/{orgID}/approvals/{approvalID}", Tenant, rbac.WorkflowsRead, wf.GetApproval},
 		{"POST", "/orgs/{orgID}/approvals/{approvalID}/decision", Tenant, rbac.ApprovalsDecide, wf.Decide},
+
+		{"GET", "/orgs/{orgID}/products", Tenant, rbac.ProductsRead, pr.List},
+		{"POST", "/orgs/{orgID}/products", Tenant, rbac.ProductsWrite, pr.Create},
+		{"POST", "/orgs/{orgID}/products/publish", Tenant, rbac.WorkflowsRun, a.publish.Publish},
+		{"GET", "/orgs/{orgID}/products/{productID}", Tenant, rbac.ProductsRead, pr.Get},
+		{"PUT", "/orgs/{orgID}/products/{productID}", Tenant, rbac.ProductsWrite, pr.Replace},
+		{"DELETE", "/orgs/{orgID}/products/{productID}", Tenant, rbac.ProductsWrite, pr.Delete},
+		{"POST", "/orgs/{orgID}/products/{productID}/images", Tenant, rbac.ProductsWrite, pr.AddImage},
+		{"DELETE", "/orgs/{orgID}/products/{productID}/images/{imageID}", Tenant, rbac.ProductsWrite, pr.DeleteImage},
+		{"POST", "/orgs/{orgID}/imports", Tenant, rbac.ImportsWrite, pr.Upload},
+		{"GET", "/orgs/{orgID}/imports", Tenant, rbac.ProductsRead, pr.ListBatches},
+		{"GET", "/orgs/{orgID}/imports/sample.csv", Tenant, rbac.ProductsRead, pr.Sample},
+		{"GET", "/orgs/{orgID}/imports/{batchID}", Tenant, rbac.ProductsRead, pr.GetBatch},
+		{"GET", "/orgs/{orgID}/imports/{batchID}/rows", Tenant, rbac.ProductsRead, pr.Rows},
+		{"PATCH", "/orgs/{orgID}/imports/{batchID}/rows/{rowID}", Tenant, rbac.ImportsWrite, pr.FixRow},
+		{"POST", "/orgs/{orgID}/imports/{batchID}/retry", Tenant, rbac.ImportsWrite, pr.Retry},
+		{"GET", "/orgs/{orgID}/imports/{batchID}/report", Tenant, rbac.ProductsRead, pr.Report},
 
 		{"GET", "/admin/shopee-apps", Admin, "", sh.ListApps},
 		{"POST", "/admin/shopee-apps", Admin, "", sh.CreateApp},

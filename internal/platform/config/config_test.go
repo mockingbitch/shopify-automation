@@ -17,6 +17,9 @@ func base() map[string]string {
 		"DATABASE_URL":    "postgres://x",
 		"REDIS_URL":       "redis://x",
 		"ENCRYPTION_KEYS": "k1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+		"S3_ENDPOINT":     "localhost:8333",
+		"S3_ACCESS_KEY":   "a",
+		"S3_SECRET_KEY":   "b",
 	}
 }
 

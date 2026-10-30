@@ -57,7 +57,21 @@ func TestTenantIsolationHTTP(t *testing.T) {
 	aApproval := aRunView.Data.PendingApproval.ID
 	aStep := aRunView.Data.Steps[0].ID
 
-	ids := map[string]string{"{memberID}": aMember, "{invitationID}": inv.Data.ID, "{shopID}": aShop, "{stateID}": aSelection,
+	// Products, an image and an import of org A.
+	aProduct := createProduct(alice, orgA, baseProduct("ORG-A-SKU"), true)
+	var ap productResp
+	alice.must(200, "GET", "/orgs/"+orgA+"/products/"+aProduct, nil).json(t, &ap)
+	aImage := ap.Data.Images[0].ID
+	var ab batchResp
+	alice.upload("/orgs/"+orgA+"/imports", "a.csv", []byte("sku,name,price,stock\nA-1,Org A secret name,abc,1\n"), nil).json(t, &ab)
+	var ar rowsResp
+	alice.must(200, "GET", "/orgs/"+orgA+"/imports/"+ab.Data.ID+"/rows", nil).json(t, &ar)
+	if len(ar.Data) != 1 {
+		t.Fatalf("org A import rows: %+v", ar)
+	}
+
+	ids := map[string]string{"{productID}": aProduct, "{imageID}": aImage, "{batchID}": ab.Data.ID, "{rowID}": ar.Data[0].ID,
+		"{memberID}": aMember, "{invitationID}": inv.Data.ID, "{shopID}": aShop, "{stateID}": aSelection,
 		"{templateID}": aTpl, "{versionID}": aVersion, "{sectionKey}": "description",
 		"{runID}": aRun, "{stepID}": aStep, "{approvalID}": aApproval}
 	bodies := map[string]any{
@@ -77,6 +91,9 @@ func TestTenantIsolationHTTP(t *testing.T) {
 		"PUT /orgs/{orgID}/templates/{templateID}/shops/{shopID}/overrides":                   map[string]any{"overrides": map[string]any{}},
 		"POST /orgs/{orgID}/templates/{templateID}/versions/{versionID}/apply":                map[string]any{"shop_ids": []string{aShop}},
 		"POST /orgs/{orgID}/approvals/{approvalID}/decision":                                  map[string]any{"decision": "REJECT"},
+		"POST /orgs/{orgID}/products/publish":                                                 map[string]any{"shop_ids": []string{aShop}, "product_ids": []string{aProduct}},
+		"PUT /orgs/{orgID}/products/{productID}":                                              baseProduct("PWNED"),
+		"PATCH /orgs/{orgID}/imports/{batchID}/rows/{rowID}":                                  map[string]any{"values": map[string]string{"price": "1"}},
 	}
 
 	checked := 0
@@ -101,7 +118,12 @@ func TestTenantIsolationHTTP(t *testing.T) {
 			if body == nil && rt.Method != "GET" {
 				body = map[string]any{}
 			}
-			r := bob.do(rt.Method, path, body, "If-Match", `W/"0"`)
+			var r resp
+			if strings.HasSuffix(rt.Path, "/images") || rt.Path == "/orgs/{orgID}/imports" {
+				r = bob.upload(path, "a.png", testPNG(10, 10), nil)
+			} else {
+				r = bob.do(rt.Method, path, body, "If-Match", `W/"0"`)
+			}
 			if r.Status != 404 && (target.org != orgB || r.Status != 403) {
 				t.Errorf("%s (%s): status %d, want 404: %s", key, target.name, r.Status, r.Body)
 			}
@@ -110,6 +132,16 @@ func TestTenantIsolationHTTP(t *testing.T) {
 				t.Errorf("%s (%s): response leaks org A data: %s", key, target.name, r.Body)
 			}
 			checked++
+		}
+	}
+	// Publishing org A's products or shops from org B finds nothing.
+	for _, body := range []map[string]any{
+		{"shop_ids": []string{aShop}, "product_ids": []string{createProduct(bob, orgB, baseProduct("B-1"), false)}},
+		{"shop_ids": []string{uuid.NewString()}, "product_ids": []string{aProduct}},
+		{"shop_ids": []string{uuid.NewString()}, "import_batch_id": ab.Data.ID},
+	} {
+		if r := bob.do("POST", "/orgs/"+orgB+"/products/publish", body); r.Status != 422 || strings.Contains(string(r.Body), "Org A") {
+			t.Errorf("cross-org publish %v: %d %s", body, r.Status, r.Body)
 		}
 	}
 	if checked < 10 {
@@ -166,12 +198,62 @@ func TestTenantIsolationDatabase(t *testing.T) {
 		} `json:"data"`
 	}
 	alice.must(200, "GET", "/orgs/"+orgA.String()+"/shops", nil).json(t, &shopsA)
-	alice.must(202, "POST", "/orgs/"+orgA.String()+"/templates/"+tplA+"/versions/"+verA+"/apply", map[string]any{"shop_ids": []string{shopsA.Data[0].ID}})
+	alice.must(200, "PUT", "/orgs/"+orgA.String()+"/templates/"+tplA+"/shops/"+shopsA.Data[0].ID+"/overrides",
+		map[string]any{"overrides": map[string]any{"description": map[string]any{"text": "y"}}})
+	var run applyResp
+	alice.must(202, "POST", "/orgs/"+orgA.String()+"/templates/"+tplA+"/versions/"+verA+"/apply", map[string]any{"shop_ids": []string{shopsA.Data[0].ID}}).json(t, &run)
+
+	// Product rows of every kind in org A.
+	pv := baseProduct("A-V")
+	pv["tiers"] = []map[string]any{{"name": "Color", "options": []string{"Red"}}}
+	pv["variations"] = []map[string]any{{"tier_index": []int{0}, "price": "1000", "stock": 1}}
+	pid := uuid.MustParse(createProduct(alice, orgA.String(), pv, true))
+	alice.upload("/orgs/"+orgA.String()+"/imports", "a.csv", []byte("sku,name,price,stock\nA-1,x,abc,1\n"), nil)
+	shopA := uuid.MustParse(shopsA.Data[0].ID)
+	items, err := e.app.Products.LoadForPublish(ctx, orgA, []uuid.UUID{pid})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("load: %v", err)
+	}
+	if _, err := e.app.Products.EnsureMapping(ctx, orgA, shopA, pid, "A-V", uuid.MustParse(run.Data.RunIDs[0])); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.app.Products.RecordImageUpload(ctx, orgA, items[0].Images[0].ID, shopA, "img-1", ""); err != nil {
+		t.Fatal(err)
+	}
 
 	tenantTables := []string{"organizations", "organization_members", "organization_invitations", "audit_logs",
 		"shop_connections", "shop_credentials", "shop_authorizations", "shop_profiles", "oauth_states",
-		"shop_templates", "shop_template_versions", "shop_template_sections",
-		"workflow_runs", "workflow_steps", "workflow_step_attempts", "workflow_approvals", "workflow_events", "shop_config_snapshots"}
+		"shop_templates", "shop_template_versions", "shop_template_sections", "shop_template_mappings",
+		"workflow_runs", "workflow_steps", "workflow_step_attempts", "workflow_approvals", "workflow_events", "shop_config_snapshots",
+		"products", "product_variations", "product_images", "product_mappings", "product_image_uploads",
+		"product_import_batches", "product_import_rows"}
+
+	// Every table with an org_id column has forced RLS and is listed above.
+	listed := map[string]bool{}
+	for _, tbl := range tenantTables {
+		listed[tbl] = true
+	}
+	rows, err := e.db.Pool.Query(ctx, `SELECT c.relname, c.relrowsecurity AND c.relforcerowsecurity
+		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition
+		  AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'org_id' AND NOT a.attisdropped)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var name string
+		var forced bool
+		if err := rows.Scan(&name, &forced); err != nil {
+			t.Fatal(err)
+		}
+		if !forced {
+			t.Errorf("%s has org_id but no forced row-level security", name)
+		}
+		if !listed[name] {
+			t.Errorf("%s has org_id but is not in the isolation test", name)
+		}
+	}
+	rows.Close()
 	count := func(scope db.Scope, table, where string, args ...any) int {
 		t.Helper()
 		var n int
@@ -205,7 +287,7 @@ func TestTenantIsolationDatabase(t *testing.T) {
 	}
 
 	// Writes into another tenant are rejected by WITH CHECK.
-	err := e.db.Tx(ctx, db.Scope{OrgID: orgB}, func(tx pgx.Tx) error {
+	err = e.db.Tx(ctx, db.Scope{OrgID: orgB}, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `INSERT INTO organization_members (id, org_id, user_id, role_key)
 			SELECT $1, $2, user_id, 'admin' FROM organization_members LIMIT 1`, db.NewID(), orgA)
 		return err

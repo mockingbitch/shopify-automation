@@ -214,6 +214,45 @@ func (q *Queries) InsertAttempt(ctx context.Context, arg InsertAttemptParams) er
 	return err
 }
 
+const insertItemStep = `-- name: InsertItemStep :exec
+INSERT INTO workflow_steps (id, org_id, run_id, step_key, item_key, position, status, blocking, mutating,
+  capability_key, max_attempts, next_attempt_at)
+VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', $7, $8,
+  $9, $10, $11)
+ON CONFLICT (run_id, step_key, item_key) DO NOTHING
+`
+
+type InsertItemStepParams struct {
+	ID            uuid.UUID
+	OrgID         uuid.UUID
+	RunID         uuid.UUID
+	StepKey       string
+	ItemKey       string
+	Position      int32
+	Blocking      bool
+	Mutating      bool
+	CapabilityKey *string
+	MaxAttempts   int32
+	NextAttemptAt time.Time
+}
+
+func (q *Queries) InsertItemStep(ctx context.Context, arg InsertItemStepParams) error {
+	_, err := q.db.Exec(ctx, insertItemStep,
+		arg.ID,
+		arg.OrgID,
+		arg.RunID,
+		arg.StepKey,
+		arg.ItemKey,
+		arg.Position,
+		arg.Blocking,
+		arg.Mutating,
+		arg.CapabilityKey,
+		arg.MaxAttempts,
+		arg.NextAttemptAt,
+	)
+	return err
+}
+
 const insertStep = `-- name: InsertStep :exec
 INSERT INTO workflow_steps (id, org_id, run_id, step_key, item_key, position, status, blocking, mutating,
   capability_key, max_attempts, next_attempt_at)
@@ -443,6 +482,22 @@ type ResetStepForRetryParams struct {
 
 func (q *Queries) ResetStepForRetry(ctx context.Context, arg ResetStepForRetryParams) error {
 	_, err := q.db.Exec(ctx, resetStepForRetry, arg.Now, arg.OrgID, arg.ID)
+	return err
+}
+
+const resetSucceededStep = `-- name: ResetSucceededStep :exec
+UPDATE workflow_steps SET status = 'PENDING', attempt_count = 0, next_attempt_at = $1::timestamptz, finished_at = NULL
+WHERE org_id = $2 AND id = $3 AND status IN ('SUCCEEDED', 'SKIPPED')
+`
+
+type ResetSucceededStepParams struct {
+	Now   time.Time
+	OrgID uuid.UUID
+	ID    uuid.UUID
+}
+
+func (q *Queries) ResetSucceededStep(ctx context.Context, arg ResetSucceededStepParams) error {
+	_, err := q.db.Exec(ctx, resetSucceededStep, arg.Now, arg.OrgID, arg.ID)
 	return err
 }
 

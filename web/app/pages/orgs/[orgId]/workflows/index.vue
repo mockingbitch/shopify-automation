@@ -49,7 +49,8 @@ watch(batch, () => load())
 
 const shopName = (id: string) => shops.value[id]?.shop_name ?? (shops.value[id] ? `Shop ${shops.value[id]!.shopee_shop_id}` : 'Shop')
 const templateOf = (r: RunSummary) => {
-  const i = r.input as { template_name?: string; version_no?: number }
+  const i = r.input as { template_name?: string; version_no?: number; product_ids?: string[] }
+  if (r.definition === 'PRODUCT_PUBLISH') return `Publish ${i.product_ids?.length ?? 0} products`
   return i.template_name ? `${i.template_name} v${i.version_no}` : r.definition
 }
 const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
@@ -57,7 +58,7 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
 
 <template>
   <div class="mx-auto max-w-6xl space-y-6">
-    <PageHeader title="Automation Workflows" description="Shop setups started from templates. Open a run to approve changes, finish manual tasks or retry." />
+    <PageHeader title="Automation Workflows" description="Shop setups and product publishing. Open a run to approve changes, finish manual tasks or retry." />
     <FormError :message="error" />
     <Alert v-if="pendingApprovals">
       <AlertTitle>{{ pendingApprovals }} run(s) waiting for approval</AlertTitle>

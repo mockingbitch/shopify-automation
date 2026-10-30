@@ -61,3 +61,14 @@ VALUES (@id, @org_id, @step_id, @attempt_no, @outcome, sqlc.narg(error), sqlc.na
 
 -- name: ListAttempts :many
 SELECT * FROM workflow_step_attempts WHERE org_id = @org_id AND step_id = @step_id ORDER BY attempt_no, started_at;
+
+-- name: InsertItemStep :exec
+INSERT INTO workflow_steps (id, org_id, run_id, step_key, item_key, position, status, blocking, mutating,
+  capability_key, max_attempts, next_attempt_at)
+VALUES (@id, @org_id, @run_id, @step_key, @item_key, @position, 'PENDING', @blocking, @mutating,
+  sqlc.narg(capability_key), @max_attempts, @next_attempt_at)
+ON CONFLICT (run_id, step_key, item_key) DO NOTHING;
+
+-- name: ResetSucceededStep :exec
+UPDATE workflow_steps SET status = 'PENDING', attempt_count = 0, next_attempt_at = @now::timestamptz, finished_at = NULL
+WHERE org_id = @org_id AND id = @id AND status IN ('SUCCEEDED', 'SKIPPED');

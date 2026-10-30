@@ -17,6 +17,8 @@ async function latestLink(request: APIRequestContext, to: string, path: string):
   throw new Error(`no email with ${path} to ${to}`)
 }
 
+const onePixelPNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+
 test('sign up, create an organization and invite a member', async ({ page, request }) => {
   const stamp = Date.now()
   const email = `owner-${stamp}@example.com`
@@ -80,6 +82,34 @@ test('sign up, create an organization and invite a member', async ({ page, reque
   await page.getByRole('alertdialog').getByRole('button', { name: 'Publish' }).click()
   await expect(page.getByText('is published and can no longer be changed')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Save section' })).toHaveCount(0)
+
+  // Products: create one and add an image.
+  const nav = page.getByRole('navigation', { name: 'Main' })
+  await nav.getByRole('link', { name: 'Products', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'No products' })).toBeVisible()
+  await page.getByRole('link', { name: 'New product' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'New product' })).toBeVisible()
+  await page.getByLabel('SKU', { exact: true }).fill('E2E-TEE')
+  await page.getByLabel('Name', { exact: true }).fill('Áo thun E2E')
+  await page.getByLabel('Price', { exact: true }).fill('159000')
+  await page.getByLabel('Stock', { exact: true }).fill('5')
+  await page.getByRole('button', { name: 'Create product' }).click()
+  await expect(page.getByText('Product created.')).toBeVisible()
+  await page.locator('#pd-file').setInputFiles({ name: 'tee.png', mimeType: 'image/png', buffer: Buffer.from(onePixelPNG, 'base64') })
+  await expect(page.getByRole('img', { name: 'Image 1' })).toBeVisible()
+
+  // Imports: rows are checked; a row is fixed in place and checked again.
+  await nav.getByRole('link', { name: 'Product Imports' }).click()
+  await page.locator('#imp-file').setInputFiles({ name: 'e2e.csv', mimeType: 'text/csv',
+    buffer: Buffer.from('sku,name,description,price,currency,stock,weight_kg\nE2E-1,Mug,Gốm sứ,89000,VND,3,0.4\n') })
+  await page.getByRole('button', { name: 'Import' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'e2e.csv' })).toBeVisible()
+  await expect(page.getByText('Category is required.')).toBeVisible({ timeout: 20_000 })
+  await page.getByRole('button', { name: 'Fix line 2' }).click()
+  await page.getByLabel('category, line 2').fill('100017')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Category is required.')).toHaveCount(0)
+  await expect(page.getByText('At least one image URL is required.')).toBeVisible()
 
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page).toHaveURL(/\/login/)

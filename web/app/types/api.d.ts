@@ -2728,6 +2728,712 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/orgs/{orgID}/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        /** List products, newest first */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Name or SKU contains */
+                    q?: string;
+                    batch_id?: string;
+                    limit?: number;
+                    cursor?: string;
+                };
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Products */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["Product"][];
+                            next_cursor: string | null;
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /** Create a product */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProductInput"];
+                };
+            };
+            responses: {
+                201: components["responses"]["Product"];
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/products/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish products to shops
+         * @description Starts one PRODUCT_PUBLISH run per shop, sharing a batch ID. Choose
+         *     products by `product_ids` or by `import_batch_id` (exactly one). Each
+         *     run checks products against the shop's categories, attributes, brands
+         *     and logistics, asks for approval, then creates items with `add_item`.
+         *     Items are created as `UNLIST` unless `item_status` is `NORMAL`. With an
+         *     `Idempotency-Key` (UUID), repeating the same request returns the same
+         *     runs (`replayed: true`); the same key with a different request is `409`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        product_ids?: string[];
+                        /** Format: uuid */
+                        import_batch_id?: string;
+                        shop_ids: string[];
+                        /** @enum {string} */
+                        item_status?: "UNLIST" | "NORMAL";
+                    };
+                };
+            };
+            responses: {
+                /** @description Runs started */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                /** Format: uuid */
+                                batch_id: string;
+                                workflow_run_ids: string[];
+                                replayed: boolean;
+                            };
+                        };
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                424: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/products/{productID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                productID: string;
+            };
+            cookie?: never;
+        };
+        /** Product with variations, images and per-shop mappings */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    productID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["Product"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        /**
+         * Replace a product (images are kept)
+         * @description Requires `If-Match` with the product's ETag.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header: {
+                    "If-Match": string;
+                };
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    productID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProductInput"];
+                };
+            };
+            responses: {
+                200: components["responses"]["Product"];
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                412: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        post?: never;
+        /** Delete a product (soft; items on Shopee are not deleted) */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    productID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/products/{productID}/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                productID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a product image
+         * @description JPEG, PNG or WebP, at most 10 MB and 40 megapixels. Stored re-encoded as JPEG or PNG.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    productID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /** Format: binary */
+                        file: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Image */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["ProductImage"];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                413: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/products/{productID}/images/{imageID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                productID: string;
+                imageID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an image */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    productID: string;
+                    imageID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        /** Recent imports */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Imports */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["ImportBatch"][];
+                            next_cursor: string | null;
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Upload a CSV or XLSX file
+         * @description At most 50 MB and 100,000 rows. Parsing, validation and product
+         *     creation run in the background; valid rows become products, invalid
+         *     rows can be fixed and retried. Optional template defaults (category
+         *     mappings, SKU rules, product defaults, descriptions, attributes).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /** Format: binary */
+                        file: string;
+                        /** Format: uuid */
+                        template_id?: string;
+                        /** Format: uuid */
+                        template_version_id?: string;
+                    };
+                };
+            };
+            responses: {
+                202: components["responses"]["ImportBatch"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                413: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/imports/sample.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        /** Sample import file */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description CSV file */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/csv": string;
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/imports/{batchID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                batchID: components["parameters"]["BatchID"];
+            };
+            cookie?: never;
+        };
+        /** Import status and counts */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    batchID: components["parameters"]["BatchID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["ImportBatch200"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/imports/{batchID}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                batchID: components["parameters"]["BatchID"];
+            };
+            cookie?: never;
+        };
+        /** Rows with their errors */
+        get: {
+            parameters: {
+                query?: {
+                    status?: "PENDING" | "VALID" | "INVALID" | "IMPORTED" | "FAILED";
+                    cursor?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    batchID: components["parameters"]["BatchID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Rows */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["ImportRow"][];
+                            next_cursor: string | null;
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/imports/{batchID}/rows/{rowID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                batchID: components["parameters"]["BatchID"];
+                rowID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Correct cells of a row and re-validate
+         * @description An empty value removes the cell. Imported rows cannot be changed.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    batchID: components["parameters"]["BatchID"];
+                    rowID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        values: {
+                            [key: string]: string;
+                        };
+                    };
+                };
+            };
+            responses: {
+                /** @description Row */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["ImportRow"];
+                        };
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        trace?: never;
+    };
+    "/orgs/{orgID}/imports/{batchID}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                batchID: components["parameters"]["BatchID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import rows that became valid and retry failed ones */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    batchID: components["parameters"]["BatchID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                202: components["responses"]["ImportBatch"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgID}/imports/{batchID}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                batchID: components["parameters"]["BatchID"];
+            };
+            cookie?: never;
+        };
+        /** Short-lived download link for the CSV report */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orgID: components["parameters"]["OrgID"];
+                    batchID: components["parameters"]["BatchID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Link */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                url: string;
+                                /** Format: date-time */
+                                expires_at: string;
+                            };
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/shopee-apps": {
         parameters: {
             query?: never;
@@ -3148,7 +3854,8 @@ export interface components {
         Change: {
             /** @example general.shop_name */
             path: string;
-            section: components["schemas"]["SectionKey"];
+            /** @description A template section, or `products` for PRODUCT_PUBLISH approvals. */
+            section: components["schemas"]["SectionKey"] | "products";
             /** @description Last known value; null when unknown */
             current: unknown;
             current_known: boolean;
@@ -3209,6 +3916,8 @@ export interface components {
             /** Format: uuid */
             id: string;
             key: string;
+            /** @description Set on fan-out item steps (for PRODUCT_PUBLISH: the product ID) */
+            item_key: string | null;
             position: number;
             /** @enum {string} */
             status: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "SKIPPED" | "CANCELLED" | "WAITING_APPROVAL" | "WAITING_USER";
@@ -3284,8 +3993,186 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        Money: {
+            /** @example 199000.00 */
+            amount: string;
+            /** @enum {string} */
+            currency: "VND" | "SGD" | "MYR" | "THB" | "PHP" | "IDR" | "TWD";
+        };
+        ProductAttribute: {
+            attribute_id: number;
+            value_id: number;
+            original_value_name?: string;
+            value_unit?: string;
+        };
+        PackageCm: {
+            length: number;
+            width: number;
+            height: number;
+        };
+        Tier: {
+            name: string;
+            options: string[];
+        };
+        ProductInput: {
+            sku: string;
+            name: string;
+            description?: string;
+            shopee_category_id?: string | null;
+            category_label?: string | null;
+            brand_name?: string | null;
+            /** @enum {string|null} */
+            condition?: "NEW" | "USED" | null;
+            attributes?: components["schemas"]["ProductAttribute"][];
+            price: string;
+            currency: string;
+            stock: number;
+            weight_kg?: string | null;
+            package_cm?: components["schemas"]["PackageCm"] | null;
+            days_to_ship?: number | null;
+            tiers?: components["schemas"]["Tier"][];
+            variations?: {
+                tier_index: number[];
+                sku?: string | null;
+                price: string;
+                stock: number;
+            }[];
+        };
+        ProductImage: {
+            /** Format: uuid */
+            id: string;
+            position: number;
+            /** @description Presigned URL valid for 15 minutes */
+            url: string;
+            width: number;
+            height: number;
+            sha256: string;
+        };
+        ProductMapping: {
+            /** Format: uuid */
+            shop_id: string;
+            /** @enum {string} */
+            publish_state: "PLANNED" | "CREATING" | "CREATED" | "VERIFIED" | "FAILED" | "UNKNOWN";
+            shopee_item_id: string | null;
+            item_sku: string;
+            last_error: unknown;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Product: {
+            /** Format: uuid */
+            id: string;
+            sku: string;
+            name: string;
+            description: string;
+            shopee_category_id: string | null;
+            category_label: string | null;
+            brand_name: string | null;
+            condition: string | null;
+            attributes: components["schemas"]["ProductAttribute"][];
+            price: components["schemas"]["Money"];
+            stock: number;
+            weight_kg: string | null;
+            package_cm: components["schemas"]["PackageCm"] | null;
+            days_to_ship: number | null;
+            tiers: components["schemas"]["Tier"][];
+            variations: {
+                /** Format: uuid */
+                id: string;
+                tier_index: number[];
+                sku: string | null;
+                price: components["schemas"]["Money"];
+                stock: number;
+            }[];
+            images: components["schemas"]["ProductImage"][];
+            mappings: components["schemas"]["ProductMapping"][];
+            /** @enum {string} */
+            source: "MANUAL" | "IMPORT";
+            /** Format: uuid */
+            import_batch_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ImportBatch: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            source: "CSV" | "XLSX";
+            filename: string;
+            /** @enum {string} */
+            status: "UPLOADED" | "PARSING" | "IMPORTING" | "COMPLETED" | "FAILED";
+            /** Format: uuid */
+            template_id: string | null;
+            /** Format: uuid */
+            template_version_id: string | null;
+            total_rows: number;
+            valid_rows: number;
+            invalid_rows: number;
+            imported_rows: number;
+            failed_rows: number;
+            has_report: boolean;
+            error: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ImportRow: {
+            /** Format: uuid */
+            id: string;
+            /** @description Line in the file (the header is line 1) */
+            row_number: number;
+            values: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            status: "PENDING" | "VALID" | "INVALID" | "IMPORTED" | "FAILED";
+            errors: {
+                column: string;
+                code: string;
+                message: string;
+            }[];
+            /** Format: uuid */
+            product_id: string | null;
+        };
     };
     responses: {
+        /** @description Product */
+        Product: {
+            headers: {
+                ETag?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["Product"];
+                };
+            };
+        };
+        /** @description Import accepted */
+        ImportBatch: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["ImportBatch"];
+                };
+            };
+        };
+        /** @description Import */
+        ImportBatch200: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["ImportBatch"];
+                };
+            };
+        };
         /** @description Run */
         RunView200: {
             headers: {
@@ -3429,6 +4316,7 @@ export interface components {
     };
     parameters: {
         OrgID: string;
+        BatchID: string;
         RunID: string;
         TemplateID: string;
         VersionID: string;

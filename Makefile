@@ -19,8 +19,8 @@ env: ## Create .env from .env.example with a fresh encryption key
 	@sed "s|REPLACE_WITH_OUTPUT_OF_go_run_./cmd/admin_gen-key|$$(go run ./cmd/admin gen-key)|" .env.example > .env
 	@echo "wrote .env"
 
-up: ## Start Postgres, Redis, MinIO, Mailpit, Jaeger
-	$(COMPOSE) up -d --wait postgres redis minio mailpit jaeger
+up: ## Start Postgres, Redis, S3 (SeaweedFS), Mailpit, Jaeger
+	$(COMPOSE) up -d --wait postgres redis s3 mailpit jaeger
 
 down: ## Stop the dev stack
 	$(COMPOSE) down

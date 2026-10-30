@@ -16,12 +16,12 @@ import (
 	"github.com/google/uuid"
 
 	"shopee-automation/internal/capability"
-	"shopee-automation/internal/platform/apperr"
 	"shopee-automation/internal/platform/authctx"
 	"shopee-automation/internal/shopee"
 	"shopee-automation/internal/shops"
 	"shopee-automation/internal/templates"
 	"shopee-automation/internal/workflow"
+	"shopee-automation/internal/workflows/shopstep"
 )
 
 // Key is the definition key.
@@ -50,7 +50,7 @@ func (s *Setup) Definition() workflow.Definition {
 	return workflow.Definition{
 		Key: Key, Version: Version, ValidateSelection: validateSelection,
 		Steps: []workflow.StepSpec{
-			{Key: "validate_connection", Capability: "shop.info.read", Timeout: time.Minute, Handler: s.validateConnection},
+			{Key: "validate_connection", Capability: "shop.info.read", Timeout: time.Minute, Handler: shopstep.ValidateConnection(s.Shops)},
 			{Key: "fetch_current_config", Capability: "shop.profile.read", Timeout: 2 * time.Minute, Handler: s.fetchCurrent},
 			{Key: "validate_template", Timeout: time.Minute, MaxAttempts: 3, Handler: s.validateTemplate},
 			{Key: "generate_diff", Timeout: time.Minute, MaxAttempts: 3, Handler: s.generateDiff},
@@ -70,81 +70,6 @@ func (s *Setup) input(sc *workflow.StepContext) (Input, error) {
 	var in Input
 	err := json.Unmarshal(sc.Input, &in)
 	return in, err
-}
-
-// fromErr turns an error into the right step outcome.
-func fromErr(err error) workflow.Result {
-	if ae, ok := apperr.As(err); ok {
-		switch ae.Kind {
-		case apperr.KindFailedDependency:
-			return workflow.NeedsUser("reconnect_required", ae.Message)
-		case apperr.KindNotFound, apperr.KindInvalid:
-			return workflow.Permanent(errors.New(ae.Message))
-		}
-		if se, ok := shopee.AsError(err); ok {
-			return fromShopee(se)
-		}
-		return workflow.Retryable(errors.New(ae.Message))
-	}
-	if se, ok := shopee.AsError(err); ok {
-		return fromShopee(se)
-	}
-	return workflow.Retryable(err)
-}
-
-func fromShopee(e *shopee.Error) workflow.Result {
-	err := fmt.Errorf("shopee %s: %s (request %s)", e.Code, e.Message, e.RequestID)
-	switch e.Kind {
-	case shopee.KindTransient, shopee.KindRateLimited, shopee.KindAuth:
-		return workflow.Retryable(err)
-	case shopee.KindAuthorizationLost:
-		return workflow.NeedsUser("reconnect_required", "Shopee no longer accepts this shop's authorization. Reconnect the shop, then resume.")
-	case shopee.KindAmbiguous:
-		return workflow.Ambiguous(err)
-	default:
-		return workflow.Permanent(err)
-	}
-}
-
-// withAccess runs fn with a valid access token. If Shopee rejects the token
-// (it may have been invalidated early), the pair is refreshed once and fn is
-// retried; a rejected refresh marks the shop RECONNECT_REQUIRED.
-func (s *Setup) withAccess(ctx context.Context, sc *workflow.StepContext, fn func(acc shops.Access) error) error {
-	acc, err := s.Shops.AccessFor(ctx, sc.OrgID, sc.ShopID)
-	if err != nil {
-		return err
-	}
-	err = fn(acc)
-	if !shopee.IsKind(err, shopee.KindAuth) {
-		return err
-	}
-	// Force a refresh: every access token is shorter-lived than this.
-	if rerr := s.Shops.Refresh(ctx, sc.OrgID, sc.ShopID, shopee.AccessTokenLifetime+time.Hour); rerr != nil {
-		return rerr
-	}
-	if acc, err = s.Shops.AccessFor(ctx, sc.OrgID, sc.ShopID); err != nil {
-		return err
-	}
-	return fn(acc)
-}
-
-// Step 1.
-func (s *Setup) validateConnection(ctx context.Context, sc *workflow.StepContext) workflow.Result {
-	var info shopee.ShopInfo
-	var acc shops.Access
-	err := s.withAccess(ctx, sc, func(a shops.Access) error {
-		var err error
-		acc = a
-		info, err = s.Shops.Shopee.GetShopInfo(ctx, a.App, a.AccessToken, a.ShopID)
-		return err
-	})
-	if err != nil {
-		return fromErr(err)
-	}
-	if info.Status != "" && info.Status != "NORMAL" {
-		return workflow.NeedsUser("shop_not_normal", "Shopee reports the shop as "+info.Status+". Resolve it in Seller Centre, then resume.")
-	}
-	return workflow.Succeeded(map[string]any{"shopee_shop_id": strconv.FormatInt(acc.ShopID, 10), "region": info.Region, "status": info.Status})
 }
 
 // Config is what the workflow reads from a shop.
@@ -170,7 +95,7 @@ func (s *Setup) read(ctx context.Context, sc *workflow.StepContext) (Config, map
 		caps[c.Key] = c
 	}
 	var cfg Config
-	err = s.withAccess(ctx, sc, func(acc shops.Access) error {
+	err = shopstep.WithAccess(ctx, s.Shops, sc.OrgID, sc.ShopID, func(acc shops.Access) error {
 		cfg = Config{}
 		info, err := s.Shops.Shopee.GetShopInfo(ctx, acc.App, acc.AccessToken, acc.ShopID)
 		if err != nil {
@@ -207,7 +132,7 @@ func (s *Setup) read(ctx context.Context, sc *workflow.StepContext) (Config, map
 func (s *Setup) fetchCurrent(ctx context.Context, sc *workflow.StepContext) workflow.Result {
 	cfg, _, err := s.read(ctx, sc)
 	if err != nil {
-		return fromErr(err)
+		return shopstep.FromErr(err)
 	}
 	if err := s.Engine.Snapshot(ctx, sc.OrgID, sc.ShopID, sc.RunID, "BEFORE_APPLY", cfg); err != nil {
 		return workflow.Retryable(err)
@@ -266,7 +191,7 @@ func (s *Setup) validateTemplate(ctx context.Context, sc *workflow.StepContext) 
 	}
 	res, err := s.Templates.Resolve(ctx, tenant(sc), in.TemplateID, in.VersionID, sc.ShopID)
 	if err != nil {
-		return fromErr(err)
+		return shopstep.FromErr(err)
 	}
 	if res.Status == templates.StatusDraft {
 		return workflow.Permanent(errors.New("the template version is not published"))
@@ -315,7 +240,7 @@ func (s *Setup) generateDiff(ctx context.Context, sc *workflow.StepContext) work
 	}
 	detail, err := s.Shops.Get(ctx, tenant(sc), sc.ShopID)
 	if err != nil {
-		return fromErr(err)
+		return shopstep.FromErr(err)
 	}
 	caps := map[string]capability.Resolved{}
 	for _, c := range detail.Capabilities {
@@ -416,13 +341,13 @@ func (s *Setup) applyProfile(ctx context.Context, sc *workflow.StepContext) work
 		return workflow.Skip("not_selected")
 	}
 	var meta shopee.Meta
-	err = s.withAccess(ctx, sc, func(acc shops.Access) error {
+	err = shopstep.WithAccess(ctx, s.Shops, sc.OrgID, sc.ShopID, func(acc shops.Access) error {
 		var err error
 		meta, err = s.Shops.Shopee.UpdateProfile(ctx, acc.App, acc.AccessToken, acc.ShopID, u)
 		return err
 	})
 	if err != nil {
-		return fromErr(err)
+		return shopstep.FromErr(err)
 	}
 	sc.Log("info", "Shop profile updated.", map[string]any{"fields": applied, "shopee_request_id": meta.RequestID})
 	return workflow.Succeeded(map[string]any{"applied": applied, "shopee_request_id": meta.RequestID})
@@ -555,11 +480,11 @@ func (s *Setup) applyLogistics(ctx context.Context, sc *workflow.StepContext) wo
 			continue
 		}
 		if err := ensure(); err != nil {
-			return fromErr(err)
+			return shopstep.FromErr(err)
 		}
 		meta, err := call()
 		if err != nil {
-			r := fromErr(err)
+			r := shopstep.FromErr(err)
 			// Lost authorization stops the step; per-item errors do not.
 			if se, ok := shopee.AsError(err); ok && (se.Kind == shopee.KindAuthorizationLost || se.Kind == shopee.KindAmbiguous) {
 				return r
@@ -600,7 +525,7 @@ func errMessage(err error) string {
 func (s *Setup) verify(ctx context.Context, sc *workflow.StepContext) workflow.Result {
 	cfg, _, err := s.read(ctx, sc)
 	if err != nil {
-		return fromErr(err)
+		return shopstep.FromErr(err)
 	}
 	if err := s.Engine.Snapshot(ctx, sc.OrgID, sc.ShopID, sc.RunID, "AFTER_APPLY", cfg); err != nil {
 		return workflow.Retryable(err)

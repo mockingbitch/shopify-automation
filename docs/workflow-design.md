@@ -200,3 +200,20 @@ Differences from the design above:
 | Compensation | Not implemented | Needs a product decision on what may be restored automatically |
 | SHOP_SETUP step 7 `apply_branding` | Collects every selected change without an API (branding, warehouse, address creation) as manual tasks | One place where the user finishes the manual work |
 | Steps 9–11 | Not in v1 of the definition | Phase 5 |
+
+## 10. As built (Phase 5)
+
+Fan-out and PRODUCT_PUBLISH v1. Differences from the design above:
+
+| Design | As built | Why |
+|---|---|---|
+| Fan-out | `StepSpec.ItemHandler`: the parent handler returns `Expand(items, output)`; item steps share the parent's position and key and differ by `item_key` (shown in the run view). `ItemContinueOnFailure` lets other products go on when one fails; `ItemMaxAttempts` sets their attempt budget | Products are independent; one bad product must not block the rest |
+| User retry | Also resets steps marked `Report` after the first failed position | Otherwise the report kept the first, stale result |
+| `upload_image` reuse per (sha256, shop) | Reuse per (product image, shop) in `product_image_uploads` | Same effect for one catalog; cross-product dedupe waits for S-6 |
+| `add_item` ambiguous outcome | `KindAmbiguous` and transient errors after sending both set `UNKNOWN`; the next attempt searches by `item_sku` first | A 5xx after the request may still have created the item |
+| More than one match | Step waits for the user (`duplicate_items`) with the item IDs; nothing is deleted | As designed |
+| `init_tier_variation` | Always preceded by `get_model_list`; existing models are accepted. Uses `standardise_tier_variation` built from `get_variation_tree`; products whose tiers do not match the category's standard variations are blocked in prepare | `tier_variation` is deprecated since 2025-09-12 |
+| Item status | `UNLIST` by default so the seller reviews the item in Seller Centre; `NORMAL` on request | Safer default |
+
+PRODUCT_PUBLISH v1 steps: `validate_connection` → `prepare_products` (blocks products with reasons) → `approve_products` (skipped when nothing is ready) → `create_products` (fan-out per product, mutating) → `generate_report`.
+

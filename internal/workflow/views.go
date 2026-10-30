@@ -36,6 +36,7 @@ type RunSummary struct {
 type StepInfo struct {
 	ID            uuid.UUID       `json:"id"`
 	Key           string          `json:"key"`
+	ItemKey       *string         `json:"item_key"`
 	Position      int             `json:"position"`
 	Status        string          `json:"status"`
 	Blocking      bool            `json:"blocking"`
@@ -117,6 +118,10 @@ func toStep(s workflowdb.WorkflowStep) StepInfo {
 	out := StepInfo{ID: s.ID, Key: s.StepKey, Position: int(s.Position), Status: s.Status, Blocking: s.Blocking, Capability: s.CapabilityKey,
 		AttemptCount: int(s.AttemptCount), MaxAttempts: int(s.MaxAttempts), Output: rawOrEmpty(s.Output), Error: rawOrEmpty(s.Error),
 		SkipReason: s.SkipReason, StartedAt: utc(s.StartedAt), FinishedAt: utc(s.FinishedAt)}
+	if s.ItemKey != "" {
+		k := s.ItemKey
+		out.ItemKey = &k
+	}
 	if s.Status == StepPending && s.AttemptCount > 0 {
 		out.NextAttemptAt = utc(&s.NextAttemptAt)
 	}

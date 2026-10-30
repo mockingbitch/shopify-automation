@@ -47,6 +47,11 @@ type StepSpec struct {
 	// Report: on success the step output becomes the run output.
 	Report  bool
 	Handler StepHandler
+	// ItemHandler runs each item after Handler returned Expand. Items of
+	// one step run in parallel; later steps wait for all of them.
+	ItemHandler           StepHandler
+	ItemContinueOnFailure bool
+	ItemMaxAttempts       int
 }
 
 // Definition is a versioned list of steps, registered in code.
@@ -88,6 +93,7 @@ const (
 	kindManual
 	kindApproval
 	kindSkip
+	kindExpand
 )
 
 // Result is what a handler returns.
@@ -99,6 +105,7 @@ type Result struct {
 	message string
 	tasks   []ManualTask
 	diff    any
+	items   []string
 }
 
 // Succeeded finishes the step with output.
@@ -129,6 +136,12 @@ func Manual(tasks []ManualTask, output any) Result {
 // AwaitApproval stops at an approval gate showing diff.
 func AwaitApproval(diff any) Result { return Result{kind: kindApproval, diff: diff} }
 
+// Expand finishes the step and creates one item step per key, run by the
+// spec's ItemHandler.
+func Expand(items []string, output any) Result {
+	return Result{kind: kindExpand, items: items, output: output}
+}
+
 // Skip records that the step had nothing to do, with a reason.
 func Skip(reason string) Result { return Result{kind: kindSkip, reason: reason} }
 
@@ -145,13 +158,16 @@ type StepContext struct {
 	RunID     uuid.UUID
 	StepID    uuid.UUID
 	StepKey   string
+	ItemKey   string // "" unless this is an item step
 	ShopID    uuid.UUID
 	CreatedBy *uuid.UUID
 	Attempt   int
 	Input     json.RawMessage
 	Outputs   map[string]json.RawMessage
-	Approval  *Approval
-	logs      []logEntry
+	// ItemOutputs holds item step outputs: step key -> item key -> output.
+	ItemOutputs map[string]map[string]json.RawMessage
+	Approval    *Approval
+	logs        []logEntry
 }
 
 type logEntry struct {
@@ -283,21 +299,31 @@ func (e *Engine) Kick(ctx context.Context, orgID uuid.UUID, runIDs ...uuid.UUID)
 	}
 }
 
-// runnable returns PENDING steps whose earlier steps are done.
+// runnable returns the PENDING steps at the first position that is not
+// done, provided every earlier position is done. Item steps share their
+// parent's position and run in parallel.
 func (e *Engine) runnable(ctx context.Context, q *workflowdb.Queries, orgID, runID uuid.UUID) ([]workflowdb.WorkflowStep, error) {
 	steps, err := q.ListSteps(ctx, workflowdb.ListStepsParams{OrgID: orgID, RunID: runID})
 	if err != nil {
 		return nil, err
 	}
-	for _, s := range steps {
-		switch {
-		case s.Status == StepPending:
-			return []workflowdb.WorkflowStep{s}, nil
-		case s.Status == StepSucceeded || s.Status == StepSkipped || (s.Status == StepFailed && !s.Blocking):
-			continue
-		default:
-			return nil, nil // something in front is running, waiting or failed
+	done := func(s workflowdb.WorkflowStep) bool {
+		return s.Status == StepSucceeded || s.Status == StepSkipped || (s.Status == StepFailed && !s.Blocking)
+	}
+	for i := 0; i < len(steps); {
+		j := i
+		var pending []workflowdb.WorkflowStep
+		allDone := true
+		for ; j < len(steps) && steps[j].Position == steps[i].Position; j++ {
+			if steps[j].Status == StepPending {
+				pending = append(pending, steps[j])
+			}
+			allDone = allDone && done(steps[j])
 		}
+		if !allDone {
+			return pending, nil
+		}
+		i = j
 	}
 	return nil, nil
 }
@@ -467,13 +493,23 @@ func (e *Engine) context(ctx context.Context, q *workflowdb.Queries, run workflo
 		return nil, err
 	}
 	outputs := map[string]json.RawMessage{}
+	items := map[string]map[string]json.RawMessage{}
 	for _, s := range steps {
-		if len(s.Output) > 0 {
-			outputs[s.StepKey] = s.Output
+		if len(s.Output) == 0 {
+			continue
 		}
+		if s.ItemKey == "" {
+			outputs[s.StepKey] = s.Output
+			continue
+		}
+		if items[s.StepKey] == nil {
+			items[s.StepKey] = map[string]json.RawMessage{}
+		}
+		items[s.StepKey][s.ItemKey] = s.Output
 	}
-	sc := &StepContext{OrgID: run.OrgID, RunID: run.ID, StepID: step.ID, StepKey: step.StepKey, ShopID: run.ShopConnectionID,
-		CreatedBy: run.CreatedBy, Attempt: int(step.AttemptCount), Input: run.Input, Outputs: outputs}
+	sc := &StepContext{OrgID: run.OrgID, RunID: run.ID, StepID: step.ID, StepKey: step.StepKey, ItemKey: step.ItemKey,
+		ShopID: run.ShopConnectionID, CreatedBy: run.CreatedBy, Attempt: int(step.AttemptCount), Input: run.Input,
+		Outputs: outputs, ItemOutputs: items}
 	a, err := q.LatestApprovalForStep(ctx, workflowdb.LatestApprovalForStepParams{OrgID: run.OrgID, StepID: step.ID})
 	switch {
 	case err == nil:
@@ -497,6 +533,12 @@ func (e *Engine) runHandler(ctx context.Context, c *claimed) (res Result) {
 	}()
 	hctx, cancel := context.WithTimeout(ctx, orDefaultDur(c.spec.Timeout, defaultTimeout))
 	defer cancel()
+	if c.step.ItemKey != "" {
+		if c.spec.ItemHandler == nil {
+			return Permanent(fmt.Errorf("step %s has no item handler", c.step.StepKey))
+		}
+		return c.spec.ItemHandler(hctx, c.sc)
+	}
 	return c.spec.Handler(hctx, c.sc)
 }
 
@@ -523,6 +565,11 @@ func (e *Engine) finish(ctx context.Context, c *claimed, res Result) error {
 			p.Status, outcome = StepSucceeded, "SUCCEEDED"
 			p.Output = marshal(res.output)
 			p.FinishedAt = &now
+		case kindExpand:
+			p.Status, outcome = StepSucceeded, "SUCCEEDED"
+			p.Output = marshal(map[string]any{"items": res.items, "result": res.output})
+			p.FinishedAt = &now
+			msg = fmt.Sprintf("Expanded into %d items.", len(res.items))
 		case kindSkip:
 			p.Status, outcome = StepSkipped, "SKIPPED"
 			p.SkipReason = &res.reason
@@ -584,6 +631,21 @@ func (e *Engine) finish(ctx context.Context, c *claimed, res Result) error {
 		for _, l := range c.sc.logs {
 			if err := e.event(ctx, q, run.OrgID, run.ID, &step.ID, "LOG", l.level, l.message, l.data); err != nil {
 				return err
+			}
+		}
+		if res.kind == kindExpand {
+			var capKey *string
+			if c.spec.Capability != "" {
+				ck := c.spec.Capability
+				capKey = &ck
+			}
+			for _, item := range res.items {
+				if err := q.InsertItemStep(ctx, workflowdb.InsertItemStepParams{ID: db.NewID(), OrgID: run.OrgID, RunID: run.ID,
+					StepKey: step.StepKey, ItemKey: item, Position: step.Position, Blocking: !c.spec.ItemContinueOnFailure,
+					Mutating: c.spec.Mutating, CapabilityKey: capKey,
+					MaxAttempts: int32(orDefault(c.spec.ItemMaxAttempts, defaultMaxAttempts)), NextAttemptAt: now}); err != nil { // #nosec G115 -- small
+					return err
+				}
 			}
 		}
 		if res.kind == kindApproval && !cancelled {

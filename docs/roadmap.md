@@ -164,7 +164,44 @@ Goal: applying a published template to shops starts one SHOP_SETUP run per shop.
 | 4.9 | Dashboard | Apply from the preview, workflow list and detail (steps, approval with change selection, manual tasks), execution logs | Type-check + Playwright |
 | 4.10 | Docs sync | | Reviewed |
 
-## 6. Definition of done (every phase)
+## 6. Phase 5 task breakdown
+
+**Status (2026-10-30): done against the documented API (`DOC-VERIFIED`; not yet exercised in a Shopee sandbox).** Verified locally:
+- Storage against SeaweedFS; image pipeline unit tests (HTTPS only, private and redirected addresses blocked, magic-byte types, size and pixel caps, re-encode).
+- Products CRUD with `If-Match`, variations and images; imports from CSV/XLSX with row errors, fix-and-revalidate, retry, report, update by SKU; an import whose file cannot be read ends `FAILED` and can be retried.
+- Engine fan-out (per-item steps, continue on item failure, retry reruns only failed items and the report).
+- PRODUCT_PUBLISH end to end against the Shopee fake: blocked products with reasons (currency vs market, missing mandatory attribute, non-standard variation, no images), approval with selection validation, image upload once per shop, `add_item` with a lost response reconciled by `item_sku` (the item is adopted, never created twice), standardised variations, verification, report, idempotent start and a second publish that calls nothing.
+- Tenant isolation: every product/import route with org A's IDs, cross-org publish, every table with `org_id` must have forced RLS and be in the suite (this found `shop_template_mappings` missing from the suite; now covered).
+- `go test -race`, `golangci-lint` 0 issues, `sqlc diff`, migrations up/down/up, `nuxt typecheck` and build, Playwright smoke test (product with image, import with a fixed row), Docker build.
+
+Deferred from Phase 5:
+
+| Item | Moves to |
+|---|---|
+| Sandbox verification of every product endpoint and of the add_item → init_tier_variation delay | When S-1 is available |
+| Category, attribute and brand pickers in the dashboard (today: IDs typed by hand; the publish check lists what is missing) | Phase 7 |
+| Channels with `fee_type = SIZE_SELECTION` (need a `size_id` per item) | Later; needs a product decision |
+| Updating items that already exist on Shopee (price, stock, description); deleting items | Later phase (sync) |
+| Pre-order (`pre_order.days_to_ship`), wholesale, video, size chart, GTIN | Later |
+| Malware scanning of uploaded images beyond decode/re-encode | Phase 8 |
+| Item-level rate limiting across runs (`add_item` quotas per shop) | Phase 8 (load tests) |
+
+Goal: products can be created by hand or imported from CSV/XLSX, validated row by row, and published to shops by a PRODUCT_PUBLISH workflow that never creates a duplicate on Shopee, with a per-shop mapping to Shopee item and model IDs and a downloadable report.
+
+| # | Task | Output | Done when |
+|---|---|---|---|
+| 5.1 | Object storage | `platform/storage` (S3 API; SeaweedFS in development because MinIO no longer publishes public images), presigned GET URLs | Integration test against the dev S3 |
+| 5.2 | Image pipeline | SSRF-safe HTTPS fetcher; type by magic bytes (JPEG/PNG/WebP), ≤ 10 MB, ≤ 40 MP; decode and re-encode to JPEG/PNG (drops metadata and polyglot payloads; Shopee accepts JPG/PNG) | Unit tests incl. private-IP and redirect cases |
+| 5.3 | Schema | Migration `00005`: products, variations, images, product mappings, image uploads, import batches and rows | RLS; one SKU per org |
+| 5.4 | Products | CRUD with `If-Match`, up to 2 tiers of variations, image upload | Integration tests |
+| 5.5 | Imports | Streaming CSV/XLSX parser with row/size caps, per-row validation, fix-and-revalidate, materialize valid rows into products, CSV report (formula-safe) in storage | Integration tests |
+| 5.6 | Shopee product APIs | `get_category`, `get_attribute_tree`, `get_brand_list`, `get_item_limit`, `get_variation_tree`, `media_space.upload_image`, `add_item`, `init_tier_variation`, `search_item`, `get_item_base_info`, `get_model_list` | Fields from the reference; fake extended |
+| 5.7 | Engine fan-out | A step may expand into per-item steps that run in parallel | Engine tests |
+| 5.8 | PRODUCT_PUBLISH | Prepare (category, attributes, brand, limits, channels, standardised variations per shop), approval, image upload, `add_item` protocol with reconciliation by `item_sku`, variations, verification, report | End-to-end test incl. ambiguous `add_item` |
+| 5.9 | Dashboard | Products list/detail/form, imports (upload, rows, fix, report), publish dialog | Type-check + Playwright |
+| 5.10 | Docs sync | | Reviewed |
+
+## 7. Definition of done (every phase)
 
 1. Code + tests merged; `go test -race ./...`, lint and type-check green.
 2. Integration tests run against real Postgres/Redis containers.
@@ -173,7 +210,7 @@ Goal: applying a published template to shops starts one SHOP_SETUP run per shop.
 5. Docs in `docs/` updated in the same PR.
 6. No feature is reported as working against Shopee unless it was exercised in sandbox; otherwise it is labelled `DOC-VERIFIED` only.
 
-## 7. Decisions needed from the product owner
+## 8. Decisions needed from the product owner
 
 | ID | Decision | Needed by |
 |---|---|---|

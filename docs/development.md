@@ -10,7 +10,7 @@
 
 ```bash
 make env                      # .env from .env.example with a fresh encryption key
-make up                       # Postgres :5433, Redis :6379, MinIO :9000, Mailpit :8025, Jaeger :16686
+make up                       # Postgres :5433, Redis :6379, S3 (SeaweedFS) :8333, Mailpit :8025, Jaeger :16686
 make tools                    # sqlc + golangci-lint
 make run                      # applies migrations, starts the API on :8080
 make worker                   # second terminal: background tasks + scheduler (needed for workflows)

@@ -242,6 +242,7 @@ type previewChange struct {
 	Reason          string `json:"reason"`
 	Sensitive       bool   `json:"sensitive"`
 	DefaultSelected bool   `json:"default_selected"`
+	Note            string `json:"note"`
 }
 
 func byPath(cs []previewChange) map[string]previewChange {

@@ -913,3 +913,21 @@ func (s *Service) VersionStatus(ctx context.Context, t authctx.Tenant, templateI
 	})
 	return status, no, name, wrap(err, nil)
 }
+
+// VersionSections returns the sections of a version (used by imports for
+// defaults such as category mappings and SKU rules).
+func (s *Service) VersionSections(ctx context.Context, t authctx.Tenant, templateID, versionID uuid.UUID) (map[string]json.RawMessage, error) {
+	var out Sections
+	err := s.tx(ctx, authctx.Principal{}, t, func(q *templatesdb.Queries, _ pgx.Tx) error {
+		if _, err := q.GetTemplate(ctx, templatesdb.GetTemplateParams{OrgID: t.OrgID, ID: templateID}); err != nil {
+			return wrap(err, errTemplateNotFound)
+		}
+		if _, err := q.GetVersion(ctx, templatesdb.GetVersionParams{OrgID: t.OrgID, TemplateID: templateID, ID: versionID}); err != nil {
+			return wrap(err, errVersionNotFound)
+		}
+		var err error
+		out, _, err = s.loadSections(ctx, q, t, versionID)
+		return err
+	})
+	return out, wrap(err, nil)
+}

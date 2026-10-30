@@ -25,9 +25,11 @@ import (
 	"shopee-automation/internal/platform/logx"
 	"shopee-automation/internal/platform/mailer"
 	"shopee-automation/internal/platform/maintenance"
+	"shopee-automation/internal/platform/media"
 	"shopee-automation/internal/platform/otelx"
 	"shopee-automation/internal/platform/queue"
 	"shopee-automation/internal/platform/ratelimit"
+	"shopee-automation/internal/platform/storage"
 	"shopee-automation/internal/shopee"
 )
 
@@ -85,6 +87,11 @@ func run() error {
 		return err
 	}
 	limiter := ratelimit.Redis{Client: rdb, Prefix: "rl:"}
+	store, err := storage.NewS3(ctx, storage.Config{Endpoint: cfg.S3Endpoint, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey,
+		Bucket: cfg.S3Bucket, Region: cfg.S3Region, UseSSL: cfg.S3UseSSL})
+	if err != nil {
+		return err
+	}
 	tasks := asynq.NewClientFromRedisClient(rdb)
 	defer func() { _ = tasks.Close() }()
 
@@ -93,6 +100,7 @@ func run() error {
 		Mailer: mailer.Log{Logger: log}, Clock: clock.Real{}, Log: log,
 		Hasher: identity.Hasher{Params: identity.DefaultArgon2},
 		Keys:   keys, Shopee: shopee.NewClient(cfg, limiter), Queue: queue.Asynq{Client: tasks},
+		Store: store, Fetcher: media.NewFetcher(30*time.Second, false),
 	})
 	svc := a.Shops
 
@@ -110,6 +118,7 @@ func run() error {
 		return err
 	})
 	mux.Handle(queue.TypeStepExecute, a.Engine.HandleExecute)
+	mux.Handle(queue.TypeImport, a.Products.HandleImport)
 	mux.Handle(queue.TypeStepSweep, func(ctx context.Context, _ []byte) error {
 		n, err := a.Engine.Sweep(ctx)
 		if n > 0 {

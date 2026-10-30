@@ -7,7 +7,8 @@ info:
     organizations, membership, invitations, audit logs (Phase 1), and Shopee
     shop connections, capabilities, webhooks and partner-app administration
     (Phase 2), and shop templates with versions, overrides and previews
-    (Phase 3), and workflows with approvals and manual tasks (Phase 4).
+    (Phase 3), workflows with approvals and manual tasks (Phase 4), and products with
+    imports and publishing (Phase 5).
 
     Conventions (see docs/api-design.md):
     - Session cookie `sid` (`__Host-sid` over HTTPS). Unsafe methods need the
@@ -31,6 +32,8 @@ tags:
   - name: shops
   - name: templates
   - name: workflows
+  - name: products
+  - name: imports
   - name: webhooks
   - name: admin
 
@@ -1464,6 +1467,388 @@ paths:
         '415': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
 
+  /orgs/{orgID}/products:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [products]
+      summary: List products, newest first
+      x-permission: products.read
+      parameters:
+        - {name: q, in: query, description: Name or SKU contains, schema: {type: string, maxLength: 100}}
+        - {name: batch_id, in: query, schema: {type: string, format: uuid}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: Products
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Product'}
+                  next_cursor: {type: string, nullable: true}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [products]
+      summary: Create a product
+      x-permission: products.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProductInput'}
+      responses:
+        '201': {$ref: '#/components/responses/Product'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/products/publish:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    post:
+      tags: [products]
+      summary: Publish products to shops
+      description: |
+        Starts one PRODUCT_PUBLISH run per shop, sharing a batch ID. Choose
+        products by `product_ids` or by `import_batch_id` (exactly one). Each
+        run checks products against the shop's categories, attributes, brands
+        and logistics, asks for approval, then creates items with `add_item`.
+        Items are created as `UNLIST` unless `item_status` is `NORMAL`. With an
+        `Idempotency-Key` (UUID), repeating the same request returns the same
+        runs (`replayed: true`); the same key with a different request is `409`.
+      x-permission: workflows.run
+      parameters:
+        - {name: Idempotency-Key, in: header, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [shop_ids]
+              properties:
+                product_ids:
+                  type: array
+                  maxItems: 200
+                  items: {type: string, format: uuid}
+                import_batch_id: {type: string, format: uuid}
+                shop_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: {type: string, format: uuid}
+                item_status: {type: string, enum: [UNLIST, NORMAL]}
+      responses:
+        '202':
+          description: Runs started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [batch_id, workflow_run_ids, replayed]
+                    properties:
+                      batch_id: {type: string, format: uuid}
+                      workflow_run_ids:
+                        type: array
+                        items: {type: string, format: uuid}
+                      replayed: {type: boolean}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '424': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/products/{productID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: productID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [products]
+      summary: Product with variations, images and per-shop mappings
+      x-permission: products.read
+      responses:
+        '200': {$ref: '#/components/responses/Product'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [products]
+      summary: Replace a product (images are kept)
+      description: Requires `If-Match` with the product's ETag.
+      x-permission: products.write
+      parameters:
+        - {name: If-Match, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProductInput'}
+      responses:
+        '200': {$ref: '#/components/responses/Product'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [products]
+      summary: Delete a product (soft; items on Shopee are not deleted)
+      x-permission: products.write
+      responses:
+        '204': {description: Deleted}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/products/{productID}/images:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: productID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [products]
+      summary: Upload a product image
+      description: JPEG, PNG or WebP, at most 10 MB and 40 megapixels. Stored re-encoded as JPEG or PNG.
+      x-permission: products.write
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        '201':
+          description: Image
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/ProductImage'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '413': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/products/{productID}/images/{imageID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: productID, in: path, required: true, schema: {type: string}}
+      - {name: imageID, in: path, required: true, schema: {type: string}}
+    delete:
+      tags: [products]
+      summary: Remove an image
+      x-permission: products.write
+      responses:
+        '204': {description: Removed}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/imports:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [imports]
+      summary: Recent imports
+      x-permission: products.read
+      responses:
+        '200':
+          description: Imports
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/ImportBatch'}
+                  next_cursor: {type: string, nullable: true}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [imports]
+      summary: Upload a CSV or XLSX file
+      description: |
+        At most 50 MB and 100,000 rows. Parsing, validation and product
+        creation run in the background; valid rows become products, invalid
+        rows can be fixed and retried. Optional template defaults (category
+        mappings, SKU rules, product defaults, descriptions, attributes).
+      x-permission: imports.write
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+                template_id: {type: string, format: uuid}
+                template_version_id: {type: string, format: uuid}
+      responses:
+        '202': {$ref: '#/components/responses/ImportBatch'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '413': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/imports/sample.csv:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [imports]
+      summary: Sample import file
+      x-permission: products.read
+      responses:
+        '200':
+          description: CSV file
+          content:
+            text/csv:
+              schema: {type: string}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/imports/{batchID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/BatchID'}
+    get:
+      tags: [imports]
+      summary: Import status and counts
+      x-permission: products.read
+      responses:
+        '200': {$ref: '#/components/responses/ImportBatch200'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/imports/{batchID}/rows:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/BatchID'}
+    get:
+      tags: [imports]
+      summary: Rows with their errors
+      x-permission: products.read
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [PENDING, VALID, INVALID, IMPORTED, FAILED]}}
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 100}}
+      responses:
+        '200':
+          description: Rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/ImportRow'}
+                  next_cursor: {type: string, nullable: true}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/imports/{batchID}/rows/{rowID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/BatchID'}
+      - {name: rowID, in: path, required: true, schema: {type: string}}
+    patch:
+      tags: [imports]
+      summary: Correct cells of a row and re-validate
+      description: An empty value removes the cell. Imported rows cannot be changed.
+      x-permission: imports.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [values]
+              properties:
+                values:
+                  type: object
+                  additionalProperties: {type: string}
+      responses:
+        '200':
+          description: Row
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/ImportRow'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/imports/{batchID}/retry:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/BatchID'}
+    post:
+      tags: [imports]
+      summary: Import rows that became valid and retry failed ones
+      x-permission: imports.write
+      responses:
+        '202': {$ref: '#/components/responses/ImportBatch'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/imports/{batchID}/report:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/BatchID'}
+    get:
+      tags: [imports]
+      summary: Short-lived download link for the CSV report
+      x-permission: products.read
+      responses:
+        '200':
+          description: Link
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [url, expires_at]
+                    properties:
+                      url: {type: string}
+                      expires_at: {type: string, format: date-time}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+
   /admin/shopee-apps:
     get:
       tags: [admin]
@@ -1538,6 +1923,11 @@ components:
       in: path
       required: true
       schema: {type: string}
+    BatchID:
+      name: batchID
+      in: path
+      required: true
+      schema: {type: string}
     RunID:
       name: runID
       in: path
@@ -1560,6 +1950,35 @@ components:
       schema: {type: string}
 
   responses:
+    Product:
+      description: Product
+      headers:
+        ETag: {schema: {type: string}}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/Product'}
+    ImportBatch:
+      description: Import accepted
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/ImportBatch'}
+    ImportBatch200:
+      description: Import
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/ImportBatch'}
     RunView200:
       description: Run
       content:
@@ -2058,7 +2477,11 @@ components:
       required: [path, section, current, current_known, target, capability, mode, enabled, reason, sensitive, default_selected]
       properties:
         path: {type: string, example: general.shop_name}
-        section: {$ref: '#/components/schemas/SectionKey'}
+        section:
+          description: A template section, or `products` for PRODUCT_PUBLISH approvals.
+          oneOf:
+            - {$ref: '#/components/schemas/SectionKey'}
+            - {type: string, enum: [products]}
         current: {nullable: true, description: Last known value; null when unknown}
         current_known: {type: boolean}
         target: {nullable: true}
@@ -2117,11 +2540,12 @@ components:
 
     WorkflowStep:
       type: object
-      required: [id, key, position, status, blocking, capability, attempt_count, max_attempts, next_attempt_at,
+      required: [id, key, item_key, position, status, blocking, capability, attempt_count, max_attempts, next_attempt_at,
         output, error, skip_reason, started_at, finished_at]
       properties:
         id: {type: string, format: uuid}
         key: {type: string}
+        item_key: {type: string, nullable: true, description: 'Set on fan-out item steps (for PRODUCT_PUBLISH: the product ID)'}
         position: {type: integer}
         status: {type: string, enum: [PENDING, RUNNING, SUCCEEDED, FAILED, SKIPPED, CANCELLED, WAITING_APPROVAL, WAITING_USER]}
         blocking: {type: boolean, description: false when the run continues after this step fails}
@@ -2195,3 +2619,197 @@ components:
         message: {type: string}
         data: {type: object, additionalProperties: true}
         created_at: {type: string, format: date-time}
+
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: {type: string, pattern: '^[0-9]+(\.[0-9]{1,2})?$', example: '199000.00'}
+        currency: {type: string, enum: [VND, SGD, MYR, THB, PHP, IDR, TWD]}
+
+    ProductAttribute:
+      type: object
+      additionalProperties: false
+      required: [attribute_id, value_id]
+      properties:
+        attribute_id: {type: integer, minimum: 1}
+        value_id: {type: integer, minimum: 0}
+        original_value_name: {type: string}
+        value_unit: {type: string}
+
+    PackageCm:
+      type: object
+      additionalProperties: false
+      required: [length, width, height]
+      properties:
+        length: {type: integer, minimum: 1, maximum: 1000}
+        width: {type: integer, minimum: 1, maximum: 1000}
+        height: {type: integer, minimum: 1, maximum: 1000}
+
+    Tier:
+      type: object
+      additionalProperties: false
+      required: [name, options]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 50}
+        options:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: {type: string, minLength: 1, maxLength: 50}
+
+    ProductInput:
+      type: object
+      additionalProperties: false
+      required: [sku, name, price, currency, stock]
+      properties:
+        sku: {type: string, minLength: 1, maxLength: 100}
+        name: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, maxLength: 10000}
+        shopee_category_id: {type: string, nullable: true, pattern: '^[0-9]+$'}
+        category_label: {type: string, nullable: true}
+        brand_name: {type: string, nullable: true}
+        condition: {type: string, nullable: true, enum: [NEW, USED, null]}
+        attributes:
+          type: array
+          items: {$ref: '#/components/schemas/ProductAttribute'}
+        price: {type: string, pattern: '^[0-9]+(\.[0-9]{1,2})?$'}
+        currency: {type: string}
+        stock: {type: integer, minimum: 0}
+        weight_kg: {type: string, nullable: true}
+        package_cm:
+          allOf: [{$ref: '#/components/schemas/PackageCm'}]
+          nullable: true
+        days_to_ship: {type: integer, nullable: true}
+        tiers:
+          type: array
+          maxItems: 2
+          items: {$ref: '#/components/schemas/Tier'}
+        variations:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [tier_index, price, stock]
+            properties:
+              tier_index:
+                type: array
+                items: {type: integer, minimum: 0}
+              sku: {type: string, nullable: true}
+              price: {type: string}
+              stock: {type: integer, minimum: 0}
+
+    ProductImage:
+      type: object
+      required: [id, position, url, width, height, sha256]
+      properties:
+        id: {type: string, format: uuid}
+        position: {type: integer}
+        url: {type: string, description: Presigned URL valid for 15 minutes}
+        width: {type: integer}
+        height: {type: integer}
+        sha256: {type: string}
+
+    ProductMapping:
+      type: object
+      required: [shop_id, publish_state, shopee_item_id, item_sku, last_error, updated_at]
+      properties:
+        shop_id: {type: string, format: uuid}
+        publish_state: {type: string, enum: [PLANNED, CREATING, CREATED, VERIFIED, FAILED, UNKNOWN]}
+        shopee_item_id: {type: string, nullable: true}
+        item_sku: {type: string}
+        last_error: {nullable: true}
+        updated_at: {type: string, format: date-time}
+
+    Product:
+      type: object
+      required: [id, sku, name, description, shopee_category_id, category_label, brand_name, condition, attributes, price,
+        stock, weight_kg, package_cm, days_to_ship, tiers, variations, images, mappings, source, import_batch_id, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        sku: {type: string}
+        name: {type: string}
+        description: {type: string}
+        shopee_category_id: {type: string, nullable: true}
+        category_label: {type: string, nullable: true}
+        brand_name: {type: string, nullable: true}
+        condition: {type: string, nullable: true}
+        attributes:
+          type: array
+          items: {$ref: '#/components/schemas/ProductAttribute'}
+        price: {$ref: '#/components/schemas/Money'}
+        stock: {type: integer}
+        weight_kg: {type: string, nullable: true}
+        package_cm:
+          allOf: [{$ref: '#/components/schemas/PackageCm'}]
+          nullable: true
+        days_to_ship: {type: integer, nullable: true}
+        tiers:
+          type: array
+          items: {$ref: '#/components/schemas/Tier'}
+        variations:
+          type: array
+          items:
+            type: object
+            required: [id, tier_index, sku, price, stock]
+            properties:
+              id: {type: string, format: uuid}
+              tier_index:
+                type: array
+                items: {type: integer}
+              sku: {type: string, nullable: true}
+              price: {$ref: '#/components/schemas/Money'}
+              stock: {type: integer}
+        images:
+          type: array
+          items: {$ref: '#/components/schemas/ProductImage'}
+        mappings:
+          type: array
+          items: {$ref: '#/components/schemas/ProductMapping'}
+        source: {type: string, enum: [MANUAL, IMPORT]}
+        import_batch_id: {type: string, format: uuid, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+
+    ImportBatch:
+      type: object
+      required: [id, source, filename, status, template_id, template_version_id, total_rows, valid_rows, invalid_rows,
+        imported_rows, failed_rows, has_report, error, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        source: {type: string, enum: [CSV, XLSX]}
+        filename: {type: string}
+        status: {type: string, enum: [UPLOADED, PARSING, IMPORTING, COMPLETED, FAILED]}
+        template_id: {type: string, format: uuid, nullable: true}
+        template_version_id: {type: string, format: uuid, nullable: true}
+        total_rows: {type: integer}
+        valid_rows: {type: integer}
+        invalid_rows: {type: integer}
+        imported_rows: {type: integer}
+        failed_rows: {type: integer}
+        has_report: {type: boolean}
+        error: {type: string, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+
+    ImportRow:
+      type: object
+      required: [id, row_number, values, status, errors, product_id]
+      properties:
+        id: {type: string, format: uuid}
+        row_number: {type: integer, description: Line in the file (the header is line 1)}
+        values:
+          type: object
+          additionalProperties: {type: string}
+        status: {type: string, enum: [PENDING, VALID, INVALID, IMPORTED, FAILED]}
+        errors:
+          type: array
+          items:
+            type: object
+            required: [column, code, message]
+            properties:
+              column: {type: string}
+              code: {type: string}
+              message: {type: string}
+        product_id: {type: string, format: uuid, nullable: true}

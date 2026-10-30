@@ -535,3 +535,43 @@ func jsonEq(a json.RawMessage, b string) bool {
 	var x, y any
 	return json.Unmarshal(a, &x) == nil && json.Unmarshal([]byte(b), &y) == nil && reflect.DeepEqual(x, y)
 }
+
+func TestFanOut(t *testing.T) {
+	h := newHarness(t)
+	var calls sync.Map
+	fail := atomic.Bool{}
+	fail.Store(true)
+	var seen map[string]json.RawMessage
+	h.e.Register(Definition{Key: "T", Version: 1, Steps: []StepSpec{
+		{Key: "items", ItemContinueOnFailure: true,
+			Handler: func(context.Context, *StepContext) Result { return Expand([]string{"a", "b", "c"}, nil) },
+			ItemHandler: func(_ context.Context, sc *StepContext) Result {
+				n, _ := calls.LoadOrStore(sc.ItemKey, new(atomic.Int32))
+				n.(*atomic.Int32).Add(1)
+				if sc.ItemKey == "b" && fail.Load() {
+					return Permanent(errors.New("b is broken"))
+				}
+				return Succeeded(map[string]string{"item": sc.ItemKey})
+			}},
+		{Key: "after", Report: true, Handler: func(_ context.Context, sc *StepContext) Result {
+			seen = sc.ItemOutputs["items"]
+			return Succeeded(map[string]int{"items": len(seen)})
+		}},
+	}})
+	id := h.start("T", h.shop)
+	h.noQueueErrors()
+	v := h.run(id)
+	if v.Run.Status != RunPartiallyCompleted || len(v.Steps) != 5 || len(seen) != 2 {
+		t.Fatalf("after fan-out: %s steps=%d seen=%d", v.Run.Status, len(v.Steps), len(seen))
+	}
+	p, tn := h.principal()
+	fail.Store(false)
+	if _, err := h.e.Retry(context.Background(), p, tn, id); err != nil {
+		t.Fatal(err)
+	}
+	h.noQueueErrors()
+	count := func(k string) int32 { n, _ := calls.Load(k); return n.(*atomic.Int32).Load() }
+	if h.run(id).Run.Status != RunCompleted || count("a") != 1 || count("b") != 2 || count("c") != 1 || len(seen) != 3 {
+		t.Fatalf("after retry: %s a=%d b=%d c=%d", h.run(id).Run.Status, count("a"), count("b"), count("c"))
+	}
+}

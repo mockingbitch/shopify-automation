@@ -52,6 +52,9 @@ type Request struct {
 	TargetID    int64 // shop_id (Shop) or merchant_id (Merchant)
 	Query       url.Values
 	Body        any // JSON body for POST
+	// RawBody and ContentType send a prepared body (multipart uploads).
+	RawBody     []byte
+	ContentType string
 	// Idempotent marks calls that are safe to repeat after an unclear
 	// failure (reads). Writes and single-use token exchanges are not.
 	Idempotent bool
@@ -96,7 +99,10 @@ func (c *Client) Do(ctx context.Context, app App, req Request, out any) (Meta, e
 	span.SetAttributes(attribute.String("shopee.path", req.Path), attribute.Int64("shopee.partner_id", app.PartnerID))
 
 	var body []byte
-	if req.Body != nil {
+	switch {
+	case req.RawBody != nil:
+		body = req.RawBody
+	case req.Body != nil:
 		b, err := json.Marshal(req.Body)
 		if err != nil {
 			return Meta{}, fmt.Errorf("shopee: encode body: %w", err)
@@ -171,7 +177,11 @@ func (c *Client) once(ctx context.Context, app App, req Request, body []byte, ou
 		return Meta{}, fail(KindUnknown, "bad_request", 0, errors.New("cannot build request"))
 	}
 	if body != nil {
-		hr.Header.Set("Content-Type", "application/json")
+		ct := req.ContentType
+		if ct == "" {
+			ct = "application/json"
+		}
+		hr.Header.Set("Content-Type", ct)
 	}
 	hr.Header.Set("Accept", "application/json")
 

@@ -39,12 +39,16 @@ export const stepLabels: Record<string, string> = {
   apply_logistics: 'Update shipping channels and addresses',
   verify_configuration: 'Verify the result',
   generate_report: 'Write the report',
+  prepare_products: 'Check products against the shop',
+  approve_products: 'Approve products',
+  create_products: 'Create products on Shopee',
 }
 
 export const skipReasons: Record<string, string> = {
   nothing_to_change: 'The shop already matches the template.',
   not_selected: 'No change of this kind was approved.',
   no_manual_changes: 'No manual work needed.',
+  nothing_to_publish: 'No product was ready to publish.',
 }
 
 export interface WaitOutput {

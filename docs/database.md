@@ -513,9 +513,10 @@ erDiagram
 | shop_connections | index `(authorization_expires_at)` | Expiry warnings |
 | shop_template_versions | `UNIQUE (template_id, version_no)`; trigger rejects UPDATE when `status = 'PUBLISHED'` except `→ ARCHIVED` | Immutability enforced in DB |
 | shop_template_sections | trigger rejects INSERT/UPDATE/DELETE if parent version is published | Immutability |
-| products | `UNIQUE (org_id, internal_sku) WHERE deleted_at IS NULL` | Dedup on import |
-| product_mappings | `UNIQUE (shop_connection_id, product_id, variation_id)` (NULLS NOT DISTINCT) | One listing per product per shop |
-| product_mappings | `UNIQUE (shop_connection_id, shopee_item_id, shopee_model_id)` | Reverse lookup |
+| products | `UNIQUE (org_id, sku) WHERE deleted_at IS NULL` (`sku` is `citext`) | Dedup on import; `item_sku` sent to Shopee |
+| product_variations | `UNIQUE (product_id, tier_index)`; `UNIQUE (product_id, sku) WHERE sku IS NOT NULL` | One model per option combination |
+| product_mappings | `UNIQUE (shop_connection_id, product_id)`; `UNIQUE (idempotency_key)` | One listing per product per shop (as built: models are kept as JSON on the mapping, not one row per variation) |
+| product_image_uploads | `UNIQUE (product_image_id, shop_connection_id)` | Upload each image once per shop |
 | product_import_rows | `UNIQUE (batch_id, row_number)` | Row identity for retries |
 | workflow_runs | `UNIQUE (org_id, idempotency_key)` | Double-submit protection |
 | workflow_runs | partial unique `(shop_connection_id) WHERE status IN ('PENDING','RUNNING','WAITING_APPROVAL','WAITING_USER') AND definition_key = 'SHOP_SETUP'` | One mutating setup per shop |

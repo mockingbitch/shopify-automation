@@ -70,6 +70,10 @@ type Server struct {
 	calls        map[string]int
 	failNext     map[string]failure
 	RefreshDelay time.Duration
+	catalog      Catalog
+	items        map[int64]*Item
+	nextItemID   int64
+	loseAddItem  bool
 }
 
 type codeGrant struct {
@@ -91,7 +95,7 @@ func New(partnerID int64, partnerKey []byte) *Server {
 	s := &Server{
 		PartnerID: partnerID, PartnerKey: partnerKey, Now: time.Now,
 		shops: map[int64]*Shop{}, codes: map[string]codeGrant{}, access: map[string]token{},
-		refresh: map[string][]int64{}, calls: map[string]int{}, failNext: map[string]failure{},
+		refresh: map[string][]int64{}, calls: map[string]int{}, failNext: map[string]failure{}, items: map[int64]*Item{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v2/auth/token/get", s.tokenGet)
@@ -104,6 +108,7 @@ func New(partnerID int64, partnerKey []byte) *Server {
 	mux.HandleFunc("POST /api/v2/logistics/update_channel", s.updateChannel)
 	mux.HandleFunc("POST /api/v2/logistics/update_address", s.updateAddress)
 	mux.HandleFunc("POST /api/v2/logistics/set_address_config", s.setAddressConfig)
+	s.registerProducts(mux)
 	s.Server = httptest.NewServer(mux)
 	return s
 }
