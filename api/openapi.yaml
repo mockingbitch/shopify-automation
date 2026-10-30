@@ -1,0 +1,1217 @@
+openapi: 3.0.3
+info:
+  title: Shopee Shop Automation API
+  version: 0.1.0
+  description: |
+    REST API for the Shopee Shop Automation platform: authentication,
+    organizations, membership, invitations, audit logs (Phase 1), and Shopee
+    shop connections, capabilities, webhooks and partner-app administration
+    (Phase 2).
+
+    Conventions (see docs/api-design.md):
+    - Session cookie `sid` (`__Host-sid` over HTTPS). Unsafe methods need the
+      `X-CSRF-Token` header returned by `GET /auth/session` or `POST /auth/login`.
+    - Organization-scoped routes live under `/orgs/{orgID}`. Non-members get
+      `404`, never `403`, so organization IDs cannot be probed.
+    - Errors use RFC 9457 problem details (`application/problem+json`).
+servers:
+  - url: /api/v1
+
+security:
+  - session: []
+    csrf: []
+
+tags:
+  - name: auth
+  - name: organizations
+  - name: members
+  - name: invitations
+  - name: audit
+  - name: shops
+  - name: webhooks
+  - name: admin
+
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Create an account
+      description: Always returns 202 and sends an email, so the response never reveals whether the email is registered.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RegisterRequest'}
+      responses:
+        '202': {$ref: '#/components/responses/CheckEmail'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Sign in with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+      responses:
+        '200':
+          description: Signed in. Sets the session cookie.
+          headers:
+            Set-Cookie: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SessionEnvelope'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+
+  /auth/verify-email:
+    post:
+      tags: [auth]
+      summary: Confirm an email address
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TokenRequest'}
+      responses:
+        '204': {description: Verified}
+        '400': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+
+  /auth/password/forgot:
+    post:
+      tags: [auth]
+      summary: Request a password reset email
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: {type: string, format: email}
+      responses:
+        '202': {$ref: '#/components/responses/CheckEmail'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+
+  /auth/password/reset:
+    post:
+      tags: [auth]
+      summary: Set a new password with a reset token
+      description: Signs out every session of the user.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, new_password]
+              properties:
+                token: {type: string}
+                new_password: {type: string, minLength: 12, maxLength: 128}
+      responses:
+        '204': {description: Password changed}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+
+  /auth/verify-email/resend:
+    post:
+      tags: [auth]
+      summary: Send a new verification email to the signed-in user
+      description: Same response whether or not the address is already verified. Limited to 3 per hour.
+      responses:
+        '202': {$ref: '#/components/responses/CheckEmail'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Sign out the current session
+      responses:
+        '204': {description: Signed out}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+
+  /auth/session:
+    get:
+      tags: [auth]
+      summary: Current user, CSRF token and memberships (dashboard bootstrap)
+      responses:
+        '200':
+          description: Current session
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SessionEnvelope'}
+        '401': {$ref: '#/components/responses/Problem'}
+
+  /me:
+    get:
+      tags: [auth]
+      summary: Current user
+      responses:
+        '200': {$ref: '#/components/responses/User'}
+        '401': {$ref: '#/components/responses/Problem'}
+    patch:
+      tags: [auth]
+      summary: Update the current user's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                display_name: {type: string, minLength: 1, maxLength: 100}
+      responses:
+        '200': {$ref: '#/components/responses/User'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs:
+    post:
+      tags: [organizations]
+      summary: Create an organization (caller becomes owner)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateOrgRequest'}
+      responses:
+        '201':
+          description: Created
+          headers:
+            ETag: {schema: {type: string}}
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrgEnvelope'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+    get:
+      tags: [organizations]
+      summary: Organizations the caller belongs to
+      responses:
+        '200':
+          description: Memberships
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Membership'}
+                  next_cursor: {type: string, nullable: true}
+        '401': {$ref: '#/components/responses/Problem'}
+
+  /invitations/accept:
+    post:
+      tags: [invitations]
+      summary: Accept an invitation (signed-in email must match the invitation)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TokenRequest'}
+      responses:
+        '200':
+          description: Joined
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/Membership'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [organizations]
+      summary: Get the organization
+      x-permission: org.read
+      responses:
+        '200':
+          description: Organization
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrgEnvelope'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+    patch:
+      tags: [organizations]
+      summary: Update name or settings
+      x-permission: org.update
+      parameters:
+        - {name: If-Match, in: header, required: true, schema: {type: string}, description: ETag from GET}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: {type: string, minLength: 1, maxLength: 100}
+                settings: {$ref: '#/components/schemas/OrgSettings'}
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrgEnvelope'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [organizations]
+      summary: Delete the organization (soft delete)
+      x-permission: org.delete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirm_slug]
+              properties:
+                confirm_slug: {type: string}
+      responses:
+        '204': {description: Deleted}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/transfer-ownership:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    post:
+      tags: [organizations]
+      summary: Make another member the owner; the current owner becomes admin
+      x-permission: org.transfer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [new_owner_user_id]
+              properties:
+                new_owner_user_id: {type: string, format: uuid}
+      responses:
+        '204': {description: Transferred}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/members:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [members]
+      summary: List members
+      x-permission: members.read
+      responses:
+        '200':
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Member'}
+                  next_cursor: {type: string, nullable: true}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/members/{memberID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: memberID, in: path, required: true, schema: {type: string}}
+    patch:
+      tags: [members]
+      summary: Change a member's role
+      description: You cannot change your own role, give a role above your own, or change the owner (use transfer).
+      x-permission: members.manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: {$ref: '#/components/schemas/AssignableRole'}
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/Member'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [members]
+      summary: Remove a member, or leave the organization when memberID is your own
+      x-permission: members.manage (not required to remove yourself)
+      responses:
+        '204': {description: Removed}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/invitations:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    post:
+      tags: [invitations]
+      summary: Invite someone by email (valid 7 days)
+      x-permission: members.manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, role]
+              properties:
+                email: {type: string, format: email}
+                role: {$ref: '#/components/schemas/AssignableRole'}
+      responses:
+        '201':
+          description: Invitation created and emailed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/Invitation'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+    get:
+      tags: [invitations]
+      summary: List open invitations
+      x-permission: members.manage
+      responses:
+        '200':
+          description: Invitations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Invitation'}
+                  next_cursor: {type: string, nullable: true}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/invitations/{invitationID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: invitationID, in: path, required: true, schema: {type: string}}
+    delete:
+      tags: [invitations]
+      summary: Revoke an open invitation
+      x-permission: members.manage
+      responses:
+        '204': {description: Revoked}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/audit-logs:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [audit]
+      summary: List audit log entries, newest first
+      x-permission: audit.read
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: actor_id, in: query, schema: {type: string, format: uuid}}
+        - {name: action, in: query, schema: {type: string}}
+        - {name: target_type, in: query, schema: {type: string}}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+      responses:
+        '200':
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/AuditLog'}
+                  next_cursor: {type: string, nullable: true}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shops:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    get:
+      tags: [shops]
+      summary: List connected shops
+      x-permission: shops.read
+      parameters:
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/ConnectionStatus'}}
+        - {name: region, in: query, schema: {type: string}}
+        - {name: q, in: query, description: 'Shop name contains, or exact Shopee shop ID', schema: {type: string, maxLength: 100}}
+      responses:
+        '200':
+          description: Shops
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Shop'}
+                  next_cursor: {type: string, nullable: true}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shops/connect:
+    parameters: [{$ref: '#/components/parameters/OrgID'}]
+    post:
+      tags: [shops]
+      summary: Start connecting a Shopee shop
+      description: |
+        Returns the Shopee authorization URL. The browser opens it; after the
+        seller authorizes, Shopee redirects to `GET /oauth/shopee/callback`.
+        The `state` in the URL is single-use, bound to this user and
+        organization, and expires after 10 minutes.
+      x-permission: shops.connect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                shopee_app_id: {type: string, format: uuid, nullable: true, description: Needed only when several Shopee apps are enabled}
+      responses:
+        '200': {$ref: '#/components/responses/ConnectResult'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '424': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shops/connect/{stateID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: stateID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [shops]
+      summary: Shops offered by a main-account authorization
+      description: Available for 30 minutes to the user who authorized, until shops are selected.
+      x-permission: shops.connect
+      responses:
+        '200':
+          description: Pending selection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/Selection'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shops/connect/{stateID}/select:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {name: stateID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [shops]
+      summary: Attach shops from a main-account authorization
+      x-permission: shops.connect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [shopee_shop_ids]
+              properties:
+                shopee_shop_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: {type: string, pattern: '^[0-9]+$'}
+      responses:
+        '201':
+          description: Attached shops
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Shop'}
+                  next_cursor: {type: string, nullable: true}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shops/{shopID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/ShopID'}
+    get:
+      tags: [shops]
+      summary: Shop with profile, capabilities and authorization history
+      x-permission: shops.read
+      responses:
+        '200':
+          description: Shop detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/ShopDetail'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [shops]
+      summary: Disconnect a shop
+      description: Deletes the stored tokens and synced Shopee data. History and audit entries are kept. Idempotent.
+      x-permission: shops.disconnect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirm]
+              properties:
+                confirm: {type: boolean, enum: [true]}
+      responses:
+        '204': {description: Disconnected}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shops/{shopID}/capabilities:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/ShopID'}
+    get:
+      tags: [shops]
+      summary: Resolved capabilities of a shop
+      x-permission: shops.read
+      responses:
+        '200':
+          description: Capabilities
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Capability'}
+                  next_cursor: {type: string, nullable: true}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shops/{shopID}/sync:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/ShopID'}
+    post:
+      tags: [shops]
+      summary: Queue a sync of shop information from Shopee
+      description: Requests within the same minute share one job.
+      x-permission: shops.sync
+      responses:
+        '202':
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [job_id]
+                    properties:
+                      job_id: {type: string}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '424': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+
+  /orgs/{orgID}/shops/{shopID}/reconnect:
+    parameters:
+      - {$ref: '#/components/parameters/OrgID'}
+      - {$ref: '#/components/parameters/ShopID'}
+    post:
+      tags: [shops]
+      summary: Start re-authorizing an existing shop
+      description: The seller must authorize the same Shopee shop; another shop is rejected.
+      x-permission: shops.connect
+      responses:
+        '200': {$ref: '#/components/responses/ConnectResult'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '424': {$ref: '#/components/responses/Problem'}
+
+  /oauth/shopee/callback:
+    get:
+      tags: [shops]
+      summary: Shopee authorization redirect target
+      description: |
+        Shopee redirects the seller here. Always answers `302`: to the shop
+        page on success, to the shop list with `connect_error=<code>` on
+        failure, to the shop selection page for main-account logins, or to
+        `/login?next=...` when the browser has no session.
+      security: []
+      parameters:
+        - {name: code, in: query, schema: {type: string}}
+        - {name: shop_id, in: query, schema: {type: string}}
+        - {name: main_account_id, in: query, schema: {type: string}}
+        - {name: state, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Redirect to the dashboard
+          headers:
+            Location: {schema: {type: string}}
+
+  /webhooks/shopee/{appID}:
+    parameters:
+      - {name: appID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [webhooks]
+      summary: Shopee push notifications
+      description: |
+        Verified with the `Authorization` header:
+        `hex(HMAC-SHA256(partner_key, push_callback_url + "|" + raw_body))`.
+        Stored, acknowledged with an empty `204`, processed asynchronously.
+      security: []
+      parameters:
+        - {name: Authorization, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '204': {description: Accepted}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '413': {$ref: '#/components/responses/Problem'}
+
+  /admin/shopee-apps:
+    get:
+      tags: [admin]
+      summary: List Shopee partner apps
+      description: Platform admins only; everyone else gets 404.
+      responses:
+        '200':
+          description: Apps
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/ShopeeApp'}
+                  next_cursor: {type: string, nullable: true}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [admin]
+      summary: Register a Shopee partner app
+      description: Hosts default to the documented hosts of the environment. The partner key is stored encrypted and never returned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateShopeeAppRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/ShopeeApp'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+  /admin/shopee-apps/{appID}:
+    parameters:
+      - {name: appID, in: path, required: true, schema: {type: string}}
+    patch:
+      tags: [admin]
+      summary: Update a Shopee partner app
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateShopeeAppRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/ShopeeApp'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: sid
+    csrf:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+
+  parameters:
+    OrgID:
+      name: orgID
+      in: path
+      required: true
+      schema: {type: string}
+    ShopID:
+      name: shopID
+      in: path
+      required: true
+      schema: {type: string}
+
+  responses:
+    ConnectResult:
+      description: Authorization URL to open in the browser
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                type: object
+                required: [authorization_url, expires_at]
+                properties:
+                  authorization_url: {type: string}
+                  expires_at: {type: string, format: date-time}
+    ShopeeApp:
+      description: Shopee partner app
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/ShopeeApp'}
+    Problem:
+      description: Error (RFC 9457)
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    CheckEmail:
+      description: Accepted; instructions were emailed if applicable
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [check_email]}
+    User:
+      description: User
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/User'}
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        code: {type: string, description: Stable machine-readable error code}
+        detail: {type: string}
+        request_id: {type: string}
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, code, message]
+            properties:
+              field: {type: string}
+              code: {type: string}
+              message: {type: string}
+        upstream:
+          type: object
+          description: Normalized Shopee error, only for members who manage shops.
+          required: [code]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, display_name]
+      properties:
+        email: {type: string, format: email, maxLength: 254}
+        password: {type: string, minLength: 12, maxLength: 128}
+        display_name: {type: string, minLength: 1, maxLength: 100}
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: {type: string}
+        password: {type: string}
+
+    TokenRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: {type: string}
+
+    User:
+      type: object
+      required: [id, email, display_name, email_verified, is_platform_admin, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+        display_name: {type: string}
+        email_verified: {type: boolean}
+        is_platform_admin: {type: boolean}
+        created_at: {type: string, format: date-time}
+
+    SessionEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [user, csrf_token]
+          properties:
+            user: {$ref: '#/components/schemas/User'}
+            csrf_token: {type: string}
+            memberships:
+              type: array
+              items: {$ref: '#/components/schemas/Membership'}
+
+    Role:
+      type: string
+      enum: [owner, admin, operator, viewer]
+
+    AssignableRole:
+      type: string
+      enum: [admin, operator, viewer]
+
+    OrgSettings:
+      type: object
+      additionalProperties: false
+      required: [allow_self_approval]
+      properties:
+        allow_self_approval: {type: boolean}
+
+    CreateOrgRequest:
+      type: object
+      additionalProperties: false
+      required: [name, slug]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        slug: {type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$'}
+
+    Org:
+      type: object
+      required: [id, name, slug, plan, settings, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        slug: {type: string}
+        plan: {type: string}
+        settings: {$ref: '#/components/schemas/OrgSettings'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+
+    OrgEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/Org'}
+
+    Membership:
+      type: object
+      required: [organization, role, permissions]
+      properties:
+        organization: {$ref: '#/components/schemas/Org'}
+        role: {$ref: '#/components/schemas/Role'}
+        permissions:
+          type: array
+          items: {type: string}
+
+    Member:
+      type: object
+      required: [id, user_id, email, display_name, role, joined_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        email: {type: string}
+        display_name: {type: string}
+        role: {$ref: '#/components/schemas/Role'}
+        joined_at: {type: string, format: date-time}
+
+    Invitation:
+      type: object
+      required: [id, email, role, expires_at, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+        role: {$ref: '#/components/schemas/AssignableRole'}
+        expires_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+
+    AuditLog:
+      type: object
+      required: [id, actor_user_id, actor_type, action, target_type, target_id, outcome, metadata, ip, request_id, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        actor_user_id: {type: string, format: uuid, nullable: true}
+        actor_type: {type: string, enum: [user, system, shopee]}
+        action: {type: string}
+        target_type: {type: string, nullable: true}
+        target_id: {type: string, format: uuid, nullable: true}
+        outcome: {type: string, enum: [success, failure, denied]}
+        metadata: {type: object}
+        ip: {type: string, nullable: true}
+        request_id: {type: string, nullable: true}
+        created_at: {type: string, format: date-time}
+
+    ConnectionStatus:
+      type: string
+      enum: [PENDING, ACTIVE, RECONNECT_REQUIRED, REVOKED, EXPIRED, DISCONNECTED]
+
+    Shop:
+      type: object
+      description: A Shopee shop connection. Never contains tokens. Shopee IDs are strings.
+      required: [id, shopee_shop_id, shopee_app_id, environment, region, shop_name, connection_status,
+        authorization_expires_at, last_synced_at, last_sync_error, connected_at, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        shopee_shop_id: {type: string, pattern: '^[0-9]+$'}
+        shopee_app_id: {type: string, format: uuid}
+        environment: {type: string, enum: [sandbox, production]}
+        region: {type: string, nullable: true}
+        shop_name: {type: string, nullable: true}
+        connection_status: {$ref: '#/components/schemas/ConnectionStatus'}
+        authorization_expires_at: {type: string, format: date-time, nullable: true}
+        last_synced_at: {type: string, format: date-time, nullable: true}
+        last_sync_error: {type: string, nullable: true}
+        connected_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+
+    ShopProfile:
+      type: object
+      required: [shop_name, region, status, shop_logo_url, description, is_cb, is_sip, merchant_id, fetched_at]
+      properties:
+        shop_name: {type: string, nullable: true}
+        region: {type: string, nullable: true}
+        status: {type: string, nullable: true, description: 'Shopee shop status: NORMAL, BANNED or FROZEN'}
+        shop_logo_url: {type: string, nullable: true}
+        description: {type: string, nullable: true}
+        is_cb: {type: boolean, nullable: true}
+        is_sip: {type: boolean, nullable: true}
+        merchant_id: {type: string, nullable: true}
+        fetched_at: {type: string, format: date-time}
+
+    Capability:
+      type: object
+      required: [key, title, mode, enabled, reason, requires_approval, sensitive, verification]
+      properties:
+        key: {type: string}
+        title: {type: string}
+        mode: {type: string, enum: [API, BROWSER, MANUAL, UNSUPPORTED]}
+        enabled: {type: boolean}
+        reason:
+          type: string
+          description: Empty when enabled without caveats.
+          enum: ['', not_supported, disabled_by_platform, region_not_supported, app_type_not_allowed,
+            shop_not_active, not_sandbox_verified, browser_extension_unavailable]
+        requires_approval: {type: boolean}
+        sensitive: {type: boolean}
+        verification: {type: string, enum: [DOC_VERIFIED, SANDBOX_VERIFIED]}
+
+    AuthorizationEvent:
+      type: object
+      required: [event, source, expire_time, created_at]
+      properties:
+        event: {type: string, enum: [GRANTED, REAUTHORIZED, REFRESHED, REFRESH_FAILED, EXPIRING, EXPIRED, REVOKED, DISCONNECTED]}
+        source: {type: string, enum: [callback, push, sync, refresh, user]}
+        expire_time: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+
+    ShopDetail:
+      type: object
+      required: [shop, profile, capabilities, history]
+      properties:
+        shop: {$ref: '#/components/schemas/Shop'}
+        profile:
+          allOf: [{$ref: '#/components/schemas/ShopProfile'}]
+          nullable: true
+        capabilities:
+          type: array
+          items: {$ref: '#/components/schemas/Capability'}
+        history:
+          type: array
+          items: {$ref: '#/components/schemas/AuthorizationEvent'}
+
+    Selection:
+      type: object
+      required: [id, shops, expires_at]
+      properties:
+        id: {type: string, format: uuid}
+        expires_at: {type: string, format: date-time}
+        shops:
+          type: array
+          items:
+            type: object
+            required: [shopee_shop_id, shop_name, region]
+            properties:
+              shopee_shop_id: {type: string}
+              shop_name: {type: string, nullable: true}
+              region: {type: string, nullable: true}
+
+    ShopeeApp:
+      type: object
+      description: A Shopee partner app. The partner key is write-only.
+      required: [id, name, environment, api_host, auth_host, partner_id, app_type, redirect_uri,
+        push_callback_url, enabled, partner_key_set, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        environment: {type: string, enum: [sandbox, production]}
+        api_host: {type: string}
+        auth_host: {type: string}
+        partner_id: {type: string}
+        app_type: {type: string}
+        redirect_uri: {type: string}
+        push_callback_url: {type: string, nullable: true}
+        enabled: {type: boolean}
+        partner_key_set: {type: boolean}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+
+    CreateShopeeAppRequest:
+      type: object
+      additionalProperties: false
+      required: [name, environment, partner_id, partner_key, app_type]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        environment: {type: string, enum: [sandbox, production]}
+        partner_id: {type: string, pattern: '^[0-9]+$'}
+        partner_key: {type: string, minLength: 16, maxLength: 256, writeOnly: true}
+        app_type: {type: string, minLength: 1, maxLength: 64, example: ERP System}
+        api_host: {type: string, nullable: true}
+        auth_host: {type: string, nullable: true}
+        redirect_uri: {type: string, nullable: true}
+        push_callback_url: {type: string, nullable: true}
+        enabled: {type: boolean, nullable: true}
+
+    UpdateShopeeAppRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        partner_key: {type: string, minLength: 16, maxLength: 256, writeOnly: true}
+        app_type: {type: string, minLength: 1, maxLength: 64}
+        api_host: {type: string}
+        auth_host: {type: string}
+        redirect_uri: {type: string}
+        push_callback_url: {type: string, description: Empty string clears it}
+        enabled: {type: boolean}

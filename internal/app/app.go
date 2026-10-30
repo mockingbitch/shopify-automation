@@ -1,0 +1,250 @@
+// Package app wires modules into the HTTP API. The route table is data, so
+// tests can check that every route declares its access rule and that the
+// OpenAPI document lists exactly these routes.
+package app
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
+	"shopee-automation/internal/audit"
+	"shopee-automation/internal/identity"
+	"shopee-automation/internal/platform/apperr"
+	"shopee-automation/internal/platform/authctx"
+	"shopee-automation/internal/platform/clock"
+	"shopee-automation/internal/platform/config"
+	"shopee-automation/internal/platform/db"
+	"shopee-automation/internal/platform/envelope"
+	"shopee-automation/internal/platform/httpx"
+	"shopee-automation/internal/platform/mailer"
+	"shopee-automation/internal/platform/queue"
+	"shopee-automation/internal/platform/ratelimit"
+	"shopee-automation/internal/rbac"
+	"shopee-automation/internal/shopee"
+	"shopee-automation/internal/shops"
+	"shopee-automation/internal/tenancy"
+)
+
+// Access describes who may call a route.
+type Access int
+
+const (
+	// Public routes need no session.
+	Public Access = iota
+	// Session routes need a signed-in user (and CSRF on unsafe methods).
+	Session
+	// Tenant routes also resolve /orgs/{orgID} membership and check Perm.
+	Tenant
+	// TenantSelf resolves membership but leaves the permission check to the
+	// handler (e.g. a member removing themselves).
+	TenantSelf
+	// Admin routes need a platform admin; everyone else gets 404.
+	Admin
+	// Callback is a browser redirect target: the session is loaded when
+	// present, but the handler decides what to do without one (no CSRF,
+	// it is a top-level GET navigation).
+	Callback
+	// Webhook routes are called by Shopee. No session, no CSRF, no origin
+	// check; the handler verifies the request signature.
+	Webhook
+)
+
+// Route is one API endpoint under /api/v1.
+type Route struct {
+	Method  string
+	Path    string
+	Access  Access
+	Perm    rbac.Permission
+	Handler httpx.HandlerFunc
+}
+
+// Deps are the external dependencies of the API.
+type Deps struct {
+	Config  config.Config
+	DB      *db.DB
+	Redis   *redis.Client // optional; used for readiness and rate limits
+	Limiter ratelimit.Limiter
+	Mailer  mailer.Mailer
+	Clock   clock.Clock
+	Log     *slog.Logger
+	Hasher  identity.Hasher
+
+	// SystemDB is the app_system pool for cross-tenant lookups (optional in
+	// the API; webhook processing runs on the worker).
+	SystemDB *db.DB
+	Keys     *envelope.Keyring
+	Shopee   *shopee.Client
+	Queue    queue.Enqueuer
+}
+
+// App is the assembled API.
+type App struct {
+	deps     Deps
+	adapter  httpx.Adapter
+	identity identity.Handler
+	tenancy  tenancy.Handler
+	audit    audit.Handler
+	shops    shops.Handler
+	// Shops is exposed for the worker and tests.
+	Shops *shops.Service
+}
+
+// New assembles the application.
+func New(d Deps) *App {
+	rec := audit.Recorder{Clock: d.Clock}
+	idSvc := &identity.Service{
+		DB: d.DB, Clock: d.Clock, Mailer: d.Mailer, Audit: rec, Log: d.Log, Hasher: d.Hasher,
+		BaseURL: d.Config.PublicBaseURL, IdleTTL: d.Config.SessionIdleTTL, AbsoluteTTL: d.Config.SessionAbsoluteTTL,
+	}
+	tSvc := &tenancy.Service{DB: d.DB, Clock: d.Clock, Audit: rec, Mailer: d.Mailer, Log: d.Log, BaseURL: d.Config.PublicBaseURL}
+	a := &App{
+		deps:    d,
+		adapter: httpx.Adapter{Log: d.Log},
+		tenancy: tenancy.Handler{Svc: tSvc, Log: d.Log},
+		audit:   audit.Handler{DB: d.DB},
+	}
+	a.Shops = &shops.Service{
+		DB: d.DB, System: d.SystemDB, Keys: d.Keys, Shopee: d.Shopee, Clock: d.Clock, Audit: rec,
+		Queue: d.Queue, Tenants: tSvc, Log: d.Log, BaseURL: d.Config.PublicBaseURL,
+		AllowInsecureHosts: !d.Config.IsProduction(),
+	}
+	a.shops = shops.Handler{Svc: a.Shops, Log: d.Log}
+	a.identity = identity.Handler{
+		Svc: idSvc, Limiter: d.Limiter, Log: d.Log, CookieSecure: d.Config.CookieSecure,
+		Memberships: func(ctx context.Context, userID uuid.UUID) (any, error) {
+			return tSvc.ListMemberships(ctx, userID)
+		},
+	}
+	return a
+}
+
+// Routes returns the API route table.
+func (a *App) Routes() []Route {
+	id, tn, sh := a.identity, a.tenancy, a.shops
+	return []Route{
+		{"POST", "/auth/register", Public, "", id.Register},
+		{"POST", "/auth/login", Public, "", id.Login},
+		{"POST", "/auth/verify-email", Public, "", id.VerifyEmail},
+		{"POST", "/auth/password/forgot", Public, "", id.ForgotPassword},
+		{"POST", "/auth/password/reset", Public, "", id.ResetPassword},
+		{"POST", "/auth/logout", Session, "", id.Logout},
+		{"POST", "/auth/verify-email/resend", Session, "", id.ResendVerification},
+		{"GET", "/auth/session", Session, "", id.Session},
+		{"GET", "/me", Session, "", id.Me},
+		{"PATCH", "/me", Session, "", id.UpdateMe},
+
+		{"POST", "/orgs", Session, "", tn.CreateOrg},
+		{"GET", "/orgs", Session, "", tn.ListOrgs},
+		{"POST", "/invitations/accept", Session, "", tn.AcceptInvitation},
+
+		{"GET", "/orgs/{orgID}", Tenant, rbac.OrgRead, tn.GetOrg},
+		{"PATCH", "/orgs/{orgID}", Tenant, rbac.OrgUpdate, tn.UpdateOrg},
+		{"DELETE", "/orgs/{orgID}", Tenant, rbac.OrgDelete, tn.DeleteOrg},
+		{"POST", "/orgs/{orgID}/transfer-ownership", Tenant, rbac.OrgTransfer, tn.TransferOwnership},
+		{"GET", "/orgs/{orgID}/members", Tenant, rbac.MembersRead, tn.ListMembers},
+		{"PATCH", "/orgs/{orgID}/members/{memberID}", Tenant, rbac.MembersManage, tn.ChangeRole},
+		{"DELETE", "/orgs/{orgID}/members/{memberID}", TenantSelf, "", tn.RemoveMember},
+		{"POST", "/orgs/{orgID}/invitations", Tenant, rbac.MembersManage, tn.Invite},
+		{"GET", "/orgs/{orgID}/invitations", Tenant, rbac.MembersManage, tn.ListInvitations},
+		{"DELETE", "/orgs/{orgID}/invitations/{invitationID}", Tenant, rbac.MembersManage, tn.RevokeInvitation},
+		{"GET", "/orgs/{orgID}/audit-logs", Tenant, rbac.AuditRead, a.audit.List},
+
+		{"POST", "/orgs/{orgID}/shops/connect", Tenant, rbac.ShopsConnect, sh.Connect},
+		{"GET", "/orgs/{orgID}/shops/connect/{stateID}", Tenant, rbac.ShopsConnect, sh.GetSelection},
+		{"POST", "/orgs/{orgID}/shops/connect/{stateID}/select", Tenant, rbac.ShopsConnect, sh.SelectShops},
+		{"GET", "/orgs/{orgID}/shops", Tenant, rbac.ShopsRead, sh.List},
+		{"GET", "/orgs/{orgID}/shops/{shopID}", Tenant, rbac.ShopsRead, sh.Get},
+		{"GET", "/orgs/{orgID}/shops/{shopID}/capabilities", Tenant, rbac.ShopsRead, sh.Capabilities},
+		{"POST", "/orgs/{orgID}/shops/{shopID}/sync", Tenant, rbac.ShopsSync, sh.Sync},
+		{"POST", "/orgs/{orgID}/shops/{shopID}/reconnect", Tenant, rbac.ShopsConnect, sh.Reconnect},
+		{"DELETE", "/orgs/{orgID}/shops/{shopID}", Tenant, rbac.ShopsDisconnect, sh.Disconnect},
+		{"GET", "/oauth/shopee/callback", Callback, "", sh.Callback},
+		{"POST", "/webhooks/shopee/{appID}", Webhook, "", sh.Webhook},
+
+		{"GET", "/admin/shopee-apps", Admin, "", sh.ListApps},
+		{"POST", "/admin/shopee-apps", Admin, "", sh.CreateApp},
+		{"PATCH", "/admin/shopee-apps/{appID}", Admin, "", sh.UpdateApp},
+	}
+}
+
+// Handler returns the root HTTP handler.
+func (a *App) Handler() http.Handler {
+	cfg := a.deps.Config
+	r := chi.NewRouter()
+	r.Use(httpx.RequestMeta(cfg.TrustProxyHeaders), httpx.Recoverer(a.adapter), httpx.AccessLog(a.deps.Log), httpx.SecurityHeaders)
+	r.NotFound(a.adapter.H(func(http.ResponseWriter, *http.Request) error { return apperr.NotFound("Route not found.") }).ServeHTTP)
+	r.MethodNotAllowed(a.adapter.H(func(http.ResponseWriter, *http.Request) error {
+		return &apperr.Error{Kind: apperr.KindNotFound, Code: "method_not_allowed", Message: "Method not allowed."}
+	}).ServeHTTP)
+
+	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	r.Get("/readyz", a.ready)
+
+	origin := cfg.PublicBaseURL.Scheme + "://" + cfg.PublicBaseURL.Host
+	api := chi.NewRouter()
+	api.Use(httpx.SameOrigin(a.adapter, origin), a.identity.LoadSession)
+	api.NotFound(r.NotFoundHandler())
+	api.MethodNotAllowed(r.MethodNotAllowedHandler())
+	for _, rt := range a.Routes() {
+		if rt.Access == Webhook {
+			// Outside the API sub-router: no origin check, no session.
+			r.Method(rt.Method, "/api/v1"+rt.Path, a.adapter.H(rt.Handler))
+			continue
+		}
+		var mw []func(http.Handler) http.Handler
+		switch rt.Access {
+		case Admin:
+			mw = append(mw, a.identity.RequireSession, a.requireAdmin)
+		case Session:
+			mw = append(mw, a.identity.RequireSession)
+		case Tenant:
+			mw = append(mw, a.identity.RequireSession, a.tenancy.ResolveTenant, tenancy.Require(a.deps.Log, rt.Perm))
+		case TenantSelf:
+			mw = append(mw, a.identity.RequireSession, a.tenancy.ResolveTenant)
+		}
+		api.With(mw...).Method(rt.Method, rt.Path, a.adapter.H(rt.Handler))
+	}
+	r.Mount("/api/v1", api)
+	return otelhttp.NewHandler(r, "http.server", otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
+		if rc := chi.RouteContext(r.Context()); rc != nil && rc.RoutePattern() != "" {
+			return r.Method + " " + rc.RoutePattern()
+		}
+		return r.Method
+	}))
+}
+
+// requireAdmin hides platform admin routes from everyone else.
+func (a *App) requireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if p, ok := authctx.PrincipalFrom(r.Context()); !ok || !p.IsPlatformAdmin {
+			a.adapter.WriteError(w, r, apperr.NotFound("Route not found."))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *App) ready(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if err := a.deps.DB.Ping(ctx); err != nil {
+		a.deps.Log.WarnContext(ctx, "readiness: database", slog.String("error", err.Error()))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if a.deps.Redis != nil {
+		if err := a.deps.Redis.Ping(ctx).Err(); err != nil {
+			a.deps.Log.WarnContext(ctx, "readiness: redis", slog.String("error", err.Error()))
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

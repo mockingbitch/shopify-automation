@@ -1,0 +1,134 @@
+version: "2"
+# One generated package per module, all sharing the migration schema.
+# A module never imports another module's generated package.
+sql:
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries/identity
+    gen:
+      go:
+        package: identitydb
+        out: internal/identity/identitydb
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type: {import: github.com/google/uuid, type: UUID, pointer: true}
+          - db_type: citext
+            go_type: string
+          - db_type: citext
+            nullable: true
+            go_type: {type: string, pointer: true}
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type: {import: time, type: Time, pointer: true}
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries/tenancy
+    gen:
+      go:
+        package: tenancydb
+        out: internal/tenancy/tenancydb
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type: {import: github.com/google/uuid, type: UUID, pointer: true}
+          - db_type: citext
+            go_type: string
+          - db_type: citext
+            nullable: true
+            go_type: {type: string, pointer: true}
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type: {import: time, type: Time, pointer: true}
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries/audit
+    gen:
+      go:
+        package: auditdb
+        out: internal/audit/auditdb
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type: {import: github.com/google/uuid, type: UUID, pointer: true}
+          - db_type: citext
+            go_type: string
+          - db_type: citext
+            nullable: true
+            go_type: {type: string, pointer: true}
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type: {import: time, type: Time, pointer: true}
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries/rbac
+    gen:
+      go:
+        package: rbacdb
+        out: internal/rbac/rbacdb
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type: {import: github.com/google/uuid, type: UUID, pointer: true}
+          - db_type: citext
+            go_type: string
+          - db_type: citext
+            nullable: true
+            go_type: {type: string, pointer: true}
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type: {import: time, type: Time, pointer: true}
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries/shops
+    gen:
+      go:
+        package: shopsdb
+        out: internal/shops/shopsdb
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type: {import: github.com/google/uuid, type: UUID, pointer: true}
+          - db_type: citext
+            go_type: string
+          - db_type: citext
+            nullable: true
+            go_type: {type: string, pointer: true}
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type: {import: time, type: Time, pointer: true}

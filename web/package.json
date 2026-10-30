@@ -1,0 +1,43 @@
+{
+  "name": "shopee-automation-web",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
+    "api:types": "openapi-typescript ../api/openapi.yaml -o app/types/api.d.ts",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.64.0",
+    "@pinia/nuxt": "^1.0.3",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vueuse/core": "^15.0.0",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.5.0",
+    "nuxt": "~3.21.11",
+    "openapi-fetch": "^0.17.0",
+    "pinia": "^4.1.0",
+    "reka-ui": "^2.11.0",
+    "shadcn-nuxt": "^2.9.0",
+    "tailwindcss": "^4.3.3",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "@types/node": "^24.19.2",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.0",
+    "vue-tsc": "^3.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

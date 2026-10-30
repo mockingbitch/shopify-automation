@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: app_owner
+          POSTGRES_PASSWORD: owner_ci_pw
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app_owner" --health-interval 3s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      TEST_REQUIRE_DB: "1"
+      TEST_DATABASE_OWNER_URL: postgres://app_owner:owner_ci_pw@localhost:5432/postgres?sslmode=disable
+      TEST_DATABASE_RW_URL: postgres://app_rw:rw_ci_pw@localhost:5432/postgres?sslmode=disable
+      TEST_DATABASE_SYSTEM_URL: postgres://app_system:system_ci_pw@localhost:5432/postgres?sslmode=disable
+      TEST_REDIS_URL: redis://localhost:6379/1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Create runtime roles
+        run: |
+          psql "postgres://app_owner:owner_ci_pw@localhost:5432/postgres" -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE app_rw LOGIN PASSWORD 'rw_ci_pw' NOBYPASSRLS;
+          CREATE ROLE app_system LOGIN PASSWORD 'system_ci_pw' BYPASSRLS;
+          CREATE DATABASE ci_migrations;
+          SQL
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l $(git ls-files '*.go'))"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+
+      - name: sqlc generated code is up to date
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0
+          sqlc diff
+
+      - name: Migrations up, down, up
+        env:
+          DATABASE_MIGRATE_URL: postgres://app_owner:owner_ci_pw@localhost:5432/ci_migrations?sslmode=disable
+        run: |
+          go run ./cmd/migrate up
+          go run ./cmd/migrate down-all
+          go run ./cmd/migrate up
+
+      - name: Tests (unit + integration, race detector)
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      - name: Build binaries
+        run: go build ./cmd/...
+
+      - name: Build image
+        run: docker build -f deploy/Dockerfile -t api:ci .
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: API types are generated from api/openapi.yaml
+        run: npm run api:types && git diff --exit-code app/types/api.d.ts
+      - run: npm run typecheck
+      - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [backend, web]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: app_owner
+          POSTGRES_PASSWORD: owner_ci_pw
+          POSTGRES_DB: shopee_automation
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app_owner" --health-interval 3s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+      mailpit:
+        image: axllent/mailpit:latest
+        ports: ["1025:1025", "8025:8025"]
+    env:
+      APP_ENV: test
+      PUBLIC_BASE_URL: http://localhost:3100
+      DATABASE_URL: postgres://app_rw:rw_ci_pw@localhost:5432/shopee_automation?sslmode=disable
+      DATABASE_MIGRATE_URL: postgres://app_owner:owner_ci_pw@localhost:5432/shopee_automation?sslmode=disable
+      REDIS_URL: redis://localhost:6379/0
+      SMTP_ADDR: localhost:1025
+      COOKIE_SECURE: "false"
+      # Throwaway key for the CI database only.
+      ENCRYPTION_KEYS: ci1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Create runtime role and migrate
+        run: |
+          psql "postgres://app_owner:owner_ci_pw@localhost:5432/shopee_automation" -c "CREATE ROLE app_rw LOGIN PASSWORD 'rw_ci_pw' NOBYPASSRLS;"
+          go run ./cmd/migrate up
+      - name: Start API
+        run: |
+          go build -o bin/api ./cmd/api
+          ./bin/api > api.log 2>&1 &
+          timeout 30 bash -c 'until curl -sf localhost:8080/readyz; do sleep 1; done'
+      - name: Playwright smoke test
+        working-directory: web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-debug
+          path: |
+            api.log
+            web/test-results
+          retention-days: 7

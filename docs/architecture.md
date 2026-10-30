@@ -1,0 +1,277 @@
+# Architecture — Shopee Shop Automation
+
+Status: Phase 0 draft · Last updated: 2026-10-30
+
+## 1. Summary
+
+A **modular monolith** in Go with three deployable processes built from one codebase, plus a browser extension that runs in the seller's own browser and a static Vue dashboard.
+
+| Process | Binary | Responsibility |
+|---|---|---|
+| API server | `cmd/api` | REST API `/api/v1`, Shopee OAuth callback, Shopee webhook receiver, extension API `/api/v1/ext` |
+| Job worker | `cmd/worker` | Asynq consumer: workflow steps, token refresh, shop sync, import parsing, webhook processing |
+| Scheduler | `cmd/worker --scheduler` | Asynq periodic tasks and the workflow "sweeper" (re-enqueues stuck steps). Runs as a single replica. |
+| Migrator | `cmd/migrate` | Applies SQL migrations as the schema owner role |
+| Browser extension | `browser-extension/` (MV3, WXT + TypeScript) | Executes `BROWSER` capabilities in the seller's logged-in Seller Centre tab. See [browser-extension.md](browser-extension.md) |
+| Dashboard | `web/` (Nuxt 3, SPA mode) | Static build served by Nginx |
+
+```mermaid
+flowchart LR
+  user([User browser]) -->|HTTPS| nginx[Nginx]
+  nginx -->|/ static| web[(Dashboard static files)]
+  nginx -->|/api/v1, /oauth, /webhooks| api[Go API server]
+  shopee[[Shopee Open Platform]] -->|push webhooks| nginx
+  api -->|SQL + RLS| pg[(PostgreSQL 17)]
+  api -->|enqueue| redis[(Redis)]
+  worker[Go job worker] -->|consume| redis
+  worker -->|SQL + RLS| pg
+  worker -->|signed HTTPS| shopee
+  api -->|signed HTTPS| shopee
+  worker --> s3[(S3 / MinIO)]
+  api --> s3
+  ext[Browser extension<br/>in seller's browser] -->|HTTPS, device token| nginx
+  ext -->|UI actions in Seller Centre tab| shopee
+  api & worker -->|OTLP| otel[OTel Collector]
+```
+
+## 2. Architecture decisions
+
+Each decision is short; it can be promoted to a full ADR file if challenged.
+
+### ADR-1 Modular monolith
+
+One Go module, packages per bounded context, enforced dependency rules (§4). Scaling happens by running more `api` and `worker` replicas, which are stateless. A module is extracted into a service only when it has a different scaling or isolation profile that we can measure. The browser worker is already separate because it needs a different runtime and a stronger sandbox.
+
+### ADR-2 sqlc + pgx, not GORM
+
+RLS, composite foreign keys, `FOR UPDATE SKIP LOCKED`, advisory locks and JSONB queries are central to correctness here. sqlc keeps SQL explicit and type-checked. Driver: `pgx/v5` with `pgxpool`. Migrations: `goose` (plain SQL files, up/down).
+
+### ADR-3 Frontend: Nuxt 3 in SPA mode, not Inertia.js
+
+The master spec requires a documented REST API with OpenAPI. The dashboard should consume **that same API**, so there is one contract, generated TypeScript types (`openapi-typescript`) and one set of authorization checks.
+
+- Inertia would add a second contract (server-rendered page props) next to the REST API, and Go has only small community Inertia adapters.
+- Nuxt with `ssr: false` produces static files. No Node server runs in production for the dashboard. Nginx serves them on the same origin as the API, so cookies stay `SameSite=Strict`-friendly and no CORS is needed.
+- Nuxt gives file-based routing, layouts and route middleware for auth guards; shadcn-vue, Tailwind and Pinia all support it.
+
+(An earlier chat suggestion favored Inertia; this decision supersedes it after reading the full spec.)
+
+### ADR-4 Authentication: server-side sessions
+
+Opaque random session ID (256-bit) in an `HttpOnly; Secure; SameSite=Lax` cookie. Session rows live in PostgreSQL (`user_sessions`), hashed, with idle (12 h) and absolute (7 days) expiry and a Redis cache. CSRF: synchronizer token returned by `GET /api/v1/auth/session` and required in `X-CSRF-Token` on every unsafe method. JWTs are not used: revocation and "log out everywhere" are simpler with server sessions.
+
+### ADR-5 Tenant in the URL path
+
+Tenant-scoped routes are `/api/v1/orgs/{orgId}/...`. Middleware loads the membership for `(user, orgId)`; no membership → `404` (not `403`, to avoid leaking existence). The resolved `TenantContext{OrgID, UserID, Role, Permissions}` is put on `context.Context`. Handlers never read an org ID from a body.
+
+### ADR-6 Defense in depth with PostgreSQL RLS
+
+- The application connects as role `app_rw`, which is **not** the table owner and does **not** have `BYPASSRLS`. Every tenant table has `ENABLE` + `FORCE ROW LEVEL SECURITY`.
+- Every transaction that touches tenant data starts with `SELECT set_config('app.org_id', $1, true)` (transaction-local). The policy is `org_id = current_setting('app.org_id', true)::uuid`. If the setting is missing, the comparison is `NULL`, so **no rows are visible** (fail closed).
+- Child tables carry `org_id` too and use **composite foreign keys** `(org_id, parent_id) → parent(org_id, id)`, so a row can never point at another tenant's row even if application code is wrong.
+- A small set of system jobs needs cross-tenant reads (e.g., "find credentials expiring in 30 min"). They use a separate role `app_system` with `BYPASSRLS`, a separate connection pool, and only the queries in `internal/platform/systemdb`. Lint rule: no other package may import it.
+
+Details in [database.md](database.md#tenant-isolation).
+
+**Limits found while testing (Phase 1):** RLS stops queries that run with a missing or wrong tenant scope, but it cannot catch an *authorization* bug where the code sets the scope to an org the caller does not belong to. A mutation test (removing the membership check) confirmed this: RLS alone let a user of org B read and delete org A. The membership check in `tenancy.ResolveTenant` is therefore the primary control, and the HTTP isolation suite (`internal/app/isolation_test.go`) is what guards it. `users`, `user_sessions` and `user_tokens` are global (not tenant-owned) and have no RLS; access to them is limited to the identity module's queries.
+
+### ADR-7 Database is the source of truth for workflows
+
+Workflow and step state live in PostgreSQL. Asynq tasks only carry `(run_id, step_id, attempt_token)`. A sweeper re-enqueues steps that are runnable but have no live task. See [workflow-design.md](workflow-design.md).
+
+### ADR-8 Secrets and token encryption
+
+Envelope encryption: a per-row data key (AES-256-GCM) wrapped by a versioned key-encryption key (KEK). KEKs come from a `KeyProvider` interface: `env` (development), `file` (Docker secret) and later AWS KMS / Vault Transit. Ciphertext stores `kek_id`, so KEK rotation is a background re-wrap job. AAD binds ciphertext to `(table, row id, column)` so it cannot be swapped between rows. Details in [shopee-integration.md](shopee-integration.md#5-token-storage-and-encryption).
+
+### ADR-9 Browser automation through an extension
+
+Operations without an Open API run in a Manifest V3 extension inside the seller's own browser, not in a server-side headless browser. The seller is logged in on their own device, so the platform never stores Shopee sessions, OTP and verification happen naturally, and tenant isolation comes for free. The extension only performs UI actions from signed declarative recipes, checks the logged-in shop ID before writing, and stops on any security challenge. Trade-off: no unattended runs. This deviates from master spec §10 (server-side Playwright worker); Playwright is used to test the extension. Details: [browser-extension.md](browser-extension.md).
+
+### ADR-10 Observability
+
+`log/slog` JSON handler with a redaction layer (field allowlist for known-sensitive keys: `access_token`, `refresh_token`, `partner_key`, `sign`, `code`, `password`, `authorization`, `cookie`). OpenTelemetry SDK for traces and metrics → OTLP → collector. Trace ID is propagated into Asynq task headers and the browser worker.
+
+## 3. Repository layout
+
+```
+.
+├── cmd/
+│   ├── api/            # HTTP server main
+│   ├── worker/         # Asynq worker (+ -scheduler)
+│   ├── admin/          # operator CLI: promote platform admins, generate keys
+│   └── migrate/        # goose runner
+├── internal/
+│   ├── app/            # route table + wiring; HTTP integration, isolation and contract tests
+│   ├── platform/       # infrastructure, no business rules
+│   │   ├── apperr/     # transport-independent errors
+│   │   ├── authctx/    # principal + tenant carried in context
+│   │   ├── securetoken/ # random tokens and their stored hashes
+│   │   ├── validate/   # input validation helpers
+│   │   ├── reqmeta/    # request ID, IP, user agent in context
+│   │   ├── ratelimit/  # Redis fixed-window limiter
+│   │   ├── mailer/     # SMTP / log / in-memory mailers
+│   │   ├── testdb/     # throwaway migrated database per test
+│   │   ├── config/     # env parsing + validation
+│   │   ├── db/         # pgxpool, tx helper (sets app.org_id), sqlc output
+│   │   ├── queue/      # Asynq enqueuer, handler mux, inline queue for tests
+│   │   ├── envelope/   # envelope encryption (AES-256-GCM, keyring)
+│   │   ├── httpx/      # router, middleware, error envelope, validation
+│   │   ├── logx/       # slog setup + redaction
+│   │   ├── otel/       # tracer/meter setup
+│   │   ├── storage/    # S3 client, presigned URLs
+│   │   └── clock/      # injectable time
+│   ├── identity/       # users, sessions, password hashing
+│   ├── tenancy/        # organizations, members, invitations, TenantContext
+│   ├── rbac/           # roles, permissions, policy checks
+│   ├── audit/          # append-only audit log
+│   ├── shopee/         # Shopee Open Platform client (anti-corruption layer):
+│   │   │               # transport, retries, error normalization, endpoints, auth link, push check
+│   │   ├── signer/     # HMAC-SHA256 base-string signing
+│   │   └── shopeefake/ # test double of the documented endpoints (tests only)
+│   ├── shops/          # partner apps, connections, credentials, OAuth, refresh, sync, webhooks
+│   ├── capability/     # capability resolver (pure)
+│   ├── templates/      # templates, versions, overrides, diff, validation
+│   ├── products/       # catalog, variations, images, mappings
+│   ├── imports/        # CSV/XLSX parsing, row validation, batches
+│   ├── workflow/       # engine: definitions, runs, steps, approvals, events
+│   ├── workflows/      # concrete workflows: shopsetup, productimport
+│   ├── browsertask/    # extension API, devices, recipes, browser tasks
+│   └── notifications/  # in-app + email
+├── db/
+│   ├── migrations/     # goose SQL files
+│   └── queries/        # sqlc query files per module
+├── api/openapi.yaml    # source of truth for the HTTP contract
+├── web/                # Nuxt 3 dashboard
+├── browser-extension/  # MV3 extension (WXT, Vue popup, recipe runner)
+├── deploy/
+│   ├── docker-compose.yml
+│   ├── nginx/
+│   └── otel-collector.yaml
+├── docs/
+└── .github/workflows/
+```
+
+Each business module follows the same internal shape (kept small; no layer for its own sake):
+
+```
+internal/templates/
+  service.go      # use cases; takes interfaces it needs
+  model.go        # domain types + invariants (pure Go)
+  repo.go         # sqlc-backed repository
+  http.go         # thin handlers: decode → validate → service → encode
+  diff.go         # pure logic, heavily unit-tested
+  *_test.go
+```
+
+## 4. Module boundaries and dependency map
+
+Rules:
+
+1. Business modules may depend on `platform/*` and on other modules' **service interfaces**, never on their repositories or SQL.
+2. `shopee` is an anti-corruption layer. It knows Shopee payloads; nothing outside `shopee`, `shops` and the step executors uses Shopee types. Products and templates map to and from Shopee through explicit mappers.
+3. `workflow` (engine) knows nothing about Shopee or templates. Concrete workflows in `workflows/*` register step handlers.
+4. No cycles. Enforced in CI with `go-arch-lint` (or a small `go list` script).
+
+```mermaid
+flowchart TD
+  subgraph platform[platform]
+    config; db; queue; envelope; httpx; logx; otel; storage
+  end
+  identity --> db
+  tenancy --> identity
+  rbac --> tenancy
+  audit --> db
+  shopee --> envelope
+  shopee --> otel
+  shops --> shopee
+  shops --> tenancy
+  shops --> audit
+  shops --> capability
+  templates --> capability
+  templates --> shops
+  products --> shops
+  imports --> products
+  imports --> storage
+  workflow --> queue
+  workflow --> db
+  workflows --> workflow
+  workflows --> templates
+  workflows --> products
+  workflows --> capability
+  workflows --> browsertask
+  browsertask --> storage
+  notifications --> tenancy
+  httpapi[cmd/api wiring] --> identity & tenancy & rbac & shops & templates & products & imports & workflow & browsertask
+```
+
+Wiring is manual constructor injection in `cmd/*/main.go` (no DI framework).
+
+## 5. Request lifecycle
+
+1. Nginx terminates TLS, applies body size limits, forwards `X-Request-ID`.
+2. Middleware chain: recover → request ID → OTel span → structured access log → rate limit (Redis, per IP and per user) → session auth → CSRF check (unsafe methods) → tenant resolution (if `/orgs/{orgId}`) → permission check (declared per route).
+3. Handler decodes JSON with `DisallowUnknownFields`, validates, calls the service.
+4. Service opens a transaction through `db.InTenantTx(ctx, orgID, fn)`, which sets `app.org_id` and writes the audit entry in the **same transaction** as the change.
+5. Errors map to a single envelope (see [api-design.md](api-design.md#error-format)).
+
+## 6. Security risk assessment
+
+Likelihood × impact on a 1–3 scale. "Score" = L × I.
+
+| # | Threat | L | I | Score | Mitigations |
+|---|---|---|---|---|---|
+| R1 | Cross-tenant data access via IDOR or missing filter | 2 | 3 | 6 | Org in path + membership check; RLS with FORCE; composite FKs; automated cross-tenant test suite that calls every endpoint with a foreign org's IDs |
+| R2 | Shopee token theft (DB dump, logs, backups) | 2 | 3 | 6 | Envelope encryption, KEK outside DB, log redaction, backups encrypted, tokens never sent to the frontend |
+| R3 | Refresh-token race loses the only valid token → forced re-auth | 3 | 2 | 6 | Per-shop row lock + single-flight refresh; persist before use; alert on `RECONNECT_REQUIRED` |
+| R4 | Shopee treats extension automation as a policy violation | 2 | 2 | 4 | UI actions only, no internal API calls, no data collection, seller present and confirms, no CAPTCHA/OTP bypass; per-capability kill switch |
+| R5 | Forged Shopee webhooks | 2 | 2 | 4 | Verify `Authorization` HMAC over `url|body`; constant-time compare; optional source IP check against `public.get_shopee_ip_ranges`; dedupe |
+| R6 | OAuth callback CSRF / shop bound to attacker's org | 2 | 3 | 6 | Signed, single-use `state` tied to org + user + expiry (10 min); callback requires the same logged-in user |
+| R7 | Malicious import files (XLSX zip bombs, formula injection in exported reports, malware images) | 2 | 2 | 4 | Size and row caps, streaming parser with decompression limits, image re-encoding, ClamAV scan, CSV export escapes leading `= + - @` |
+| R8 | SSRF via image URLs in imports | 2 | 3 | 6 | Download through a fetcher that blocks private/link-local ranges, re-resolves DNS, caps size/time, allowlists `https` |
+| R9 | Session hijack / CSRF on dashboard | 1 | 3 | 3 | HttpOnly/Secure cookies, CSRF token, strict CSP, rotate session on login and privilege change |
+| R10 | Privilege escalation through role management | 1 | 3 | 3 | Cannot grant above own role; last-owner guard; audit; tests |
+| R11 | Duplicate products on Shopee from retries | 3 | 2 | 6 | Outbox state per product, reconcile by `item_sku` via `search_item` before re-create |
+| R12 | Browser artifacts leak PII (screenshots of orders, addresses) | 2 | 2 | 4 | Only for gated capabilities; mask selectors; encrypted bucket; 14-day lifecycle rule; access audited |
+| R13 | Queue poisoning / unauthorized task injection | 1 | 3 | 3 | Redis on private network with ACL + password + TLS; tasks contain only IDs; worker re-reads state from DB and re-checks org |
+| R14 | Exceeding Shopee rate limits → app throttled for all tenants | 2 | 2 | 4 | Per-partner-app and per-shop token buckets in Redis; backoff on throttling; fair scheduling across orgs |
+| R16 | Stolen extension device token or tampered recipe used to change a shop | 1 | 3 | 3 | Token scoped to user+org, hashed, revocable, rotated; recipes Ed25519-signed; shop-ID check before writes; seller must click Run |
+| R15 | Data retention/privacy non-compliance (PDPA, VN Decree 13) | 2 | 2 | 4 | Store only data needed; retention jobs; delete on disconnect + 14-day purge per Shopee ToS §termination |
+
+## 7. Deployment (initial)
+
+Docker Compose for local development and a single-host staging setup: `nginx`, `api`, `worker`, `scheduler`, `postgres:17`, `redis:7`, `minio`, `otel-collector`, `mailpit` (dev only), `clamav`. Production target is the same images on a managed container platform with managed Postgres and Redis (decided in Phase 8).
+
+## 8. Phase 1 implementation notes
+
+| Topic | As built |
+|---|---|
+| Processes | Only `cmd/api` and `cmd/migrate` exist. `cmd/worker` arrives with Asynq in Phase 2/4. |
+| Email | Sent synchronously after the transaction commits; failures are logged. Moves to a retried Asynq job in Phase 4. |
+| Passwords | Argon2id (m=19 MiB, t=2, p=1), PHC string, transparent rehash on login. Breached-password range check is deferred to Phase 8; a small denylist is used now. |
+| Local ports | Postgres 5433 and dashboard 3100, because 5432 and 3000 are used by other projects on the development machine. |
+| Tracing in dev | Jaeger all-in-one receives OTLP directly (UI on :16686) instead of an OTel Collector. |
+| OpenAPI | 3.0.3 instead of 3.1, so `kin-openapi` can validate every test response. |
+| CSP | The dashboard's CSP hashes Nuxt's inline config script at build time (`web/scripts/csp.mjs`) instead of allowing `'unsafe-inline'` scripts. |
+
+## 9. Phase 2 implementation notes
+
+| Topic | As built |
+|---|---|
+| Packages | `shopee` is one package (client, endpoints, errors, auth link, push check) plus `shopee/signer`; the planned `client/oauth/api` split was not worth it at this size. Webhooks live in `shops` because they only change shop connections. `capability` is a pure resolver; `shops` loads the registry and calls it. |
+| Encryption | `platform/envelope`: one random data key per row, AES-256-GCM, wrapped by a KEK from `ENCRYPTION_KEYS` (`id:base64`, several allowed for rotation, `ENCRYPTION_ACTIVE_KEY` picks one). AAD binds table, row and column. Used for `shop_credentials`, `shopee_apps.partner_key_enc` and pending main-account tokens in `oauth_states`. KMS/Vault providers come later behind the same keyring. |
+| Cross-tenant lookups | The worker opens a second pool as `app_system` (BYPASSRLS) with column-level `SELECT` grants only: it can find which org owns a Shopee shop and which credentials are due, but cannot read tokens, keys or names, and cannot write. All writes happen in tenant-scoped transactions as `app_rw`. A test checks the grants. |
+| Token refresh | Row lock on the credential (`SELECT … FOR UPDATE`) held across the Shopee call (10 s timeout). Concurrent callers wait and then see the new token; a test runs 50 callers and expects exactly one upstream refresh. Definitive rejection → `RECONNECT_REQUIRED`; temporary or ambiguous failure → tokens kept, failure counted, retried by the queue. |
+| Background work | `cmd/worker` (Asynq). Tasks carry IDs only: `shop:sync`, `shopee:token_refresh`, `webhook:process`. With `-scheduler`: due-refresh scan every 5 minutes, webhook sweep every 2 minutes. The API only enqueues. Tests use `queue.Inline`, which runs handlers synchronously. |
+| OAuth callback | `GET /api/v1/oauth/shopee/callback` is a browser redirect target, so it loads the session but has no CSRF check; protection is the single-use `state` bound to org + user, 10-minute expiry, and a fresh permission check. Without a session it redirects to `/login?next=…` and the state stays usable. |
+| Webhooks | `POST /api/v1/webhooks/shopee/{appID}` is mounted outside the API sub-router (no origin check, no session). Signature over `push_callback_url + "\|" + body`; stored with SHA-256 dedupe; `204` with an empty body; processed by the worker. |
+| Dashboard CSP | `img-src` allows `https:` for shop logos served from per-market Shopee CDNs. |
+
+## 10. Conventions
+
+- Go: `gofmt`, `go vet`, `golangci-lint` (errcheck, staticcheck, gosec, revive, contextcheck). `context.Context` is the first parameter of every function that does I/O.
+- Errors: wrap with `%w`; domain errors are typed (`ErrNotFound`, `ErrConflict`, `ValidationError`) and mapped to HTTP only in `httpx`.
+- Time: UTC everywhere; `clock.Clock` injected for tests.
+- IDs: UUIDv7 (time-ordered, index-friendly) generated in Go.
+- Money: `numeric(14,2)` in DB, `decimal` type in Go (`shopspring/decimal`), never `float64`. Converted to Shopee's `float` only in the mapper.
+- TypeScript: `strict: true`, no `any` without a comment, API types generated from `api/openapi.yaml`.
+- Commits: Conventional Commits.

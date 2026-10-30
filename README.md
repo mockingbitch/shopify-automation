@@ -1,0 +1,22 @@
+# Shopee Shop Automation
+
+Multi-tenant SaaS for configuring many Shopee shops from reusable templates, using the Shopee Open Platform API, and a browser extension for operations that have no API.
+
+Status:
+- **Phase 1 (foundation) complete**: accounts, organizations, members, invitations, roles, audit log, tenant isolation, dashboard shell.
+- **Phase 2 (Shopee integration) complete against the documented API**: partner apps, OAuth connect and reconnect (including main accounts), encrypted tokens with safe refresh, shop sync, authorization webhooks, capability registry, shop pages. Not yet exercised against the real Shopee sandbox (needs S-1, see [docs/roadmap.md](docs/roadmap.md)).
+
+Quick start: see [docs/development.md](docs/development.md).
+
+| Document | Contents |
+|---|---|
+| [docs/requirements.md](docs/requirements.md) | Requirements, discovery findings, assumptions, open questions |
+| [docs/architecture.md](docs/architecture.md) | Architecture, decisions, module map, security risk assessment |
+| [docs/database.md](docs/database.md) | ERD, constraints, row-level security, migrations, backups |
+| [docs/api-design.md](docs/api-design.md) | REST conventions, error format, permissions, endpoint catalog |
+| [docs/workflow-design.md](docs/workflow-design.md) | Workflow engine, state machines, idempotency, SHOP_SETUP |
+| [docs/shopee-integration.md](docs/shopee-integration.md) | Verified Shopee API facts, signing, tokens, webhooks, capability matrix |
+| [docs/browser-extension.md](docs/browser-extension.md) | Browser extension for Seller Centre operations without an API |
+| [docs/roadmap.md](docs/roadmap.md) | Phases, task breakdowns, pending decisions |
+| [docs/development.md](docs/development.md) | Local setup, commands, conventions |
+| [api/openapi.yaml](api/openapi.yaml) | HTTP API contract |
