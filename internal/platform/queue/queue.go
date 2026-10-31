@@ -28,6 +28,7 @@ const (
 	TypeImport          = "products:import"
 	TypeMailSend        = "mail:send"
 	TypeMailSweep       = "mail:sweep"
+	TypeOrgPurge        = "maintenance:org_purge"
 )
 
 // Options controls one enqueue.

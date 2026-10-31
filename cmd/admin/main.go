@@ -3,6 +3,9 @@
 //	admin promote -email user@example.com   grant platform admin
 //	admin demote  -email user@example.com   revoke platform admin
 //	admin gen-key                           print a new encryption key
+//	admin gen-recipe-key                    print a recipe signing key pair
+//	admin rewrap                            re-seal data keys under the active KEK
+//	admin purge-orgs                        purge organizations past ORG_RETENTION
 package main
 
 import (
@@ -13,13 +16,18 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"shopee-automation/internal/platform/config"
+	"shopee-automation/internal/platform/db"
 	"shopee-automation/internal/platform/envelope"
+	"shopee-automation/internal/platform/maintenance"
+	"shopee-automation/internal/platform/storage"
 )
 
 func main() {
@@ -31,11 +39,56 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: admin promote|demote -email <email> | gen-key | gen-recipe-key")
+		return errors.New("usage: admin promote|demote -email <email> | gen-key | gen-recipe-key | rewrap | purge-orgs")
 	}
 	switch args[0] {
 	case "gen-key":
 		fmt.Println(envelope.GenerateKey())
+		return nil
+	case "rewrap", "purge-orgs":
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		cfg, err := config.Load(os.Getenv)
+		if err != nil {
+			return err
+		}
+		if cfg.DatabaseSystemURL == "" {
+			return errors.New("DATABASE_SYSTEM_URL is required")
+		}
+		system, err := db.Open(ctx, cfg.DatabaseSystemURL)
+		if err != nil {
+			return err
+		}
+		defer system.Close()
+		log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+		if args[0] == "rewrap" {
+			keys, err := envelope.ParseKeyring(cfg.EncryptionKeys, cfg.EncryptionActiveKey)
+			if err != nil {
+				return err
+			}
+			n, err := maintenance.RewrapKeys(ctx, system, keys)
+			for t, c := range n {
+				fmt.Printf("%s: %d rows re-wrapped under %s\n", t, c, keys.ActiveID())
+			}
+			return err
+		}
+		store, err := storage.NewS3(ctx, storage.Config{Endpoint: cfg.S3Endpoint, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey,
+			Bucket: cfg.S3Bucket, Region: cfg.S3Region, UseSSL: cfg.S3UseSSL})
+		if err != nil {
+			return err
+		}
+		total := 0
+		for {
+			n, err := maintenance.PurgeOrganizations(ctx, system, store, time.Now(), cfg.OrgRetention, log)
+			total += n
+			if err != nil {
+				return err
+			}
+			if n < 20 {
+				break
+			}
+		}
+		fmt.Printf("%d organizations purged\n", total)
 		return nil
 	case "gen-recipe-key":
 		// The seed goes to RECIPE_SIGNING_KEY on the server; the public key
@@ -63,7 +116,10 @@ func run(args []string) error {
 }
 
 func setAdmin(email string, admin bool) error {
-	url := os.Getenv("DATABASE_URL")
+	url, err := config.Secret(os.Getenv, "DATABASE_URL")
+	if err != nil {
+		return err
+	}
 	if url == "" {
 		return errors.New("DATABASE_URL is required")
 	}

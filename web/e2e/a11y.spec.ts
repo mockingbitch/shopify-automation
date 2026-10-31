@@ -59,9 +59,9 @@ test('main pages have no WCAG A/AA violations', async ({ page, request }) => {
   for (const [name, path] of [
     ['overview', ''], ['organizations', '/../'], ['shops', '/shops'], ['templates', '/templates'], ['products', '/products'],
     ['new product', '/products/new'], ['imports', '/imports'], ['workflows', '/workflows'], ['logs', '/logs'],
-    ['extension', '/extension'], ['members', '/members'], ['settings', '/settings'], ['audit', '/audit'],
+    ['extension', '/extension'], ['account', '/../../account'], ['members', '/members'], ['settings', '/settings'], ['audit', '/audit'],
   ] as const) {
-    await page.goto(name === 'organizations' ? '/orgs' : `${base}${path}`)
+    await page.goto(name === 'organizations' ? '/orgs' : name === 'account' ? '/account' : `${base}${path}`)
     await audit(page, name, found)
   }
   await page.goto(base)

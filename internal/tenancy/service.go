@@ -42,6 +42,9 @@ type Service struct {
 // rejected so that settings stay a typed contract.
 type Settings struct {
 	AllowSelfApproval bool `json:"allow_self_approval"`
+	// RequireMFA makes two-step verification mandatory for owners and
+	// admins of the organization.
+	RequireMFA bool `json:"require_mfa"`
 }
 
 // Org is the API view of an organization.
@@ -168,10 +171,11 @@ func (s *Service) ResolveTenant(ctx context.Context, userID, orgID uuid.UUID) (a
 		if err != nil {
 			return err
 		}
-		if _, err := q.GetOrganization(ctx, orgID); err != nil {
+		o, err := q.GetOrganization(ctx, orgID)
+		if err != nil {
 			return err
 		}
-		t = authctx.Tenant{OrgID: orgID, MemberID: m.ID, Role: rbac.Role(m.RoleKey)}
+		t = authctx.Tenant{OrgID: orgID, MemberID: m.ID, Role: rbac.Role(m.RoleKey), MFARequired: toOrg(o).Settings.RequireMFA}
 		return nil
 	})
 	if db.IsNoRows(err) {
@@ -216,6 +220,10 @@ func (s *Service) UpdateOrg(ctx context.Context, p authctx.Principal, t authctx.
 	}
 	if err := v.Err(); err != nil {
 		return Org{}, err
+	}
+	if in.Settings != nil && in.Settings.RequireMFA && !p.MFAEnabled {
+		return Org{}, apperr.Invalid(apperr.FieldError{Field: "settings.require_mfa", Code: "mfa_required",
+			Message: "Turn on two-step verification for your own account first."})
 	}
 	if ifMatch == "" {
 		return Org{}, apperr.PreconditionFailed("If-Match header is required.")

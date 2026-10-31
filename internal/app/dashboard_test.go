@@ -3,6 +3,7 @@ package app_test
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,9 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"shopee-automation/internal/platform/db"
+	"shopee-automation/internal/platform/envelope"
+	"shopee-automation/internal/platform/maintenance"
+	"shopee-automation/internal/platform/testdb"
 	"shopee-automation/internal/shopee/shopeefake"
 )
 
@@ -300,4 +304,130 @@ func TestExtensionRelease(t *testing.T) {
 		t.Fatalf("release counted as failure: %+v", recipes)
 	}
 	e.extMust(200, b.token, "POST", "/ext/tasks/"+id+"/claim", nil)
+}
+
+// A deleted organization is purged after the retention period: every row
+// in tenant tables and every stored file. Audit logs stay.
+func TestPurgeDeletedOrganization(t *testing.T) {
+	e := newEnv(t)
+	e.requireSystem()
+	e.setupApp()
+	setupShopForWorkflow(e, 881, "Shop")
+	owner := e.signUp("owner@a.example", "Owner").noRedirect()
+	org := owner.createOrg("Org A", "org-a")
+	shop := e.connectShop(owner, org, 881)
+	tpl, v := publishTemplate(t, owner, org, map[string]any{"description": map[string]any{"text": "New"}})
+	owner.must(202, "POST", "/orgs/"+org+"/templates/"+tpl+"/versions/"+v+"/apply", map[string]any{"shop_ids": []string{shop}})
+	createProduct(owner, org, baseProduct("P-1"), true)
+	other := e.signUp("other@b.example", "Other")
+	orgB := other.createOrg("Org B", "org-b")
+	createProduct(other, orgB, baseProduct("P-B"), true)
+	if len(e.store.Keys("orgs/"+org+"/")) == 0 {
+		t.Fatal("no stored files to purge")
+	}
+	owner.must(204, "DELETE", "/orgs/"+org, map[string]string{"confirm_slug": "org-a"})
+
+	ctx := context.Background()
+	if n, err := maintenance.PurgeOrganizations(ctx, e.system, e.store, time.Now(), 30*24*time.Hour, slog.New(slog.DiscardHandler)); err != nil || n != 0 {
+		t.Fatalf("purged inside retention: %d %v", n, err)
+	}
+	if n, err := maintenance.PurgeOrganizations(ctx, e.system, e.store, time.Now().Add(31*24*time.Hour), 30*24*time.Hour, slog.New(slog.DiscardHandler)); err != nil || n != 1 {
+		t.Fatalf("purge: %d %v", n, err)
+	}
+	if k := e.store.Keys("orgs/" + org + "/"); len(k) != 0 {
+		t.Fatalf("files left: %v", k)
+	}
+	if len(e.store.Keys("orgs/"+orgB+"/")) == 0 {
+		t.Fatal("other org's files deleted")
+	}
+	orgID := uuid.MustParse(org)
+	// Count rows of org A in every table with org_id, as the owner role.
+	owners, err := pgx.Connect(ctx, testdb.OwnerURL(t, e.db))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = owners.Close(ctx) }()
+	rows, err := owners.Query(ctx, `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition
+		  AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'org_id' AND NOT a.attisdropped)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tables, _ := pgx.CollectRows(rows, pgx.RowTo[string])
+	for _, tbl := range tables {
+		var n int
+		// The owner role is subject to forced RLS; disable it for the count.
+		if _, err := owners.Exec(ctx, "SET row_security = off"); err != nil {
+			t.Fatal(err)
+		}
+		if err := owners.QueryRow(ctx, "SELECT count(*) FROM "+tbl+" WHERE org_id = $1", orgID).Scan(&n); err != nil {
+			t.Fatalf("%s: %v", tbl, err)
+		}
+		if tbl == "audit_logs" {
+			if n == 0 {
+				t.Error("audit history was deleted")
+			}
+			continue
+		}
+		if n != 0 {
+			t.Errorf("%s: %d rows of the purged org left", tbl, n)
+		}
+	}
+	var orgs int
+	_ = owners.QueryRow(ctx, "SELECT count(*) FROM organizations WHERE id = $1", orgID).Scan(&orgs)
+	if orgs != 0 {
+		t.Fatal("organization row left")
+	}
+	other.must(200, "GET", "/orgs/"+orgB+"/products", nil)
+}
+
+// KEK rotation re-seals every data key under the new key; afterwards the
+// data opens with the new key alone.
+func TestRewrapKeys(t *testing.T) {
+	e := newEnv(t)
+	e.requireSystem()
+	e.setupApp()
+	e.fake.AddShop(shopeefake.Shop{ID: 891, Name: "Shop", Region: "VN"})
+	owner := e.signUp("owner@a.example", "Owner").noRedirect()
+	org := owner.createOrg("Org A", "org-a")
+	e.connectShop(owner, org, 891)
+
+	newKey := make([]byte, 32)
+	for i := range newKey {
+		newKey[i] = byte(i + 7)
+	}
+	both, err := envelope.NewKeyring("t2", map[string][]byte{"t1": e.kek, "t2": newKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	n, err := maintenance.RewrapKeys(ctx, e.system, both)
+	if err != nil || n["shopee_apps"] != 1 || n["shop_credentials"] != 1 {
+		t.Fatalf("rewrap: %v %v", n, err)
+	}
+	if again, err := maintenance.RewrapKeys(ctx, e.system, both); err != nil || again["shop_credentials"] != 0 {
+		t.Fatalf("second run should be a no-op: %v %v", again, err)
+	}
+	onlyNew, _ := envelope.NewKeyring("t2", map[string][]byte{"t2": newKey})
+	var id string
+	var kek string
+	var wrapped, tokenEnc []byte
+	if err := e.db.Tx(ctx, db.Scope{OrgID: uuid.MustParse(org)}, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, "SELECT shop_connection_id::text, kek_id, dek_wrapped, access_token_enc FROM shop_credentials LIMIT 1").
+			Scan(&id, &kek, &wrapped, &tokenEnc)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	row, err := onlyNew.OpenRow("shop_credentials", id, envelope.WrappedKey{KEKID: kek, DEK: wrapped})
+	if err != nil || kek != "t2" {
+		t.Fatalf("open with the new key: %s %v", kek, err)
+	}
+	if tok, err := row.Open("access_token", tokenEnc); err != nil || len(tok) == 0 {
+		t.Fatalf("token after rotation: %v", err)
+	}
+	// A keyring without the old key reports the rows it cannot rewrap.
+	bad, _ := envelope.NewKeyring("t3", map[string][]byte{"t3": newKey})
+	if _, err := maintenance.RewrapKeys(ctx, e.system, bad); err == nil || !strings.Contains(err.Error(), "ENCRYPTION_KEYS") {
+		t.Fatalf("missing key: %v", err)
+	}
 }

@@ -501,6 +501,23 @@ func (q *Queries) ResetSucceededStep(ctx context.Context, arg ResetSucceededStep
 	return err
 }
 
+const runningStepsForOrg = `-- name: RunningStepsForOrg :one
+SELECT count(*) FROM workflow_steps s
+WHERE s.org_id = $1 AND s.status = 'RUNNING' AND s.lease_expires_at > $2::timestamptz
+`
+
+type RunningStepsForOrgParams struct {
+	OrgID uuid.UUID
+	Now   time.Time
+}
+
+func (q *Queries) RunningStepsForOrg(ctx context.Context, arg RunningStepsForOrgParams) (int64, error) {
+	row := q.db.QueryRow(ctx, runningStepsForOrg, arg.OrgID, arg.Now)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const setStepStatus = `-- name: SetStepStatus :one
 UPDATE workflow_steps SET status = $1, lease_token = NULL, lease_expires_at = NULL,
   next_attempt_at = $2, output = COALESCE($3, output),

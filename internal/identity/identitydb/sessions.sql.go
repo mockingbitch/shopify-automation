@@ -44,7 +44,8 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 }
 
 const getActiveSessionByTokenHash = `-- name: GetActiveSessionByTokenHash :one
-SELECT s.id, s.user_id, s.token_hash, s.csrf_secret, s.ip, s.user_agent, s.created_at, s.last_seen_at, s.idle_expires_at, s.absolute_expires_at, s.revoked_at, u.id, u.email, u.password_hash, u.display_name, u.is_platform_admin, u.email_verified_at, u.created_at, u.updated_at, u.deleted_at
+SELECT s.id, s.user_id, s.token_hash, s.csrf_secret, s.ip, s.user_agent, s.created_at, s.last_seen_at, s.idle_expires_at, s.absolute_expires_at, s.revoked_at, u.id, u.email, u.password_hash, u.display_name, u.is_platform_admin, u.email_verified_at, u.created_at, u.updated_at, u.deleted_at,
+  EXISTS (SELECT 1 FROM user_mfa m WHERE m.user_id = u.id AND m.confirmed_at IS NOT NULL) AS mfa_enabled
 FROM user_sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = $1
@@ -62,6 +63,7 @@ type GetActiveSessionByTokenHashParams struct {
 type GetActiveSessionByTokenHashRow struct {
 	UserSession UserSession
 	User        User
+	MfaEnabled  bool
 }
 
 func (q *Queries) GetActiveSessionByTokenHash(ctx context.Context, arg GetActiveSessionByTokenHashParams) (GetActiveSessionByTokenHashRow, error) {
@@ -88,6 +90,7 @@ func (q *Queries) GetActiveSessionByTokenHash(ctx context.Context, arg GetActive
 		&i.User.CreatedAt,
 		&i.User.UpdatedAt,
 		&i.User.DeletedAt,
+		&i.MfaEnabled,
 	)
 	return i, err
 }

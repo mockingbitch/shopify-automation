@@ -1,0 +1,1 @@
+postgres://app_owner:REPLACE_ME@db.example.internal:5432/shopee_automation?sslmode=verify-full

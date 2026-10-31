@@ -29,8 +29,8 @@ Deferred from Phase 1, tracked for later phases:
 | Item | Moves to |
 |---|---|
 | Emails through a retried background job | Done in Phase 7 (`notify.Outbox`) |
-| Breached-password check (k-anonymity range API) | Phase 8 |
-| TOTP / MFA (Q-5) | Phase 8 |
+| Breached-password check (k-anonymity range API) | Done in Phase 8 |
+| TOTP / MFA (Q-5) | Done in Phase 8 |
 | Platform admin endpoints (`/admin/*`) | Done in Phase 2 (`/admin/shopee-apps`) |
 | Job that creates future `audit_logs` partitions | Done in Phase 4; purge of deleted organizations moved to Phase 8 |
 | Resend verification email endpoint | Done in Phase 2 |
@@ -77,7 +77,7 @@ Deferred from Phase 2:
 | Admin UI for capability overrides (table and resolver exist) | Done in Phase 7 |
 | Notifications for `RECONNECT_REQUIRED` / expiring authorizations (shown in the dashboard today) | Phase 4 (notifications) |
 | Daily `public.get_shops_by_partner` reconciliation and `push.get_lost_push_message` recovery | Phase 4 (scheduler) |
-| KEK rotation job (`envelope.Keyring.Rewrap` exists) | Phase 8 |
+| KEK rotation job (`envelope.Keyring.Rewrap` exists) | Done in Phase 8 |
 | Trace propagation into task headers | Phase 4 |
 
 Goal: an admin registers a Shopee partner app, an org admin connects a shop through OAuth, tokens are stored encrypted and refreshed safely, the shop profile is synced, webhooks for authorization changes are processed, and every shop shows its resolved capabilities. Everything is tested against an in-process fake of the documented Shopee responses; nothing is `SANDBOX-VERIFIED` until S-1 is done.
@@ -183,7 +183,7 @@ Deferred from Phase 5:
 | Channels with `fee_type = SIZE_SELECTION` (need a `size_id` per item) | Later; needs a product decision |
 | Updating items that already exist on Shopee (price, stock, description); deleting items | Later phase (sync) |
 | Pre-order (`pre_order.days_to_ship`), wholesale, video, size chart, GTIN | Later |
-| Malware scanning of uploaded images beyond decode/re-encode | Phase 8 |
+| Malware scanning of uploaded images beyond decode/re-encode | Done in Phase 8 |
 | Item-level rate limiting across runs (`add_item` quotas per shop) | Phase 8 (load tests) |
 
 Goal: products can be created by hand or imported from CSV/XLSX, validated row by row, and published to shops by a PRODUCT_PUBLISH workflow that never creates a duplicate on Shopee, with a per-shop mapping to Shopee item and model IDs and a downloadable report.
@@ -263,7 +263,37 @@ Deferred from Phase 7:
 | Live updates (server-sent events) instead of polling | Phase 8 if load tests show polling is too costly |
 | Manual screen-reader pass (NVDA/VoiceOver) beyond the automated audit | Before production |
 
-## 9. Definition of done (every phase)
+## 9. Phase 8 task breakdown
+
+**Status (2026-10-31): done locally.** Not deployed: no production environment exists yet (the managed-platform choice is open).
+
+| # | Task | Result |
+|---|---|---|
+| 8.1 | Two-step verification (Q-5) | TOTP + recovery codes, two-step sign-in, per-org requirement for owners/admins, mandatory for platform admins in production; dashboard account page and settings |
+| 8.2 | Breached passwords | k-anonymity range check on sign-up and reset (`PWNED_PASSWORDS_URL`) |
+| 8.3 | KEK rotation | `admin rewrap` |
+| 8.4 | Purge of deleted organizations | Hourly job + `admin purge-orgs`; files, events, rows; audit kept |
+| 8.5 | Per-org concurrency | `WORKFLOW_ORG_CONCURRENCY` |
+| 8.6 | Malware scanning | Optional clamd scan of uploads (fails closed) |
+| 8.7 | Security checks | `govulncheck`: 0 reachable after Go 1.27.3 and the excelize fix; `npm audit`: extension 0; dashboard findings are build-tool only (see architecture.md §15) |
+| 8.8 | Load tests (`cmd/loadtest`) | 500 orgs / 5,000 shops / 25,000 products / 10,000 runs: 50 users, ~5,000 requests/s, p95 15 ms, p99 19 ms, 0 errors (NFR-1, NFR-5). 10,000-row import parsed and validated in 6.1 s (NFR-6; image downloads not included). Single dev machine, Postgres and Redis in Docker. |
+| 8.9 | Deploy, backups, runbooks | `deploy/production` (compose reference, nginx, secrets as files), `deploy/backup` (encrypted backup, guarded restore, restore drill: 80 tables match row for row), `.github/workflows/release.yml`, docs/deployment.md, docs/runbooks.md |
+
+Verified locally: Go unit and integration tests (TOTP vectors, MFA sign-in incl. replay, attempts, expiry, recovery codes, org and admin requirements; breached-password client; rewrap; purge across every tenant table; concurrency cap; clamd scanning incl. fail-closed), `go test -race`, `golangci-lint`, `sqlc diff`, migrations up/down/up, Docker build, `make prod-config-check` (compose config, `nginx -t`), restore drill, dashboard type-check and Playwright (smoke incl. MFA sign-in, accessibility audit incl. the account page).
+
+Deferred from Phase 8:
+
+| Item | Moves to |
+|---|---|
+| Choose the production platform; run the stack, PITR and alerting there | Before go-live |
+| Load test on production-like hardware, with Shopee calls through the sandbox | After S-1 |
+| Shopee reconciliation jobs (`get_shops_by_partner`, `get_lost_push_message`) | After S-1 (sandbox) |
+| Revoke-all-sessions / revoke-all-devices from the dashboard (runbooks use SQL) | Later |
+| Per-class queues (critical/default/bulk/low) | When production metrics show contention |
+| Personal access tokens (A-5) | Later |
+| Trace propagation into queued tasks | Later |
+
+## 10. Definition of done (every phase)
 
 1. Code + tests merged; `go test -race ./...`, lint and type-check green.
 2. Integration tests run against real Postgres/Redis containers.
@@ -272,7 +302,7 @@ Deferred from Phase 7:
 5. Docs in `docs/` updated in the same PR.
 6. No feature is reported as working against Shopee unless it was exercised in sandbox; otherwise it is labelled `DOC-VERIFIED` only.
 
-## 10. Decisions needed from the product owner
+## 11. Decisions needed from the product owner
 
 | ID | Decision | Needed by |
 |---|---|---|
@@ -280,5 +310,5 @@ Deferred from Phase 7:
 | Q-2 | Launch markets | Phase 3 (template validation per market) |
 | Q-3 | Self-approval by Operators | Phase 4 |
 | Q-4 | Retention periods | Phase 1 (audit partitions) — default used if not answered |
-| Q-5 | MFA requirement | Phase 1 (optional TOTP) / Phase 8 (enforced) |
+| Q-5 | MFA requirement: provisional answer built in Phase 8 (per-org requirement; mandatory for platform admins). Confirm whether every owner must use it | Before go-live |
 | S-1 | Register the Shopee developer account + sandbox app | Sandbox verification of Phase 2 |

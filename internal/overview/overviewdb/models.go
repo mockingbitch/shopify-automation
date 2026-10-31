@@ -161,6 +161,16 @@ type ExtensionPairingCode struct {
 	CreatedAt time.Time
 }
 
+type MfaChallenge struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	TokenHash []byte
+	ExpiresAt time.Time
+	Attempts  int32
+	UsedAt    *time.Time
+	CreatedAt time.Time
+}
+
 type Notification struct {
 	ID        uuid.UUID
 	OrgID     uuid.UUID
@@ -516,6 +526,25 @@ type User struct {
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	DeletedAt       *time.Time
+}
+
+type UserMfa struct {
+	UserID       uuid.UUID
+	KekID        string
+	DekWrapped   []byte
+	SecretEnc    []byte
+	ConfirmedAt  *time.Time
+	LastUsedStep int64
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type UserRecoveryCode struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	CodeHash  []byte
+	UsedAt    *time.Time
+	CreatedAt time.Time
 }
 
 type UserSession struct {

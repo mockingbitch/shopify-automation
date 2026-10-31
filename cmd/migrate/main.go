@@ -11,13 +11,18 @@ import (
 	"os"
 	"time"
 
+	"shopee-automation/internal/platform/config"
 	"shopee-automation/internal/platform/db"
 	"shopee-automation/internal/platform/logx"
 )
 
 func main() {
 	log := logx.New(os.Stdout, slog.LevelInfo).With(slog.String("service", "migrate"))
-	url := os.Getenv("DATABASE_MIGRATE_URL")
+	url, err := config.Secret(os.Getenv, "DATABASE_MIGRATE_URL")
+	if err != nil {
+		log.Error("read DATABASE_MIGRATE_URL", slog.String("error", err.Error()))
+		os.Exit(2)
+	}
 	if url == "" {
 		log.Error("DATABASE_MIGRATE_URL is required")
 		os.Exit(2)
@@ -29,7 +34,6 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	var err error
 	switch cmd {
 	case "up":
 		err = db.Migrate(ctx, url)

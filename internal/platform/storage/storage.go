@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,8 @@ type Store interface {
 	Put(ctx context.Context, key string, body []byte, contentType string) error
 	Get(ctx context.Context, key string, maxBytes int64) ([]byte, error)
 	PresignGet(ctx context.Context, key string, ttl time.Duration, filename string) (string, error)
+	// DeletePrefix removes every object under prefix and returns how many.
+	DeletePrefix(ctx context.Context, prefix string) (int, error)
 }
 
 // Config locates the bucket.
@@ -95,6 +98,33 @@ func (s *S3) Get(ctx context.Context, key string, maxBytes int64) ([]byte, error
 	return b, nil
 }
 
+// DeletePrefix implements Store.
+func (s *S3) DeletePrefix(ctx context.Context, prefix string) (int, error) {
+	if prefix == "" || !strings.HasSuffix(prefix, "/") {
+		return 0, errors.New("storage: refusing to delete without a directory prefix")
+	}
+	objects := make(chan minio.ObjectInfo)
+	n := 0
+	var listErr error
+	go func() {
+		defer close(objects)
+		for o := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true}) {
+			if o.Err != nil {
+				listErr = o.Err
+				return
+			}
+			n++
+			objects <- o
+		}
+	}()
+	for e := range s.client.RemoveObjects(ctx, s.bucket, objects, minio.RemoveObjectsOptions{}) {
+		if e.Err != nil {
+			return n, fmt.Errorf("storage: delete %s: %w", e.ObjectName, e.Err)
+		}
+	}
+	return n, listErr
+}
+
 // PresignGet returns a temporary download URL.
 func (s *S3) PresignGet(ctx context.Context, key string, ttl time.Duration, filename string) (string, error) {
 	params := url.Values{}
@@ -149,6 +179,33 @@ func (m *Memory) Get(_ context.Context, key string, maxBytes int64) ([]byte, err
 		return nil, fmt.Errorf("storage: %s is larger than %d bytes", key, maxBytes)
 	}
 	return append([]byte(nil), b...), nil
+}
+
+// DeletePrefix implements Store.
+func (m *Memory) DeletePrefix(_ context.Context, prefix string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for k := range m.objects {
+		if strings.HasPrefix(k, prefix) {
+			delete(m.objects, k)
+			n++
+		}
+	}
+	return n, nil
+}
+
+// Keys returns the stored keys with a prefix (tests).
+func (m *Memory) Keys(prefix string) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []string
+	for k := range m.objects {
+		if strings.HasPrefix(k, prefix) {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // PresignGet implements Store with a fake URL.

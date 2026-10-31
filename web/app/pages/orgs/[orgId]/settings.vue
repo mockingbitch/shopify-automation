@@ -11,7 +11,7 @@ const { orgId, role, can } = useOrg()
 const path = computed(() => ({ orgID: orgId.value }))
 
 const etag = ref('')
-const form = reactive({ name: '', slug: '', allowSelfApproval: false })
+const form = reactive({ name: '', slug: '', allowSelfApproval: false, requireMFA: false })
 const fields = ref<Record<string, string>>({})
 const error = ref('')
 const notice = ref('')
@@ -28,6 +28,7 @@ async function load() {
   form.name = org.name
   form.slug = org.slug
   form.allowSelfApproval = org.settings.allow_self_approval
+  form.requireMFA = org.settings.require_mfa ?? false
   if (role.value === 'owner') {
     members.value = unwrap(await api.GET('/orgs/{orgID}/members', { params: { path: path.value } })).data.filter((m) => m.role !== 'owner')
   }
@@ -42,7 +43,7 @@ async function save() {
   try {
     const res = await api.PATCH('/orgs/{orgID}', {
       params: { path: path.value, header: { 'If-Match': etag.value } },
-      body: { name: form.name, settings: { allow_self_approval: form.allowSelfApproval } },
+      body: { name: form.name, settings: { allow_self_approval: form.allowSelfApproval, require_mfa: form.requireMFA } },
     })
     unwrap(res)
     etag.value = res.response.headers.get('ETag') ?? ''
@@ -103,6 +104,17 @@ async function remove() {
             <div>
               <Label for="self-approval">Operators may approve their own workflows</Label>
               <p id="self-approval-hint" class="text-xs text-muted-foreground">When off, someone other than the person who started a workflow must approve its changes.</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <input id="require-mfa" v-model="form.requireMFA" type="checkbox" class="mt-1 size-4 accent-primary" :disabled="!can('org.update')" aria-describedby="require-mfa-hint">
+            <div>
+              <Label for="require-mfa">Require two-step verification for owners and admins</Label>
+              <p id="require-mfa-hint" class="text-xs text-muted-foreground">
+                Owners and admins without it cannot open this organization until they turn it on in
+                <NuxtLink to="/account" class="underline">Account security</NuxtLink>. Turn it on for your own account first.
+              </p>
+              <p v-if="fields['settings.require_mfa']" class="text-xs text-destructive">{{ fields['settings.require_mfa'] }}</p>
             </div>
           </div>
           <Button v-if="can('org.update')" type="submit" :disabled="saving">Save changes</Button>

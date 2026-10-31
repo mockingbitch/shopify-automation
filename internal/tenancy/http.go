@@ -39,6 +39,11 @@ func (h Handler) ResolveTenant(next http.Handler) http.Handler {
 			a.WriteError(w, r, err)
 			return
 		}
+		if t.MFARequired && (t.Role == rbac.Owner || t.Role == rbac.Admin) && !p.MFAEnabled {
+			a.WriteError(w, r, apperr.Forbidden("mfa_required",
+				"This organization requires two-step verification for owners and admins. Turn it on in your account settings."))
+			return
+		}
 		next.ServeHTTP(w, r.WithContext(authctx.WithTenant(r.Context(), t)))
 	})
 }

@@ -153,4 +153,4 @@ These came out of reading the official Shopee Open Platform documentation on 202
 | Q-2 | Which markets launch first? | Category trees, logistics channels and required attributes differ per market. | VN first. |
 | Q-3 | Should Operators be able to approve their own workflows? | Separation of duties. | No by default; per-org setting. |
 | Q-4 | Retention period for audit logs and browser artifacts? | Storage cost and privacy law (VN Decree 13/2023, PDPA). | Audit 2 years, artifacts 14 days, import files 90 days. |
-| Q-5 | Is MFA required for Owners/Admins at launch? | Account takeover risk on accounts that hold seller tokens. | TOTP optional in Phase 1, enforced for Owners in Phase 8. |
+| Q-5 | Is MFA required for Owners/Admins at launch? | Account takeover risk on accounts that hold seller tokens. | **Provisional (Phase 8):** TOTP for everyone; each organization can require it for owners and admins; platform admins must use it in production. Confirm whether it should be mandatory for every owner by default. |

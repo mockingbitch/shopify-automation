@@ -1,11 +1,12 @@
 /// <reference types="node" />
 import { expect, test } from '@playwright/test'
-import { latestLink } from './helpers'
+import { latestLink, totp } from './helpers'
 
 const onePixelPNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
 
 test('sign up, create an organization and invite a member', async ({ page, request }) => {
   const stamp = Date.now()
+  test.setTimeout(150_000) // includes waiting for a fresh 30-second code
   const email = `owner-${stamp}@example.com`
   const password = 'correct horse battery staple'
 
@@ -101,6 +102,25 @@ test('sign up, create an organization and invite a member', async ({ page, reque
   await expect(page.getByRole('heading', { name: 'No browser paired' })).toBeVisible()
   await page.getByRole('button', { name: 'Create pairing code' }).click()
   await expect(page.getByText(/^[A-Z2-9]{5}-[A-Z2-9]{5}$/)).toBeVisible()
+
+  // Two-step verification: turn it on, then sign in with a code.
+  await page.getByRole('link', { name: /Account security/ }).click()
+  await page.getByRole('button', { name: 'Turn on' }).click()
+  const secret = (await page.locator('code').first().textContent()) ?? ''
+  await page.getByLabel('Code', { exact: true }).fill(await totp(secret))
+  await page.getByRole('button', { name: 'Confirm' }).click()
+  await expect(page.getByRole('heading', { name: 'Recovery codes' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page).toHaveURL(/\/login/)
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  // A new code: the one used to confirm cannot be replayed.
+  await page.waitForTimeout(Math.max(0, 30_000 - (Date.now() % 30_000)) + 500)
+  await page.getByLabel('Verification code').fill(await totp(secret))
+  await page.getByRole('button', { name: 'Verify' }).click()
+  await expect(page).not.toHaveURL(/\/login/)
 
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page).toHaveURL(/\/login/)

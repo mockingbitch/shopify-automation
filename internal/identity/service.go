@@ -22,6 +22,7 @@ import (
 	"shopee-automation/internal/platform/authctx"
 	"shopee-automation/internal/platform/clock"
 	"shopee-automation/internal/platform/db"
+	"shopee-automation/internal/platform/envelope"
 	"shopee-automation/internal/platform/mailer"
 	"shopee-automation/internal/platform/reqmeta"
 	"shopee-automation/internal/platform/validate"
@@ -36,12 +37,16 @@ const (
 
 // Service implements identity use cases.
 type Service struct {
-	DB          *db.DB
-	Clock       clock.Clock
-	Mailer      mailer.Mailer
-	Audit       audit.Recorder
-	Log         *slog.Logger
-	Hasher      Hasher
+	DB     *db.DB
+	Clock  clock.Clock
+	Mailer mailer.Mailer
+	Audit  audit.Recorder
+	Log    *slog.Logger
+	Hasher Hasher
+	// Keys seals TOTP secrets; nil disables two-step verification.
+	Keys *envelope.Keyring
+	// Pwned checks new passwords against known breaches; nil skips it.
+	Pwned       PwnedChecker
 	BaseURL     *url.URL
 	IdleTTL     time.Duration
 	AbsoluteTTL time.Duration
@@ -57,6 +62,7 @@ type User struct {
 	DisplayName     string     `json:"display_name"`
 	EmailVerified   bool       `json:"email_verified"`
 	IsPlatformAdmin bool       `json:"is_platform_admin"`
+	MFAEnabled      bool       `json:"mfa_enabled"`
 	CreatedAt       time.Time  `json:"created_at"`
 	EmailVerifiedAt *time.Time `json:"-"`
 }
@@ -86,6 +92,9 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) error {
 	v.Password("password", in.Password)
 	v.Length("display_name", in.DisplayName, 1, 100)
 	if err := v.Err(); err != nil {
+		return err
+	}
+	if err := s.checkBreached(ctx, in.Password); err != nil {
 		return err
 	}
 	hash, err := s.Hasher.Hash(in.Password)
@@ -167,12 +176,15 @@ func (s *Service) ResendVerification(ctx context.Context, p authctx.Principal) e
 	return nil
 }
 
-// Session is the result of a successful login.
+// Session is the result of a successful login. When the user has
+// two-step verification, MFAChallenge is set instead of Token and the
+// login continues with CompleteMFALogin.
 type Session struct {
-	Token     string
-	ExpiresAt time.Time
-	Principal authctx.Principal
-	User      User
+	Token        string
+	MFAChallenge string
+	ExpiresAt    time.Time
+	Principal    authctx.Principal
+	User         User
 }
 
 var errBadCredentials = apperr.Unauthenticated("Email or password is incorrect.")
@@ -213,24 +225,39 @@ func (s *Service) Login(ctx context.Context, email, password string, previousSes
 		return Session{}, errBadCredentials
 	}
 
+	if needsRehash {
+		if h, err := s.Hasher.Hash(password); err == nil {
+			if err := s.DB.Tx(ctx, db.Scope{UserID: u.ID}, func(tx pgx.Tx) error {
+				return identitydb.New(tx).UpdatePasswordHash(ctx, identitydb.UpdatePasswordHashParams{ID: u.ID, PasswordHash: h})
+			}); err != nil {
+				return Session{}, apperr.Internal(err)
+			}
+		}
+	}
+	mfa, err := s.mfaEnabled(ctx, u.ID)
+	if err != nil {
+		return Session{}, apperr.Internal(err)
+	}
+	if mfa {
+		return s.startChallenge(ctx, u)
+	}
+	return s.createSession(ctx, u, previousSessionID, false, "auth.login")
+}
+
+// createSession issues a session for an authenticated user.
+func (s *Service) createSession(ctx context.Context, u identitydb.User, previousSessionID uuid.UUID, mfa bool, action string) (Session, error) {
 	now := s.Clock.Now()
 	token, tokenHash := NewToken()
 	csrf := randomBytes(32)
 	sess := Session{Token: token, ExpiresAt: now.Add(s.AbsoluteTTL), User: toUser(u)}
+	sess.User.MFAEnabled = mfa
 	sessionID := db.NewID()
 	m := reqmeta.From(ctx)
-	err = s.DB.Tx(ctx, db.Scope{UserID: u.ID}, func(tx pgx.Tx) error {
+	err := s.DB.Tx(ctx, db.Scope{UserID: u.ID}, func(tx pgx.Tx) error {
 		q := identitydb.New(tx)
 		if previousSessionID != uuid.Nil {
 			if err := q.RevokeSession(ctx, previousSessionID); err != nil {
 				return err
-			}
-		}
-		if needsRehash {
-			if h, err := s.Hasher.Hash(password); err == nil {
-				if err := q.UpdatePasswordHash(ctx, identitydb.UpdatePasswordHashParams{ID: u.ID, PasswordHash: h}); err != nil {
-					return err
-				}
 			}
 		}
 		var ua *string
@@ -243,13 +270,13 @@ func (s *Service) Login(ctx context.Context, email, password string, previousSes
 		}); err != nil {
 			return err
 		}
-		return s.Audit.Record(ctx, tx, audit.Entry{ActorUserID: &u.ID, Action: "auth.login",
-			TargetType: "session", TargetID: &sessionID})
+		return s.Audit.Record(ctx, tx, audit.Entry{ActorUserID: &u.ID, Action: action,
+			TargetType: "session", TargetID: &sessionID, Metadata: map[string]any{"mfa": mfa}})
 	})
 	if err != nil {
 		return Session{}, apperr.Internal(err)
 	}
-	sess.Principal = principalFor(u, sessionID, csrf)
+	sess.Principal = principalFor(u, sessionID, csrf, mfa)
 	return sess, nil
 }
 
@@ -263,10 +290,10 @@ func (s *Service) recordLoginFailure(ctx context.Context, u identitydb.User, fou
 	}
 }
 
-func principalFor(u identitydb.User, sessionID uuid.UUID, csrf []byte) authctx.Principal {
+func principalFor(u identitydb.User, sessionID uuid.UUID, csrf []byte, mfa bool) authctx.Principal {
 	return authctx.Principal{
 		UserID: u.ID, SessionID: sessionID, Email: u.Email, DisplayName: u.DisplayName,
-		EmailVerified: u.EmailVerifiedAt != nil, IsPlatformAdmin: u.IsPlatformAdmin,
+		EmailVerified: u.EmailVerifiedAt != nil, IsPlatformAdmin: u.IsPlatformAdmin, MFAEnabled: mfa,
 		CSRFToken: base64.RawURLEncoding.EncodeToString(csrf),
 	}
 }
@@ -292,7 +319,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (authctx.Princ
 				return err
 			}
 		}
-		p = principalFor(row.User, row.UserSession.ID, row.UserSession.CsrfSecret)
+		p = principalFor(row.User, row.UserSession.ID, row.UserSession.CsrfSecret, row.MfaEnabled)
 		return nil
 	})
 	if db.IsNoRows(err) {
@@ -390,6 +417,12 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 	var v validate.Errors
 	if !v.Password("new_password", newPassword) {
 		return v.Err()
+	}
+	if err := s.checkBreached(ctx, newPassword); err != nil {
+		if ae, ok := apperr.As(err); ok && len(ae.Fields) == 1 {
+			ae.Fields[0].Field = "new_password"
+		}
+		return err
 	}
 	hash, err := s.Hasher.Hash(newPassword)
 	if err != nil {
@@ -499,4 +532,23 @@ func (s *Service) dummy() string {
 		s.dummyHash = h
 	})
 	return s.dummyHash
+}
+
+// checkBreached rejects passwords found in known breaches. The range API
+// only sees a 5-character hash prefix. If it cannot be reached, the
+// password is accepted (availability) and the failure is logged.
+func (s *Service) checkBreached(ctx context.Context, password string) error {
+	if s.Pwned == nil {
+		return nil
+	}
+	bad, err := s.Pwned.Breached(ctx, password)
+	if err != nil {
+		s.Log.WarnContext(ctx, "breached-password check unavailable", slog.String("error", err.Error()))
+		return nil
+	}
+	if bad {
+		return apperr.Invalid(apperr.FieldError{Field: "password", Code: "breached",
+			Message: "This password appeared in a data breach. Choose a different one."})
+	}
+	return nil
 }

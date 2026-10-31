@@ -49,6 +49,7 @@ type env struct {
 	store  *storage.Memory
 	fake   *shopeefake.Server
 	system *db.DB
+	kek    []byte // the test KEK ("t1")
 }
 
 // testExtensionOrigin is the extension origin allowed by CORS in tests.
@@ -62,7 +63,7 @@ const testPartnerID = 2001887
 
 var testPartnerKey = []byte("fake-partner-key-for-tests-only-0123456789")
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T, opts ...func(*config.Config)) *env {
 	t.Helper()
 	d := testdb.New(t)
 	e := &env{t: t, db: d, mail: &mailer.Memory{}, clock: clock.NewFake(time.Now()), limits: &ratelimit.Memory{}, queue: &queue.Inline{}, store: &storage.Memory{}}
@@ -74,6 +75,7 @@ func newEnv(t *testing.T) *env {
 	t.Cleanup(e.fake.Close)
 	kek := make([]byte, 32)
 	_, _ = rand.Read(kek)
+	e.kek = kek
 	keys, err := envelope.NewKeyring("t1", map[string][]byte{"t1": kek})
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +85,9 @@ func newEnv(t *testing.T) *env {
 		Env: "test", PublicBaseURL: base, CookieSecure: false,
 		SessionIdleTTL: 12 * time.Hour, SessionAbsoluteTTL: 7 * 24 * time.Hour,
 		ExtensionOrigins: []string{testExtensionOrigin},
+	}
+	for _, o := range opts {
+		o(&cfg)
 	}
 	signer, err := browser.NewSigner("test1", base64.StdEncoding.EncodeToString(testRecipeSeed))
 	if err != nil {

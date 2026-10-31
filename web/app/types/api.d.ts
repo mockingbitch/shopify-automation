@@ -52,7 +52,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sign in with email and password */
+        /**
+         * Sign in with email and password
+         * @description With two-step verification on, the response is `{mfa_required: true, challenge, expires_at}` and no
+         *     cookie is set; continue with `POST /auth/login/mfa` within 5 minutes.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -63,6 +67,57 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["LoginRequest"];
+                };
+            };
+            responses: {
+                /** @description Signed in (sets the session cookie), or a second step is required. */
+                200: {
+                    headers: {
+                        "Set-Cookie"?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SessionEnvelope"] | components["schemas"]["MFAChallengeEnvelope"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                401: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Second sign-in step with an authenticator code or a recovery code
+         * @description A challenge allows 5 attempts and one success. Each authenticator code is accepted once.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        challenge: string;
+                        /** @description 6-digit code or a recovery code (XXXXX-XXXXX) */
+                        code: string;
+                    };
                 };
             };
             responses: {
@@ -78,6 +133,224 @@ export interface paths {
                 };
                 400: components["responses"]["Problem"];
                 401: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Two-step verification status of the caller */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Status */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                enabled: boolean;
+                                recovery_codes_left: number;
+                                /** @description The server can store secrets (encryption keys configured) */
+                                available: boolean;
+                            };
+                        };
+                    };
+                };
+                401: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start enrolling an authenticator app (replaces an unconfirmed secret) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Secret to add to the app */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                /** @description Base32 secret */
+                                secret: string;
+                                otpauth_uri: string;
+                            };
+                        };
+                    };
+                };
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Turn two-step verification on with a first code; returns recovery codes once */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MFACode"];
+                };
+            };
+            responses: {
+                200: components["responses"]["RecoveryCodes"];
+                400: components["responses"]["Problem"];
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Turn two-step verification off (password and a current or recovery code) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        password: string;
+                        code: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Turned off */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["Problem"];
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/recovery-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the recovery codes (needs a current authenticator code) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MFACode"];
+                };
+            };
+            responses: {
+                200: components["responses"]["RecoveryCodes"];
+                400: components["responses"]["Problem"];
+                401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                415: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
                 429: components["responses"]["Problem"];
             };
         };
@@ -3019,6 +3292,7 @@ export interface paths {
                 413: components["responses"]["Problem"];
                 415: components["responses"]["Problem"];
                 422: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
             };
         };
         delete?: never;
@@ -4166,6 +4440,7 @@ export interface paths {
                         };
                     };
                 };
+                403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
             };
         };
@@ -4195,6 +4470,7 @@ export interface paths {
             responses: {
                 201: components["responses"]["BrowserRecipe201"];
                 400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
                 415: components["responses"]["Problem"];
                 422: components["responses"]["Problem"];
@@ -4256,6 +4532,7 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
                 409: components["responses"]["Problem"];
                 415: components["responses"]["Problem"];
@@ -4815,6 +5092,7 @@ export interface paths {
                         };
                     };
                 };
+                403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
             };
         };
@@ -4869,6 +5147,7 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
                 415: components["responses"]["Problem"];
                 422: components["responses"]["Problem"];
@@ -4912,6 +5191,7 @@ export interface paths {
                     };
                     content?: never;
                 };
+                403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
             };
         };
@@ -4953,6 +5233,7 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
             };
         };
@@ -4977,6 +5258,7 @@ export interface paths {
                 201: components["responses"]["ShopeeApp"];
                 400: components["responses"]["Problem"];
                 401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
                 409: components["responses"]["Problem"];
                 415: components["responses"]["Problem"];
@@ -5023,6 +5305,7 @@ export interface paths {
                 200: components["responses"]["ShopeeApp"];
                 400: components["responses"]["Problem"];
                 401: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
                 415: components["responses"]["Problem"];
                 422: components["responses"]["Problem"];
@@ -5034,6 +5317,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        MFACode: {
+            code: string;
+        };
+        MFAChallengeEnvelope: {
+            data: {
+                /** @enum {boolean} */
+                mfa_required: true;
+                challenge: string;
+                /** Format: date-time */
+                expires_at: string;
+            };
+        };
         Overview: {
             /** @description Shops not disconnected */
             connected_shops: number;
@@ -5258,6 +5553,8 @@ export interface components {
             display_name: string;
             email_verified: boolean;
             is_platform_admin: boolean;
+            /** @description Two-step verification is on */
+            mfa_enabled?: boolean;
             /** Format: date-time */
             created_at: string;
         };
@@ -5274,6 +5571,8 @@ export interface components {
         AssignableRole: "admin" | "operator" | "viewer";
         OrgSettings: {
             allow_self_approval: boolean;
+            /** @description Owners and admins must use two-step verification; the caller must have it on to enable this */
+            require_mfa?: boolean;
         };
         CreateOrgRequest: {
             name: string;
@@ -5810,6 +6109,19 @@ export interface components {
         };
     };
     responses: {
+        /** @description Recovery codes, shown once */
+        RecoveryCodes: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: {
+                        recovery_codes: string[];
+                    };
+                };
+            };
+        };
         /** @description Paired; the token is shown once */
         Paired: {
             headers: {

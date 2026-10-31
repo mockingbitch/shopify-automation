@@ -67,6 +67,41 @@ paths:
         content:
           application/json:
             schema: {$ref: '#/components/schemas/LoginRequest'}
+      description: |
+        With two-step verification on, the response is `{mfa_required: true, challenge, expires_at}` and no
+        cookie is set; continue with `POST /auth/login/mfa` within 5 minutes.
+      responses:
+        '200':
+          description: Signed in (sets the session cookie), or a second step is required.
+          headers:
+            Set-Cookie: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - {$ref: '#/components/schemas/SessionEnvelope'}
+                  - {$ref: '#/components/schemas/MFAChallengeEnvelope'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+
+  /auth/login/mfa:
+    post:
+      tags: [auth]
+      summary: Second sign-in step with an authenticator code or a recovery code
+      description: A challenge allows 5 attempts and one success. Each authenticator code is accepted once.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [challenge, code]
+              properties:
+                challenge: {type: string, maxLength: 128}
+                code: {type: string, maxLength: 20, description: 6-digit code or a recovery code (XXXXX-XXXXX)}
       responses:
         '200':
           description: Signed in. Sets the session cookie.
@@ -77,6 +112,117 @@ paths:
               schema: {$ref: '#/components/schemas/SessionEnvelope'}
         '400': {$ref: '#/components/responses/Problem'}
         '401': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+
+  /auth/mfa:
+    get:
+      tags: [auth]
+      summary: Two-step verification status of the caller
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [enabled, recovery_codes_left, available]
+                    properties:
+                      enabled: {type: boolean}
+                      recovery_codes_left: {type: integer}
+                      available: {type: boolean, description: The server can store secrets (encryption keys configured)}
+        '401': {$ref: '#/components/responses/Problem'}
+
+  /auth/mfa/setup:
+    post:
+      tags: [auth]
+      summary: Start enrolling an authenticator app (replaces an unconfirmed secret)
+      responses:
+        '200':
+          description: Secret to add to the app
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [secret, otpauth_uri]
+                    properties:
+                      secret: {type: string, description: Base32 secret}
+                      otpauth_uri: {type: string}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+
+  /auth/mfa/confirm:
+    post:
+      tags: [auth]
+      summary: Turn two-step verification on with a first code; returns recovery codes once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MFACode'}
+      responses:
+        '200': {$ref: '#/components/responses/RecoveryCodes'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+
+  /auth/mfa/disable:
+    post:
+      tags: [auth]
+      summary: Turn two-step verification off (password and a current or recovery code)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password, code]
+              properties:
+                password: {type: string, maxLength: 128}
+                code: {type: string, maxLength: 20}
+      responses:
+        '204': {description: Turned off}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+
+  /auth/mfa/recovery-codes:
+    post:
+      tags: [auth]
+      summary: Replace the recovery codes (needs a current authenticator code)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MFACode'}
+      responses:
+        '200': {$ref: '#/components/responses/RecoveryCodes'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '415': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
         '429': {$ref: '#/components/responses/Problem'}
 
   /auth/verify-email:
@@ -1648,6 +1794,7 @@ paths:
         '413': {$ref: '#/components/responses/Problem'}
         '415': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
 
   /orgs/{orgID}/products/{productID}/images/{imageID}:
     parameters:
@@ -2211,6 +2358,7 @@ paths:
                     type: array
                     items: {$ref: '#/components/schemas/BrowserRecipe'}
         '404': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
     post:
       tags: [admin]
       summary: Add a recipe version (disabled and unverified)
@@ -2232,6 +2380,7 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '415': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
 
   /admin/browser-recipes/{recipeID}:
     parameters: [{name: recipeID, in: path, required: true, schema: {type: string}}]
@@ -2265,6 +2414,7 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '415': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
 
   /orgs/{orgID}/overview:
     parameters: [{$ref: '#/components/parameters/OrgID'}]
@@ -2562,6 +2712,7 @@ paths:
                           type: array
                           items: {$ref: '#/components/schemas/CapabilityOverride'}
         '404': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
 
   /admin/capability-overrides:
     put:
@@ -2596,6 +2747,7 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '415': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
 
   /admin/capability-overrides/{overrideID}:
     parameters: [{name: overrideID, in: path, required: true, schema: {type: string}}]
@@ -2605,6 +2757,7 @@ paths:
       responses:
         '204': {description: Removed}
         '404': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
 
   /admin/shopee-apps:
     get:
@@ -2626,6 +2779,7 @@ paths:
                   next_cursor: {type: string, nullable: true}
         '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
     post:
       tags: [admin]
       summary: Register a Shopee partner app
@@ -2643,6 +2797,7 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '415': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
 
   /admin/shopee-apps/{appID}:
     parameters:
@@ -2662,6 +2817,7 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '415': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
 
 components:
   securitySchemes:
@@ -2711,6 +2867,21 @@ components:
       schema: {type: string}
 
   responses:
+    RecoveryCodes:
+      description: Recovery codes, shown once
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                type: object
+                required: [recovery_codes]
+                properties:
+                  recovery_codes:
+                    type: array
+                    items: {type: string}
     Paired:
       description: Paired; the token is shown once
       content:
@@ -2889,6 +3060,23 @@ components:
               data: {$ref: '#/components/schemas/User'}
 
   schemas:
+    MFACode:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: {type: string, maxLength: 20}
+    MFAChallengeEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [mfa_required, challenge, expires_at]
+          properties:
+            mfa_required: {type: boolean, enum: [true]}
+            challenge: {type: string}
+            expires_at: {type: string, format: date-time}
     Overview:
       type: object
       required: [connected_shops, active_shops, disconnected_shops, reconnect_required, running_workflows, waiting_workflows,
@@ -3129,6 +3317,7 @@ components:
         display_name: {type: string}
         email_verified: {type: boolean}
         is_platform_admin: {type: boolean}
+        mfa_enabled: {type: boolean, description: Two-step verification is on}
         created_at: {type: string, format: date-time}
 
     SessionEnvelope:
@@ -3159,6 +3348,7 @@ components:
       required: [allow_self_approval]
       properties:
         allow_self_approval: {type: boolean}
+        require_mfa: {type: boolean, description: Owners and admins must use two-step verification; the caller must have it on to enable this}
 
     CreateOrgRequest:
       type: object

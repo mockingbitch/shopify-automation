@@ -59,3 +59,16 @@ tools: ## Install developer tools
 
 docker: ## Build the API image
 	docker build -f deploy/Dockerfile -t shopee-automation/api:dev .
+
+.PHONY: backup restore-drill prod-config-check
+
+backup: ## Encrypted backup of the dev DB into tmp/backups (needs BACKUP_PASSPHRASE_FILE or BACKUP_GPG_RECIPIENT)
+	PGDATABASE=shopee_automation BACKUP_DIR=$${BACKUP_DIR:-tmp/backups} \
+	PG_DUMP="$(COMPOSE) exec -T -e PGUSER=app_owner postgres pg_dump" \
+	deploy/backup/backup.sh
+
+restore-drill: ## Back up the dev DB, restore into a scratch DB, compare row counts, drop it
+	deploy/backup/restore-drill.sh
+
+prod-config-check: ## Validate deploy/production (compose config + nginx -t) with placeholder values
+	deploy/production/check.sh

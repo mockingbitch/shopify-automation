@@ -17,3 +17,18 @@ export async function latestLink(request: APIRequestContext, to: string, path: s
   throw new Error(`no email with ${path} to ${to}`)
 }
 
+
+// totp returns the current RFC 6238 code for a base32 secret (as an
+// authenticator app would).
+export async function totp(secretB32: string, now = Date.now()): Promise<string> {
+  const { createHmac } = await import('node:crypto')
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  let bits = ''
+  for (const c of secretB32.replace(/\s|=/g, '').toUpperCase()) bits += alphabet.indexOf(c).toString(2).padStart(5, '0')
+  const key = Buffer.from((bits.match(/.{8}/g) ?? []).map((b) => parseInt(b, 2)))
+  const msg = Buffer.alloc(8)
+  msg.writeBigUInt64BE(BigInt(Math.floor(now / 1000 / 30)))
+  const h = createHmac('sha1', key).update(msg).digest()
+  const off = h[h.length - 1]! & 0x0f
+  return String((h.readUInt32BE(off) & 0x7fffffff) % 1_000_000).padStart(6, '0')
+}

@@ -13,3 +13,9 @@ dist/
 
 # graphify: local cache (the graph itself is committed)
 graphify-out/cache/
+
+# Binaries built with `go build ./cmd/<name>` in the repo root
+/admin
+/worker
+/migrate
+/loadtest

@@ -4,10 +4,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -32,10 +34,43 @@ import (
 )
 
 func main() {
+	// `api -healthcheck` lets the container runtime probe the server: the
+	// distroless image has no curl.
+	if len(os.Args) > 1 && os.Args[1] == "-healthcheck" {
+		os.Exit(healthcheck())
+	}
 	if err := run(); err != nil {
 		slog.Error("api exited", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+}
+
+func healthcheck() int {
+	addr := os.Getenv("HTTP_ADDR")
+	if addr == "" {
+		addr = ":8080"
+	}
+	if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/readyz", nil) // #nosec G704 -- see below
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "healthcheck:", err)
+		return 1
+	}
+	res, err := http.DefaultClient.Do(req) // #nosec G704 -- the operator-set HTTP_ADDR of this same process
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "healthcheck:", err)
+		return 1
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		fmt.Fprintln(os.Stderr, "healthcheck: status", res.StatusCode)
+		return 1
+	}
+	return 0
 }
 
 func run() error {
@@ -70,7 +105,7 @@ func run() error {
 
 	var mail mailer.Mailer = mailer.Log{Logger: log}
 	if cfg.SMTPAddr != "" {
-		mail = mailer.SMTP{Addr: cfg.SMTPAddr, From: cfg.SMTPFrom}
+		mail = mailer.SMTP{Addr: cfg.SMTPAddr, From: cfg.SMTPFrom, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword}
 	}
 
 	keys, err := envelope.ParseKeyring(cfg.EncryptionKeys, cfg.EncryptionActiveKey)

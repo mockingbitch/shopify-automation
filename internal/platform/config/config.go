@@ -23,8 +23,10 @@ type Config struct {
 
 	RedisURL string
 
-	SMTPAddr string
-	SMTPFrom string
+	SMTPAddr     string
+	SMTPFrom     string
+	SMTPUsername string
+	SMTPPassword string
 
 	OTLPEndpoint string
 	LogLevel     slog.Level
@@ -61,6 +63,19 @@ type Config struct {
 	// ExtensionOrigins are the browser extension origins allowed by CORS
 	// (chrome-extension://<id>), comma separated.
 	ExtensionOrigins []string
+
+	// PwnedPasswordsURL is a k-anonymity range API for breached passwords
+	// (https://api.pwnedpasswords.com/range/). Empty disables the check.
+	PwnedPasswordsURL string
+	// RequireAdminMFA makes two-step verification mandatory for platform
+	// admin routes (default: true in production).
+	RequireAdminMFA bool
+	// ClamAVAddr is a clamd TCP address for scanning uploads; empty skips it.
+	ClamAVAddr string
+	// WorkflowOrgConcurrency caps running workflow steps per organization.
+	WorkflowOrgConcurrency int
+	// OrgRetention is how long a deleted organization is kept before purge.
+	OrgRetention time.Duration
 }
 
 // IsProduction reports whether the process runs in production.
@@ -81,6 +96,8 @@ func Load(getenv Getenv) (Config, error) {
 		RedisURL:           l.required("REDIS_URL"),
 		SMTPAddr:           l.str("SMTP_ADDR", ""),
 		SMTPFrom:           l.str("SMTP_FROM", "no-reply@localhost"),
+		SMTPUsername:       l.str("SMTP_USERNAME", ""),
+		SMTPPassword:       l.str("SMTP_PASSWORD", ""),
 		OTLPEndpoint:       l.str("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		CookieSecure:       l.boolean("COOKIE_SECURE", true),
 		SessionIdleTTL:     l.duration("SESSION_IDLE_TTL", 12*time.Hour),
@@ -128,6 +145,20 @@ func Load(getenv Getenv) (Config, error) {
 		l.fail("LOG_LEVEL", "must be debug, info, warn or error")
 	}
 
+	c.PwnedPasswordsURL = l.str("PWNED_PASSWORDS_URL", "")
+	c.RequireAdminMFA = l.boolean("REQUIRE_ADMIN_MFA", c.IsProduction())
+	c.ClamAVAddr = l.str("CLAMAV_ADDR", "")
+	c.WorkflowOrgConcurrency = l.integer("WORKFLOW_ORG_CONCURRENCY", 10)
+	c.OrgRetention = l.duration("ORG_RETENTION", 30*24*time.Hour)
+	if c.WorkflowOrgConcurrency < 1 || c.WorkflowOrgConcurrency > 1000 {
+		l.fail("WORKFLOW_ORG_CONCURRENCY", "must be between 1 and 1000")
+	}
+	if c.OrgRetention < 24*time.Hour {
+		l.fail("ORG_RETENTION", "must be at least 24h")
+	}
+	if c.IsProduction() && !c.RequireAdminMFA {
+		l.fail("REQUIRE_ADMIN_MFA", "must be true in production")
+	}
 	c.RecipeSigningKey = l.str("RECIPE_SIGNING_KEY", "")
 	c.RecipeSigningKeyID = l.str("RECIPE_SIGNING_KEY_ID", "k1")
 	for _, o := range strings.Split(l.str("EXTENSION_ORIGINS", ""), ",") {
@@ -241,4 +272,16 @@ func (l *loader) duration(key string, def time.Duration) time.Duration {
 // ShopeeSettings returns the outbound Shopee client settings.
 func (c Config) ShopeeSettings() (time.Duration, int, int) {
 	return c.ShopeeHTTPTimeout, c.ShopeeRatePerApp, c.ShopeeRatePerShop
+}
+
+// Secret returns an environment variable, or the trimmed contents of the
+// file named by KEY_FILE (Docker secrets), for tools that do not load the
+// full configuration.
+func Secret(getenv Getenv, key string) (string, error) {
+	l := &loader{getenv: getenv}
+	v := l.lookup(key)
+	if len(l.errs) > 0 {
+		return "", errors.Join(l.errs...)
+	}
+	return v, nil
 }

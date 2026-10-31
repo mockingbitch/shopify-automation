@@ -3,7 +3,8 @@ INSERT INTO user_sessions (id, user_id, token_hash, csrf_secret, ip, user_agent,
 VALUES (@id, @user_id, @token_hash, @csrf_secret, @ip, @user_agent, @idle_expires_at, @absolute_expires_at);
 
 -- name: GetActiveSessionByTokenHash :one
-SELECT sqlc.embed(s), sqlc.embed(u)
+SELECT sqlc.embed(s), sqlc.embed(u),
+  EXISTS (SELECT 1 FROM user_mfa m WHERE m.user_id = u.id AND m.confirmed_at IS NOT NULL) AS mfa_enabled
 FROM user_sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = @token_hash

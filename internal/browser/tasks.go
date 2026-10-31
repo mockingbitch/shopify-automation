@@ -182,6 +182,9 @@ func (s *Service) buildInputs(ctx context.Context, spec TaskSpec, taskID uuid.UU
 			var files []storedFile
 			for i, u := range urls {
 				raw, err := s.Fetcher.Fetch(ctx, u)
+				if err == nil && s.Scanner != nil {
+					err = s.Scanner.Scan(ctx, raw)
+				}
 				if err != nil {
 					s.Log.WarnContext(ctx, "browser task input not fetched", "task_key", spec.Key, "error", err.Error())
 					return nil, false, nil

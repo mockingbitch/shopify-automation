@@ -1,0 +1,3 @@
+# Real configuration and secrets never enter git.
+production.env
+secrets/

@@ -142,9 +142,126 @@ func (h Handler) Login(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if sess.MFAChallenge != "" {
+		w.Header().Set("Cache-Control", "no-store")
+		return httpx.JSON(w, http.StatusOK, httpx.Data[mfaChallengeView]{Data: mfaChallengeView{
+			MFARequired: true, Challenge: sess.MFAChallenge, ExpiresAt: sess.ExpiresAt}})
+	}
 	h.setCookie(w, sess.Token, sess.ExpiresAt)
 	return httpx.JSON(w, http.StatusOK, httpx.Data[sessionView]{Data: sessionView{
 		User: sess.User, CSRFToken: sess.Principal.CSRFToken}})
+}
+
+type mfaChallengeView struct {
+	MFARequired bool      `json:"mfa_required"`
+	Challenge   string    `json:"challenge"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+// LoginMFA handles POST /auth/login/mfa: the second step of sign-in.
+func (h Handler) LoginMFA(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Challenge string `json:"challenge"`
+		Code      string `json:"code"`
+	}
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	if err := h.limit(r, "login-mfa:ip:"+clientKey(r), 20, time.Minute); err != nil {
+		return err
+	}
+	var prev uuid.UUID
+	if p, ok := authctx.PrincipalFrom(r.Context()); ok {
+		prev = p.SessionID
+	}
+	sess, err := h.Svc.CompleteMFALogin(r.Context(), in.Challenge, in.Code, prev)
+	if err != nil {
+		return err
+	}
+	h.setCookie(w, sess.Token, sess.ExpiresAt)
+	return httpx.JSON(w, http.StatusOK, httpx.Data[sessionView]{Data: sessionView{User: sess.User, CSRFToken: sess.Principal.CSRFToken}})
+}
+
+// MFAStatus handles GET /auth/mfa.
+func (h Handler) MFAStatus(w http.ResponseWriter, r *http.Request) error {
+	out, err := h.Svc.MFAStatusOf(r.Context(), authctx.MustPrincipal(r.Context()))
+	if err != nil {
+		return err
+	}
+	return httpx.JSON(w, http.StatusOK, httpx.Data[MFAStatus]{Data: out})
+}
+
+// MFASetup handles POST /auth/mfa/setup.
+func (h Handler) MFASetup(w http.ResponseWriter, r *http.Request) error {
+	out, err := h.Svc.SetupMFA(r.Context(), authctx.MustPrincipal(r.Context()))
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	return httpx.JSON(w, http.StatusOK, httpx.Data[MFASetup]{Data: out})
+}
+
+type codesView struct {
+	RecoveryCodes []string `json:"recovery_codes"`
+}
+
+// MFAConfirm handles POST /auth/mfa/confirm.
+func (h Handler) MFAConfirm(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Code string `json:"code"`
+	}
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	p := authctx.MustPrincipal(r.Context())
+	if err := h.limit(r, "mfa-code:user:"+p.UserID.String(), 10, time.Minute); err != nil {
+		return err
+	}
+	codes, err := h.Svc.ConfirmMFA(r.Context(), p, in.Code)
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	return httpx.JSON(w, http.StatusOK, httpx.Data[codesView]{Data: codesView{RecoveryCodes: codes}})
+}
+
+// MFADisable handles POST /auth/mfa/disable.
+func (h Handler) MFADisable(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Password string `json:"password"`
+		Code     string `json:"code"`
+	}
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	p := authctx.MustPrincipal(r.Context())
+	if err := h.limit(r, "mfa-code:user:"+p.UserID.String(), 10, time.Minute); err != nil {
+		return err
+	}
+	if err := h.Svc.DisableMFA(r.Context(), p, in.Password, in.Code); err != nil {
+		return err
+	}
+	return httpx.NoContent(w)
+}
+
+// MFARecoveryCodes handles POST /auth/mfa/recovery-codes.
+func (h Handler) MFARecoveryCodes(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Code string `json:"code"`
+	}
+	if err := httpx.Decode(w, r, &in); err != nil {
+		return err
+	}
+	p := authctx.MustPrincipal(r.Context())
+	if err := h.limit(r, "mfa-code:user:"+p.UserID.String(), 10, time.Minute); err != nil {
+		return err
+	}
+	codes, err := h.Svc.RegenerateRecoveryCodes(r.Context(), p, in.Code)
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	return httpx.JSON(w, http.StatusOK, httpx.Data[codesView]{Data: codesView{RecoveryCodes: codes}})
 }
 
 // Logout handles POST /auth/logout.
@@ -163,6 +280,7 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	u.MFAEnabled = p.MFAEnabled
 	view := sessionView{User: u, CSRFToken: p.CSRFToken}
 	if h.Memberships != nil {
 		if view.Memberships, err = h.Memberships(r.Context(), p.UserID); err != nil {

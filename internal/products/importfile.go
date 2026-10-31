@@ -14,7 +14,7 @@ import (
 
 // Import limits (assumption A-7 and risk R7).
 const (
-	MaxImportBytes = 50 << 20
+	MaxImportBytes = 20 << 20
 	MaxImportRows  = 100_000
 	maxImportCols  = 60
 	maxCellLen     = 10_000

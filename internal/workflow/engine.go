@@ -196,13 +196,15 @@ func (sc *StepContext) Output(stepKey string, v any) error {
 
 // Engine executes workflow runs.
 type Engine struct {
-	DB     *db.DB
-	System *db.DB // sweeper only
-	Queue  queue.Enqueuer
-	Clock  clock.Clock
-	Audit  audit.Recorder
-	Log    *slog.Logger
-	defs   map[string]Definition
+	// OrgConcurrency caps RUNNING steps per organization (0: no cap).
+	OrgConcurrency int
+	DB             *db.DB
+	System         *db.DB // sweeper only
+	Queue          queue.Enqueuer
+	Clock          clock.Clock
+	Audit          audit.Recorder
+	Log            *slog.Logger
+	defs           map[string]Definition
 }
 
 // Register adds a definition.
@@ -443,6 +445,21 @@ func (e *Engine) claim(ctx context.Context, orgID, stepID uuid.UUID) (*claimed, 
 		done, err := q.PreviousStepsDone(ctx, workflowdb.PreviousStepsDoneParams{RunID: run.ID, Position: step.Position})
 		if err != nil || done == nil || !*done {
 			return err
+		}
+		if e.OrgConcurrency > 0 {
+			// Per-organization limit: one org cannot take all workers.
+			// The lock serializes this check within the org.
+			if err := q.AdvisoryLock(ctx, "org-concurrency:"+orgID.String()); err != nil {
+				return err
+			}
+			n, err := q.RunningStepsForOrg(ctx, workflowdb.RunningStepsForOrgParams{OrgID: orgID, Now: now})
+			if err != nil {
+				return err
+			}
+			if n >= int64(e.OrgConcurrency) {
+				delay = busyDelay
+				return q.DelayStep(ctx, workflowdb.DelayStepParams{NextAttemptAt: now.Add(busyDelay), OrgID: orgID, ID: step.ID})
+			}
 		}
 		if spec.Mutating {
 			if err := q.AdvisoryLock(ctx, "shop-mutation:"+run.ShopConnectionID.String()); err != nil {

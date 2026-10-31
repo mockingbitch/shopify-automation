@@ -16,6 +16,7 @@ import (
 	"shopee-automation/internal/platform/clock"
 	"shopee-automation/internal/platform/db"
 	"shopee-automation/internal/platform/media"
+	"shopee-automation/internal/platform/scan"
 	"shopee-automation/internal/platform/securetoken"
 	"shopee-automation/internal/platform/storage"
 	"shopee-automation/internal/rbac"
@@ -52,6 +53,8 @@ type Service struct {
 	Log     *slog.Logger
 	// AutoDisableAfter disables a recipe after this many failures in a row.
 	AutoDisableAfter int
+	// Scanner checks downloaded task input files (optional).
+	Scanner scan.Scanner
 }
 
 func (s *Service) now() time.Time { return s.Clock.Now().UTC() }

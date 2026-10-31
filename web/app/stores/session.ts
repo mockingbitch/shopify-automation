@@ -33,9 +33,17 @@ export const useSessionStore = defineStore('session', {
       }
       this.loaded = true
     },
-    async login(email: string, password: string) {
-      const data = unwrap(await useApi().POST('/auth/login', { body: { email, password } }))
-      this.csrfToken = data.data.csrf_token
+    /** Returns a challenge when two-step verification is needed. */
+    async login(email: string, password: string): Promise<{ challenge: string } | null> {
+      const res = unwrap(await useApi().POST('/auth/login', { body: { email, password } }))
+      if ('mfa_required' in res.data && res.data.mfa_required) return { challenge: res.data.challenge }
+      this.csrfToken = (res.data as { csrf_token: string }).csrf_token
+      await this.load(true)
+      return null
+    },
+    async loginMFA(challenge: string, code: string) {
+      const res = unwrap(await useApi().POST('/auth/login/mfa', { body: { challenge, code } }))
+      this.csrfToken = res.data.csrf_token
       await this.load(true)
     },
     async logout() {

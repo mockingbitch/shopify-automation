@@ -376,6 +376,42 @@ func TestMutatingStepsSerializePerShop(t *testing.T) {
 	}
 }
 
+// The per-organization cap delays further steps (without spending an
+// attempt) while the org already runs as many steps as allowed.
+func TestOrgConcurrencyCap(t *testing.T) {
+	h := newHarness(t)
+	h.e.OrgConcurrency = 1
+	release := make(chan struct{})
+	started := make(chan struct{})
+	h.e.Register(Definition{Key: "SLOW", Version: 1, Steps: []StepSpec{{Key: "w", Handler: func(context.Context, *StepContext) Result {
+		close(started)
+		<-release
+		return Succeeded(nil)
+	}}}})
+	h.e.Register(Definition{Key: "FAST", Version: 1, Steps: []StepSpec{{Key: "w", Handler: func(context.Context, *StepContext) Result {
+		return Succeeded(nil)
+	}}}})
+	var slow uuid.UUID
+	_ = h.e.DB.Tx(context.Background(), db.Scope{OrgID: h.org}, func(tx pgx.Tx) error {
+		runs, err := h.e.CreateRuns(context.Background(), tx, StartOptions{OrgID: h.org}, []StartSpec{{Definition: "SLOW", ShopID: h.shop}})
+		slow = runs[0].ID
+		return err
+	})
+	go h.e.Kick(context.Background(), h.org, slow)
+	<-started
+	waiting := h.start("FAST", h.shop2) // another shop, same org: capped
+	if v := h.run(waiting); v.Run.Status != RunPending || v.Steps[0].AttemptCount != 0 {
+		t.Fatalf("not capped: %s attempts=%d", v.Run.Status, v.Steps[0].AttemptCount)
+	}
+	close(release)
+	time.Sleep(100 * time.Millisecond)
+	h.clk.Advance(10 * time.Second)
+	h.q.RunDelayed(context.Background())
+	if v := h.run(waiting); v.Run.Status != RunCompleted || v.Steps[0].AttemptCount != 1 {
+		t.Fatalf("after release: %s attempts=%d", v.Run.Status, v.Steps[0].AttemptCount)
+	}
+}
+
 func approvalDef(selected *[]string) Definition {
 	return Definition{Key: "T", Version: 1,
 		ValidateSelection: func(diff json.RawMessage, sel []string) error {

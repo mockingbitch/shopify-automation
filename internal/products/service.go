@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -21,6 +22,7 @@ import (
 	"shopee-automation/internal/platform/db"
 	"shopee-automation/internal/platform/media"
 	"shopee-automation/internal/platform/queue"
+	"shopee-automation/internal/platform/scan"
 	"shopee-automation/internal/platform/storage"
 	"shopee-automation/internal/products/productsdb"
 )
@@ -38,6 +40,26 @@ type Service struct {
 	Log     *slog.Logger
 	// Templates resolves template defaults for imports (optional).
 	Templates TemplateDefaults
+	// Scanner checks uploads for malware (optional).
+	Scanner scan.Scanner
+}
+
+// scanFile rejects infected uploads. With a scanner configured but
+// unreachable, the upload is refused (fail closed).
+func (s *Service) scanFile(ctx context.Context, field string, data []byte) error {
+	if s.Scanner == nil {
+		return nil
+	}
+	err := s.Scanner.Scan(ctx, data)
+	if errors.Is(err, scan.ErrInfected) {
+		s.Log.WarnContext(ctx, "upload rejected by the malware scanner", slog.String("error", err.Error()))
+		return apperr.Invalid(apperr.FieldError{Field: field, Code: "malware", Message: "The file was rejected by the malware scanner."})
+	}
+	if err != nil {
+		s.Log.ErrorContext(ctx, "malware scanner unavailable", slog.String("error", err.Error()))
+		return apperr.Unavailable("scanner_unavailable", "Files cannot be checked right now. Try again in a few minutes.")
+	}
+	return nil
 }
 
 func (s *Service) tx(ctx context.Context, p authctx.Principal, orgID uuid.UUID, fn func(q *productsdb.Queries, tx pgx.Tx) error) error {
@@ -424,6 +446,9 @@ func (s *Service) storeImage(ctx context.Context, q *productsdb.Queries, orgID, 
 
 // AddImage uploads one image to a product.
 func (s *Service) AddImage(ctx context.Context, p authctx.Principal, t authctx.Tenant, id uuid.UUID, raw []byte) (Image, error) {
+	if err := s.scanFile(ctx, "file", raw); err != nil {
+		return Image{}, err
+	}
 	var out Image
 	err := s.tx(ctx, p, t.OrgID, func(q *productsdb.Queries, tx pgx.Tx) error {
 		if _, err := q.LockProduct(ctx, productsdb.LockProductParams{OrgID: t.OrgID, ID: id}); err != nil {

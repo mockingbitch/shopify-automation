@@ -502,6 +502,10 @@ erDiagram
   }
 ```
 
+### 2.7 As built (Phase 8)
+
+Migration `00008_hardening.sql`: `user_mfa` (sealed TOTP secret, `confirmed_at`, `last_used_step`), `user_recovery_codes` (SHA-256 hashes, `used_at`), `mfa_challenges` (hashed token, expiry, attempts). Grants for the system role: `DELETE` on `organizations` and `workflow_events` (purge; the append-only trigger now lets only `app_system` delete events, never update them), and the key columns of the five sealed tables for `admin rewrap`.
+
 ### 2.6 As built (Phase 7)
 
 Migration `00007_dashboard.sql`:

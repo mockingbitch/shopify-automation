@@ -48,4 +48,24 @@ func TestS3(t *testing.T) {
 	if res.StatusCode != 200 || string(body) != "hello" {
 		t.Fatalf("presigned: %d %q", res.StatusCode, body)
 	}
+
+	// DeletePrefix removes only the objects under the directory.
+	dir := "purge-" + time.Now().Format("150405.000000") + "/"
+	for _, k := range []string{dir + "a.txt", dir + "sub/b.txt", "keep-" + dir + "c.txt"} {
+		if err := s.Put(ctx, k, []byte("x"), "text/plain"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, err := s.DeletePrefix(ctx, dir); err != nil || n != 2 {
+		t.Fatalf("delete prefix: %d %v", n, err)
+	}
+	if _, err := s.Get(ctx, dir+"a.txt", 10); err == nil {
+		t.Fatal("object not deleted")
+	}
+	if _, err := s.Get(ctx, "keep-"+dir+"c.txt", 10); err != nil {
+		t.Fatalf("other object deleted: %v", err)
+	}
+	if _, err := s.DeletePrefix(ctx, "no-slash"); err == nil {
+		t.Fatal("prefix without slash accepted")
+	}
 }

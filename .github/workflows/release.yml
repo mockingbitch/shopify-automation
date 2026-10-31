@@ -1,0 +1,189 @@
+name: Release
+
+# Runs on version tags (v1.2.3). Builds and publishes:
+#   - the server image (api/worker/migrate/admin) to GHCR, with SBOM and provenance
+#   - the dashboard SPA (web-dist-<tag>.tar.gz: public/ + csp.conf for nginx)
+#   - the browser extension (extension-<tag>.zip, production build)
+# and attaches the web and extension bundles to a draft GitHub release.
+# See docs/deployment.md.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Vulnerability checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: npm audit (web)
+        working-directory: web
+        run: npm ci --ignore-scripts && npm audit --audit-level=high
+      - name: npm audit (extension)
+        working-directory: extension
+        run: npm ci --ignore-scripts && npm audit --audit-level=high
+
+  image:
+    name: Server image
+    needs: audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # BuildKit attaches SLSA provenance and an SPDX SBOM to the image index.
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  web:
+    name: Dashboard SPA
+    needs: audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Package public/ and the matching CSP for nginx
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          printf 'add_header Content-Security-Policy "%s" always;\n' "$(node scripts/csp.mjs .output/public/index.html)" > dist/csp.conf
+          cp -r .output/public dist/public
+          tar -C dist -czf "web-dist-${GITHUB_REF_NAME}.tar.gz" public csp.conf
+          sha256sum "web-dist-${GITHUB_REF_NAME}.tar.gz" > "web-dist-${GITHUB_REF_NAME}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: |
+            web/web-dist-*.tar.gz
+            web/web-dist-*.tar.gz.sha256
+          retention-days: 30
+
+  extension:
+    name: Browser extension
+    needs: audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extension
+    env:
+      # Production build settings (Settings -> Secrets and variables -> Actions).
+      WXT_API_ORIGIN: ${{ vars.WXT_API_ORIGIN }}
+      WXT_SELLER_ORIGINS: ${{ vars.WXT_SELLER_ORIGINS }}
+      WXT_FILE_ORIGINS: ${{ vars.WXT_FILE_ORIGINS }}
+      WXT_RECIPE_PUBLIC_KEYS: ${{ vars.WXT_RECIPE_PUBLIC_KEYS }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - name: Required build variables are set
+        run: |
+          set -euo pipefail
+          for v in WXT_API_ORIGIN WXT_SELLER_ORIGINS WXT_RECIPE_PUBLIC_KEYS; do
+            if [ -z "${!v}" ]; then echo "::error::repository variable $v is not set"; exit 1; fi
+          done
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Package
+        run: |
+          set -euo pipefail
+          (cd .output/chrome-mv3 && zip -qr "../../extension-${GITHUB_REF_NAME}.zip" .)
+          sha256sum "extension-${GITHUB_REF_NAME}.zip" > "extension-${GITHUB_REF_NAME}.zip.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension
+          path: |
+            extension/extension-*.zip
+            extension/extension-*.zip.sha256
+          retention-days: 30
+
+  release:
+    name: Draft GitHub release
+    needs: [image, web, extension]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create draft release with artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" artifacts/* \
+            --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes "Image: ghcr.io/${GITHUB_REPOSITORY}@${DIGEST}"
+
+  # Placeholder: no target environment exists yet. When one does, replace the
+  # steps (pull the image by digest, run migrate, roll api/worker, upload the
+  # web bundle) and protect it with a GitHub environment requiring approval.
+  deploy:
+    name: Deploy (placeholder, disabled)
+    if: ${{ false }}
+    needs: release
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: echo "No deployment target is configured. See docs/deployment.md."

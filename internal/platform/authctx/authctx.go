@@ -19,7 +19,9 @@ type Principal struct {
 	DisplayName     string
 	EmailVerified   bool
 	IsPlatformAdmin bool
-	CSRFToken       string
+	// MFAEnabled is true when the user has confirmed two-step verification.
+	MFAEnabled bool
+	CSRFToken  string
 }
 
 // Tenant is the organization a request operates on, resolved from the URL
@@ -28,6 +30,8 @@ type Tenant struct {
 	OrgID    uuid.UUID
 	MemberID uuid.UUID
 	Role     rbac.Role
+	// MFARequired is the organization's require_mfa setting.
+	MFARequired bool
 }
 
 // Can reports whether the tenant member has permission p.

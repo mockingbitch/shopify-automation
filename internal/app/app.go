@@ -33,6 +33,7 @@ import (
 	"shopee-automation/internal/platform/media"
 	"shopee-automation/internal/platform/queue"
 	"shopee-automation/internal/platform/ratelimit"
+	"shopee-automation/internal/platform/scan"
 	"shopee-automation/internal/platform/storage"
 	"shopee-automation/internal/products"
 	"shopee-automation/internal/rbac"
@@ -105,6 +106,8 @@ type Deps struct {
 	Fetcher  *media.Fetcher
 	// Signer signs browser recipes; nil disables task claims.
 	Signer *browser.Signer
+	// Scanner overrides the CLAMAV_ADDR scanner (tests).
+	Scanner scan.Scanner
 }
 
 // App is the assembled API.
@@ -146,8 +149,12 @@ func New(d Deps) *App {
 		outbox = &notify.Outbox{DB: d.DB, System: d.SystemDB, Keys: d.Keys, Queue: d.Queue, Mailer: d.Mailer, Clock: d.Clock, Log: d.Log}
 		d.Mailer = outbox
 	}
+	var pwned identity.PwnedChecker
+	if d.Config.PwnedPasswordsURL != "" {
+		pwned = identity.PwnedRange{BaseURL: d.Config.PwnedPasswordsURL}
+	}
 	idSvc := &identity.Service{
-		DB: d.DB, Clock: d.Clock, Mailer: d.Mailer, Audit: rec, Log: d.Log, Hasher: d.Hasher,
+		DB: d.DB, Clock: d.Clock, Mailer: d.Mailer, Audit: rec, Log: d.Log, Hasher: d.Hasher, Keys: d.Keys, Pwned: pwned,
 		BaseURL: d.Config.PublicBaseURL, IdleTTL: d.Config.SessionIdleTTL, AbsoluteTTL: d.Config.SessionAbsoluteTTL,
 	}
 	tSvc := &tenancy.Service{DB: d.DB, Clock: d.Clock, Audit: rec, Mailer: d.Mailer, Log: d.Log, BaseURL: d.Config.PublicBaseURL}
@@ -163,7 +170,7 @@ func New(d Deps) *App {
 		AllowInsecureHosts: !d.Config.IsProduction(),
 	}
 	a.shops = shops.Handler{Svc: a.Shops, Log: d.Log}
-	a.Engine = &workflow.Engine{DB: d.DB, System: d.SystemDB, Queue: d.Queue, Clock: d.Clock, Audit: rec, Log: d.Log}
+	a.Engine = &workflow.Engine{OrgConcurrency: d.Config.WorkflowOrgConcurrency, DB: d.DB, System: d.SystemDB, Queue: d.Queue, Clock: d.Clock, Audit: rec, Log: d.Log}
 	tplSvc := &templates.Service{DB: d.DB, Clock: d.Clock, Audit: rec, Registry: templateRegistry, Shops: a.Shops, Log: d.Log,
 		ActiveRuns: func(ctx context.Context, orgID, templateID uuid.UUID) (int64, error) {
 			var n int64
@@ -175,11 +182,18 @@ func New(d Deps) *App {
 			return n, err
 		}}
 	a.tpl = templates.Handler{Svc: tplSvc}
-	a.Products = &products.Service{DB: d.DB, Clock: d.Clock, Audit: rec, Store: d.Store, Fetcher: d.Fetcher, Queue: d.Queue,
+	var scanner scan.Scanner
+	if d.Config.ClamAVAddr != "" {
+		scanner = scan.Clamd{Addr: d.Config.ClamAVAddr}
+	}
+	if d.Scanner != nil {
+		scanner = d.Scanner
+	}
+	a.Products = &products.Service{Scanner: scanner, DB: d.DB, Clock: d.Clock, Audit: rec, Store: d.Store, Fetcher: d.Fetcher, Queue: d.Queue,
 		Log: d.Log, Templates: tplSvc}
 	a.prod = products.Handler{Svc: a.Products}
 	a.Browser = &browser.Service{DB: d.DB, System: d.SystemDB, Clock: d.Clock, Audit: rec, Store: d.Store, Fetcher: d.Fetcher,
-		Signer: d.Signer, Steps: a.Engine, Log: d.Log}
+		Signer: d.Signer, Steps: a.Engine, Log: d.Log, Scanner: scanner}
 	a.Shops.Extension = a.Browser
 	a.Outbox = outbox
 	a.notes = notify.Handler{Svc: &notify.Service{DB: d.DB, Clock: d.Clock}}
@@ -211,6 +225,12 @@ func (a *App) Routes() []Route {
 	return []Route{
 		{"POST", "/auth/register", Public, "", id.Register},
 		{"POST", "/auth/login", Public, "", id.Login},
+		{"POST", "/auth/login/mfa", Public, "", id.LoginMFA},
+		{"GET", "/auth/mfa", Session, "", id.MFAStatus},
+		{"POST", "/auth/mfa/setup", Session, "", id.MFASetup},
+		{"POST", "/auth/mfa/confirm", Session, "", id.MFAConfirm},
+		{"POST", "/auth/mfa/disable", Session, "", id.MFADisable},
+		{"POST", "/auth/mfa/recovery-codes", Session, "", id.MFARecoveryCodes},
 		{"POST", "/auth/verify-email", Public, "", id.VerifyEmail},
 		{"POST", "/auth/password/forgot", Public, "", id.ForgotPassword},
 		{"POST", "/auth/password/reset", Public, "", id.ResetPassword},
@@ -416,8 +436,13 @@ func approvalPolicy(t *tenancy.Service) workflow.ApprovalPolicy {
 // requireAdmin hides platform admin routes from everyone else.
 func (a *App) requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if p, ok := authctx.PrincipalFrom(r.Context()); !ok || !p.IsPlatformAdmin {
+		p, ok := authctx.PrincipalFrom(r.Context())
+		if !ok || !p.IsPlatformAdmin {
 			a.adapter.WriteError(w, r, apperr.NotFound("Route not found."))
+			return
+		}
+		if a.deps.Config.RequireAdminMFA && !p.MFAEnabled {
+			a.adapter.WriteError(w, r, apperr.Forbidden("mfa_required", "Platform administration requires two-step verification. Turn it on in your account settings."))
 			return
 		}
 		next.ServeHTTP(w, r)

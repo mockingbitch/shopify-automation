@@ -72,3 +72,7 @@ ON CONFLICT (run_id, step_key, item_key) DO NOTHING;
 -- name: ResetSucceededStep :exec
 UPDATE workflow_steps SET status = 'PENDING', attempt_count = 0, next_attempt_at = @now::timestamptz, finished_at = NULL
 WHERE org_id = @org_id AND id = @id AND status IN ('SUCCEEDED', 'SKIPPED');
+
+-- name: RunningStepsForOrg :one
+SELECT count(*) FROM workflow_steps s
+WHERE s.org_id = @org_id AND s.status = 'RUNNING' AND s.lease_expires_at > @now::timestamptz;

@@ -6,6 +6,7 @@
 SELECT s.id, s.org_id, s.attempt_count, s.next_attempt_at
 FROM workflow_steps s
 JOIN workflow_runs r ON r.id = s.run_id
+JOIN organizations o ON o.id = s.org_id AND o.deleted_at IS NULL
 WHERE r.cancel_requested_at IS NULL
   AND r.status IN ('PENDING', 'RUNNING', 'WAITING_USER', 'WAITING_APPROVAL')
   AND (

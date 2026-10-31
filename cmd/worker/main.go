@@ -105,7 +105,7 @@ func run() error {
 	// The worker delivers queued emails (notify.Outbox), so it needs SMTP.
 	var mail mailer.Mailer = mailer.Log{Logger: log}
 	if cfg.SMTPAddr != "" {
-		mail = mailer.SMTP{Addr: cfg.SMTPAddr, From: cfg.SMTPFrom}
+		mail = mailer.SMTP{Addr: cfg.SMTPAddr, From: cfg.SMTPFrom, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword}
 	}
 	a := app.New(app.Deps{
 		Config: cfg, DB: database, SystemDB: system, Redis: rdb, Limiter: limiter, Signer: signer,
@@ -146,6 +146,10 @@ func run() error {
 	mux.Handle(queue.TypePartitions, func(ctx context.Context, _ []byte) error {
 		return maintenance.EnsurePartitions(ctx, system, time.Now(), 3)
 	})
+	mux.Handle(queue.TypeOrgPurge, func(ctx context.Context, _ []byte) error {
+		_, err := maintenance.PurgeOrganizations(ctx, system, store, time.Now(), cfg.OrgRetention, log)
+		return err
+	})
 
 	redisConn := asynq.RedisClientOpt{Addr: ropt.Addr, Username: ropt.Username, Password: ropt.Password, DB: ropt.DB, TLSConfig: ropt.TLSConfig}
 	srv := asynq.NewServer(redisConn, asynq.Config{
@@ -168,10 +172,15 @@ func run() error {
 		if _, err := sched.Register("@every 15s", asynq.NewTask(queue.TypeStepSweep, nil), asynq.Unique(14*time.Second)); err != nil {
 			return err
 		}
-		// Monthly partitions for audit_logs and workflow_events, 3 months ahead.
+		// Emails whose delivery task was lost.
 		if _, err := sched.Register("*/5 * * * *", asynq.NewTask(queue.TypeMailSweep, nil), asynq.Unique(4*time.Minute)); err != nil {
 			return err
 		}
+		// Deleted organizations past ORG_RETENTION, 20 per run.
+		if _, err := sched.Register("47 * * * *", asynq.NewTask(queue.TypeOrgPurge, nil), asynq.Unique(50*time.Minute)); err != nil {
+			return err
+		}
+		// Monthly partitions for audit_logs and workflow_events, 3 months ahead.
 		if _, err := sched.Register("17 3 * * *", asynq.NewTask(queue.TypePartitions, nil), asynq.Unique(time.Hour)); err != nil {
 			return err
 		}

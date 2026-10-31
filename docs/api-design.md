@@ -97,8 +97,14 @@ Platform admin endpoints (`/api/v1/admin/*`) need `users.is_platform_admin` (set
 
 | Method | Path | Auth | Request | Response | Notes / errors |
 |---|---|---|---|---|---|
-| POST | `/auth/register` | P | `{email, password, display_name}` | `202` | Password ≥ 12 chars, checked against a breached-password list (k-anonymity). Always returns `202` and sends an email ("verify" or "you already have an account"), so the response never reveals whether an email is registered |
-| POST | `/auth/login` | P | `{email, password, totp_code?}` | `200 {user}` + cookie | `401` generic; rate-limited 5/min/IP+email |
+| POST | `/auth/register` | P | `{email, password, display_name}` | `202` | Password ≥ 12 chars and a small denylist; when `PWNED_PASSWORDS_URL` is set, also checked against breached passwords (k-anonymity: only a 5-character SHA-1 prefix leaves the server; fails open if the service is down). Same check on password reset. Always returns `202` and sends an email ("verify" or "you already have an account"), so the response never reveals whether an email is registered |
+| POST | `/auth/login` | P | `{email, password}` | `200 {user, csrf_token}` + cookie, or `200 {mfa_required, challenge, expires_at}` | `401` generic; rate-limited 5/min/IP+email |
+| POST | `/auth/login/mfa` | P | `{challenge, code}` | `200 {user, csrf_token}` + cookie | Code from the authenticator app or a recovery code; 5 attempts per challenge, 5-minute expiry, each code accepted once |
+| GET | `/auth/mfa` | S | — | `{enabled, recovery_codes_left, available}` | |
+| POST | `/auth/mfa/setup` | S | — | `{secret, otpauth_uri}` | Replaces an unconfirmed secret; `409` when already on |
+| POST | `/auth/mfa/confirm` | S | `{code}` | `{recovery_codes[10]}` (shown once) | |
+| POST | `/auth/mfa/recovery-codes` | S | `{code}` | `{recovery_codes[10]}` | Needs a current authenticator code |
+| POST | `/auth/mfa/disable` | S | `{password, code}` | `204` | Code or recovery code |
 | POST | `/auth/logout` | S | — | `204` | |
 | GET | `/auth/session` | S | — | `{user, memberships[], csrf_token}` | Dashboard bootstrap |
 | POST | `/auth/verify-email` | P | `{token}` | `204` | |

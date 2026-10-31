@@ -115,6 +115,9 @@ async function resendVerification() {
           <p class="truncate font-medium">{{ session.user?.display_name }}</p>
           <p class="truncate text-xs text-muted-foreground">{{ session.user?.email }}</p>
           <p v-if="current" class="mt-1 text-xs text-muted-foreground">Role: {{ roleLabels[current.role] }}</p>
+          <NuxtLink to="/account" class="mt-2 block text-xs text-primary hover:underline">
+            Account security{{ session.user?.mfa_enabled ? '' : ' (two-step verification off)' }}
+          </NuxtLink>
           <NuxtLink v-if="session.user?.is_platform_admin" to="/admin/shopee-apps" class="mt-2 block text-xs text-primary hover:underline">
             Platform admin: Shopee apps
           </NuxtLink>

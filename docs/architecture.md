@@ -321,7 +321,20 @@ Docker Compose for local development and a single-host staging setup: `nginx`, `
 | Catalog cache | Per shop and kind, 24 hours, in `shopee_catalog_cache` (tenant table). `?refresh=true` bypasses it. |
 | Accessibility | `web/e2e/a11y.spec.ts` runs axe-core (WCAG 2.0/2.1/2.2 A and AA) on every main page; the brand color was darkened to keep 4.5:1 on tinted backgrounds. |
 
-## 15. Conventions
+## 15. Phase 8 implementation notes
+
+| Topic | As built |
+|---|---|
+| Two-step verification | TOTP (RFC 6238, SHA-1, 6 digits, 30 s, ±1 step) in `internal/platform/totp`; the secret is sealed with the envelope keyring (`user_mfa`); each step is accepted once (`last_used_step`). Sign-in becomes password → challenge (5 attempts, 5 minutes) → code. Ten one-time recovery codes, stored hashed. The principal carries `MFAEnabled`. |
+| MFA requirements (Q-5) | Per organization: `settings.require_mfa` blocks owners and admins without MFA from every org route (`403 mfa_required`); only someone with MFA can turn it on. Platform admin routes require MFA when `REQUIRE_ADMIN_MFA` (forced true in production). |
+| Breached passwords | Optional k-anonymity range check (`PWNED_PASSWORDS_URL`) on sign-up and reset; fails open. |
+| Key rotation | `admin rewrap` re-seals every wrapped data key under the active KEK (five tables); the system role may read and update only the key columns. |
+| Purge | Hourly worker job (and `admin purge-orgs`): organizations deleted longer ago than `ORG_RETENTION` (30 days) lose their S3 files (`orgs/<id>/`), their `workflow_events` (partitioned, no FK; only the system role may delete them) and their row, which cascades to every tenant table. Audit logs are kept. Background jobs (sweeper, token refresh, webhook routing) skip deleted organizations. |
+| Fairness | `WORKFLOW_ORG_CONCURRENCY` (default 10) caps running workflow steps per organization; extra steps wait without spending an attempt. |
+| Uploads | Optional clamd scan (`CLAMAV_ADDR`) of product images, import files and extension task inputs; fails closed when configured. Import files are limited to 20 MB. |
+| Dependencies | Go toolchain 1.27.3 (standard library fixes); excelize pinned to an upstream commit with four DoS fixes (no tagged release yet). Remaining `npm audit` findings are in dashboard build tooling only; the dashboard ships as static files. |
+
+## 16. Conventions
 
 - Go: `gofmt`, `go vet`, `golangci-lint` (errcheck, staticcheck, gosec, revive, contextcheck). `context.Context` is the first parameter of every function that does I/O.
 - Errors: wrap with `%w`; domain errors are typed (`ErrNotFound`, `ErrConflict`, `ValidationError`) and mapped to HTTP only in `httpx`.

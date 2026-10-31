@@ -109,6 +109,9 @@ func (s *Service) Upload(ctx context.Context, p authctx.Principal, t authctx.Ten
 	if len(in.Data) == 0 {
 		return Batch{}, apperr.Invalid(apperr.FieldError{Field: "file", Code: "empty", Message: "The file is empty."})
 	}
+	if err := s.scanFile(ctx, "file", in.Data); err != nil {
+		return Batch{}, err
+	}
 	if (in.TemplateID == nil) != (in.TemplateVersionID == nil) {
 		return Batch{}, apperr.Invalid(apperr.FieldError{Field: "template_version_id", Code: "required", Message: "Give both template_id and template_version_id."})
 	}
@@ -333,8 +336,10 @@ func (s *Service) importGroup(ctx context.Context, pr authctx.Principal, t authc
 	for _, u := range g.ImageURLs {
 		raw, err := s.Fetcher.Fetch(ctx, u)
 		if err == nil {
-			imgs = append(imgs, img{raw, u})
-			continue
+			if err = s.scanFile(ctx, "image_urls", raw); err == nil {
+				imgs = append(imgs, img{raw, u})
+				continue
+			}
 		}
 		imgErr = truncateStr(u, 80) + ": " + err.Error()
 		break

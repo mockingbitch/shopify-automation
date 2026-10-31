@@ -25,11 +25,15 @@ type Mailer interface {
 	Send(ctx context.Context, m Message) error
 }
 
-// SMTP sends through an SMTP relay without authentication (development relay
-// or a local MTA). A provider-specific implementation is added for production.
+// SMTP sends through an SMTP relay. With Username set it authenticates
+// with PLAIN, which net/smtp only allows over TLS (STARTTLS is used when
+// the server offers it) or to localhost. Without it, the relay must accept
+// unauthenticated mail (development relay, local MTA).
 type SMTP struct {
-	Addr string
-	From string
+	Addr     string
+	From     string
+	Username string
+	Password string
 }
 
 func (s SMTP) Send(ctx context.Context, m Message) error {
@@ -45,7 +49,12 @@ func (s SMTP) Send(ctx context.Context, m Message) error {
 	b.WriteString(strings.ReplaceAll(m.Text, "\n", "\r\n"))
 
 	done := make(chan error, 1)
-	go func() { done <- smtp.SendMail(s.Addr, nil, s.From, []string{m.To}, []byte(b.String())) }()
+	var auth smtp.Auth
+	if s.Username != "" {
+		host, _, _ := strings.Cut(s.Addr, ":")
+		auth = smtp.PlainAuth("", s.Username, s.Password, host)
+	}
+	go func() { done <- smtp.SendMail(s.Addr, auth, s.From, []string{m.To}, []byte(b.String())) }()
 	select {
 	case err := <-done:
 		if err != nil {
