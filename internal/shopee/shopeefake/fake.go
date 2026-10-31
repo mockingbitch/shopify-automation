@@ -6,6 +6,7 @@
 package shopeefake
 
 import (
+	"net"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -74,6 +75,7 @@ type Server struct {
 	items        map[int64]*Item
 	nextItemID   int64
 	loseAddItem  bool
+	mux          *http.ServeMux
 }
 
 type codeGrant struct {
@@ -90,8 +92,31 @@ type failure struct {
 	hang    bool
 }
 
-// New starts a fake with the given partner credentials.
+// New starts a fake with the given partner credentials on a random port.
 func New(partnerID int64, partnerKey []byte) *Server {
+	s := build(partnerID, partnerKey)
+	s.Server = httptest.NewServer(s.mux)
+	return s
+}
+
+// Listen starts a fake on a fixed address (local development: see
+// cmd/shopeefake). It also serves the seller authorization page.
+func Listen(addr string, partnerID int64, partnerKey []byte) (*Server, error) {
+	s := build(partnerID, partnerKey)
+	s.mux.HandleFunc("GET /auth", s.authPage)
+	s.mux.HandleFunc("POST /auth", s.authGrant)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	s.Server = httptest.NewUnstartedServer(s.mux)
+	_ = s.Server.Listener.Close()
+	s.Server.Listener = ln
+	s.Server.Start()
+	return s, nil
+}
+
+func build(partnerID int64, partnerKey []byte) *Server {
 	s := &Server{
 		PartnerID: partnerID, PartnerKey: partnerKey, Now: time.Now,
 		shops: map[int64]*Shop{}, codes: map[string]codeGrant{}, access: map[string]token{},
@@ -109,7 +134,7 @@ func New(partnerID int64, partnerKey []byte) *Server {
 	mux.HandleFunc("POST /api/v2/logistics/update_address", s.updateAddress)
 	mux.HandleFunc("POST /api/v2/logistics/set_address_config", s.setAddressConfig)
 	s.registerProducts(mux)
-	s.Server = httptest.NewServer(mux)
+	s.mux = mux
 	return s
 }
 

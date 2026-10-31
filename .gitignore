@@ -19,3 +19,5 @@ graphify-out/cache/
 /worker
 /migrate
 /loadtest
+/shopeefake
+/.local-logs/
