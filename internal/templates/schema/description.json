@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.shopee-automation.local/templates/description.json",
-  "title": "Shop description",
-  "description": "Shop description text.",
+  "title": "Mô tả shop",
+  "description": "Nội dung mô tả shop.",
   "type": "object",
   "additionalProperties": false,
   "x-applies-to": "shop",
@@ -10,10 +10,10 @@
     "text": {
       "type": "string",
       "maxLength": 5000,
-      "title": "Description",
+      "title": "Mô tả",
       "x-capability": "shop.profile.update",
       "x-multiline": true,
-      "description": "Applied with shop/update_profile. maxLength: Internal limit; Shopee does not document one."
+      "description": "Được cập nhật vào hồ sơ shop trên Shopee."
     }
   }
 }

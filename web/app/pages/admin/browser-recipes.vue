@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { components } from '~/types/api'
 
-useHead({ title: 'Browser recipes' })
+useHead({ title: 'Kịch bản thao tác' })
 
 type Recipe = components['schemas']['BrowserRecipe']
 
@@ -22,7 +22,7 @@ async function load() {
   try {
     recipes.value = unwrap(await api.GET('/admin/browser-recipes')).data
   } catch (e) {
-    error.value = toApiError(e).status === 404 ? 'This page is only available to platform administrators.' : toApiError(e).message
+    error.value = toApiError(e).status === 404 ? 'Chỉ quản trị nền tảng mới mở được trang này.' : toApiError(e).message
   } finally {
     loading.value = false
   }
@@ -37,20 +37,20 @@ async function create() {
   try {
     recipe = JSON.parse(text.value)
   } catch {
-    error.value = 'The recipe is not valid JSON.'
+    error.value = 'Kịch bản không phải JSON hợp lệ. Bạn hãy kiểm tra dấu ngoặc và dấu phẩy.'
     busy.value = false
     return
   }
   try {
     unwrap(await api.POST('/admin/browser-recipes', { body: { recipe, notes: notes.value } }))
-    notice.value = 'Recipe added. It stays disabled until it is verified on a real seller account and enabled.'
+    notice.value = 'Đã thêm kịch bản. Kịch bản sẽ tắt cho đến khi được kiểm chứng trên tài khoản người bán thật và được bật.'
     text.value = ''
     notes.value = ''
     await load()
   } catch (e) {
     const err = toApiError(e)
     fields.value = err.fields
-    error.value = Object.keys(err.fields).length ? 'The recipe has problems:' : err.message
+    error.value = Object.keys(err.fields).length ? 'Kịch bản có lỗi:' : err.message
   } finally {
     busy.value = false
   }
@@ -66,13 +66,13 @@ async function update(r: Recipe, body: { verified?: boolean; enabled?: boolean }
     error.value = toApiError(e).message
   }
 }
-const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const fmt = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' })
 </script>
 
 <template>
   <div class="mx-auto max-w-6xl space-y-6">
-    <PageHeader title="Browser recipes"
-                description="Declarative steps the browser extension runs in Seller Centre. A version can be enabled only after it was verified on a real seller account; disabling is the kill switch." />
+    <PageHeader title="Kịch bản thao tác"
+                description="Các bước khai báo sẵn mà tiện ích trình duyệt chạy trong Kênh Người Bán. Chỉ bật được một phiên bản sau khi đã kiểm chứng trên tài khoản người bán thật; tắt kịch bản chính là công tắc tắt khẩn cấp." />
     <div aria-live="polite"><Alert v-if="notice"><AlertDescription>{{ notice }}</AlertDescription></Alert></div>
     <FormError :message="error" />
     <ul v-if="Object.keys(fields).length" class="list-disc pl-5 text-sm text-destructive">
@@ -80,22 +80,22 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
     </ul>
 
     <form class="space-y-3 rounded-lg border bg-background p-4" @submit.prevent="create">
-      <h2 class="text-base font-semibold">Add a version</h2>
-      <FormField id="rc-json" label="Recipe JSON" hint="Schema: internal/browser/recipe.schema.json. Saved byte for byte, because those bytes are signed.">
+      <h2 class="text-base font-semibold">Thêm phiên bản</h2>
+      <FormField id="rc-json" label="JSON của kịch bản" hint="Schema: internal/browser/recipe.schema.json. Nội dung được lưu nguyên từng byte vì các byte này được ký.">
         <textarea id="rc-json" v-model="text" rows="12" spellcheck="false" class="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs" />
       </FormField>
-      <FormField id="rc-notes" label="Notes (optional)"><Input id="rc-notes" v-model="notes" maxlength="2000" /></FormField>
-      <div class="flex justify-end"><Button type="submit" :disabled="busy || !text.trim()">Add version</Button></div>
+      <FormField id="rc-notes" label="Ghi chú (không bắt buộc)"><Input id="rc-notes" v-model="notes" maxlength="2000" /></FormField>
+      <div class="flex justify-end"><Button type="submit" :disabled="busy || !text.trim()">Thêm phiên bản</Button></div>
     </form>
 
-    <p v-if="loading && !recipes.length" role="status" class="text-sm text-muted-foreground">Loading…</p>
-    <EmptyState v-else-if="!recipes.length" title="No recipes" description="Operations without an Open API stay manual tasks until a verified recipe is enabled." />
+    <p v-if="loading && !recipes.length" role="status" class="text-sm text-muted-foreground">Đang tải…</p>
+    <EmptyState v-else-if="!recipes.length" title="Chưa có kịch bản nào" description="Thao tác không có Open API vẫn là việc làm thủ công cho đến khi một kịch bản đã kiểm chứng được bật." />
     <div v-else class="overflow-x-auto rounded-lg border bg-background">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Capability</TableHead><TableHead>Market</TableHead><TableHead>Version</TableHead><TableHead>State</TableHead>
-            <TableHead>Runs</TableHead><TableHead><span class="sr-only">Actions</span></TableHead>
+            <TableHead>Chức năng</TableHead><TableHead>Thị trường</TableHead><TableHead>Phiên bản</TableHead><TableHead>Trạng thái</TableHead>
+            <TableHead>Lượt chạy</TableHead><TableHead><span class="sr-only">Thao tác</span></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -105,20 +105,20 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
               <TableCell>{{ r.market }}</TableCell>
               <TableCell>v{{ r.version }}</TableCell>
               <TableCell class="space-y-1">
-                <Badge :variant="r.enabled ? 'default' : 'secondary'">{{ r.enabled ? 'Enabled' : 'Disabled' }}</Badge>
-                <div class="text-xs text-muted-foreground">{{ r.verified_at ? `Verified ${fmt.format(new Date(r.verified_at))}` : 'Not verified' }}</div>
+                <Badge :variant="r.enabled ? 'default' : 'secondary'">{{ r.enabled ? 'Đang bật' : 'Đang tắt' }}</Badge>
+                <div class="text-xs text-muted-foreground">{{ r.verified_at ? `Đã kiểm chứng ${fmt.format(new Date(r.verified_at))}` : 'Chưa kiểm chứng' }}</div>
                 <div v-if="r.disabled_reason" class="text-xs text-muted-foreground">{{ r.disabled_reason }}</div>
               </TableCell>
-              <TableCell class="text-sm">{{ r.success_count }} ok · {{ r.failure_count }} failed</TableCell>
+              <TableCell class="text-sm">{{ r.success_count }} thành công · {{ r.failure_count }} thất bại</TableCell>
               <TableCell class="space-x-2 whitespace-nowrap text-right">
-                <Button variant="outline" size="sm" @click="open = open === r.id ? null : r.id">{{ open === r.id ? 'Hide' : 'View' }}</Button>
-                <ConfirmDialog v-if="!r.verified_at" title="Mark as verified?"
-                               description="Confirm that this exact version ran successfully on a real seller account in this market."
-                               confirm-label="Mark verified" @confirm="update(r, { verified: true }, 'Marked as verified.')">
-                  <template #trigger><Button variant="outline" size="sm">Verify</Button></template>
+                <Button variant="outline" size="sm" @click="open = open === r.id ? null : r.id">{{ open === r.id ? 'Ẩn' : 'Xem' }}</Button>
+                <ConfirmDialog v-if="!r.verified_at" title="Đánh dấu đã kiểm chứng?"
+                               description="Xác nhận đúng phiên bản này đã chạy thành công trên tài khoản người bán thật ở thị trường này."
+                               confirm-label="Đánh dấu đã kiểm chứng" @confirm="update(r, { verified: true }, 'Đã đánh dấu là đã kiểm chứng.')">
+                  <template #trigger><Button variant="outline" size="sm">Kiểm chứng</Button></template>
                 </ConfirmDialog>
-                <Button v-if="r.verified_at && !r.enabled" size="sm" @click="update(r, { enabled: true }, 'Enabled. Other versions were disabled.')">Enable</Button>
-                <Button v-if="r.enabled" variant="outline" size="sm" @click="update(r, { enabled: false }, 'Disabled. Tasks fall back to manual work.')">Disable</Button>
+                <Button v-if="r.verified_at && !r.enabled" size="sm" @click="update(r, { enabled: true }, 'Đã bật. Các phiên bản khác đã được tắt.')">Bật</Button>
+                <Button v-if="r.enabled" variant="outline" size="sm" @click="update(r, { enabled: false }, 'Đã tắt. Các việc sẽ chuyển sang làm thủ công.')">Tắt</Button>
               </TableCell>
             </TableRow>
             <TableRow v-if="open === r.id">

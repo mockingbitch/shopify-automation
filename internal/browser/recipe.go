@@ -73,12 +73,12 @@ var (
 func ValidateRecipe(raw []byte) (Recipe, []apperr.FieldError) {
 	inst, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
-		return Recipe{}, []apperr.FieldError{{Field: "recipe", Code: "invalid_json", Message: "The recipe must be a JSON object."}}
+		return Recipe{}, []apperr.FieldError{{Field: "recipe", Code: "invalid_json", Message: "Kịch bản thao tác phải là một đối tượng JSON."}}
 	}
 	if err := recipeSchema.Validate(inst); err != nil {
 		var ve *jsonschema.ValidationError
 		if !errors.As(err, &ve) {
-			return Recipe{}, []apperr.FieldError{{Field: "recipe", Code: "invalid", Message: "The recipe is invalid."}}
+			return Recipe{}, []apperr.FieldError{{Field: "recipe", Code: "invalid", Message: "Kịch bản thao tác không hợp lệ."}}
 		}
 		return Recipe{}, flatten(ve.BasicOutput())
 	}
@@ -119,7 +119,7 @@ func ValidateRecipe(raw []byte) (Recipe, []apperr.FieldError) {
 					bad(field, "input_type", fmt.Sprintf("%s is a %s input; %s is needed here.", ref, in.Type, wantType))
 				}
 			default:
-				bad(field, "bad_template", fmt.Sprintf("Unknown template {{%s}}; use {{task.shopee_shop_id}} or {{input.<name>}}.", ref))
+				bad(field, "bad_template", fmt.Sprintf("Không nhận ra mẫu {{%s}}; hãy dùng {{task.shopee_shop_id}} hoặc {{input.<tên>}}.", ref))
 			}
 		}
 	}
@@ -132,7 +132,7 @@ func ValidateRecipe(raw []byte) (Recipe, []apperr.FieldError) {
 		switch t := v.(type) {
 		case string:
 			if !allowed && strings.Contains(t, "{{") {
-				bad(field, "template_not_allowed", "Templates are only allowed in goto.url, fill.value, select.value and upload.files.")
+				bad(field, "template_not_allowed", "Chỉ được dùng mẫu trong goto.url, fill.value, select.value và upload.files.")
 			}
 		case map[string]any:
 			for k, x := range t {
@@ -226,7 +226,7 @@ func flatten(out *jsonschema.OutputUnit) []apperr.FieldError {
 		}
 	}
 	if len(byLoc) == 0 {
-		return []apperr.FieldError{{Field: "recipe", Code: "invalid", Message: "The recipe is invalid."}}
+		return []apperr.FieldError{{Field: "recipe", Code: "invalid", Message: "Kịch bản thao tác không hợp lệ."}}
 	}
 	locs := make([]string, 0, len(byLoc))
 	for l := range byLoc {

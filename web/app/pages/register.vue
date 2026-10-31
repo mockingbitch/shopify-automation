@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'auth' })
-useHead({ title: 'Create account' })
+useHead({ title: 'Tạo tài khoản' })
 
 const form = reactive({ display_name: '', email: '', password: '' })
 const fields = ref<Record<string, string>>({})
@@ -28,17 +28,17 @@ async function submit() {
 <template>
   <Card>
     <CardHeader>
-      <CardTitle as="h1">Create account</CardTitle>
-      <CardDescription v-if="!done">You can create or join an organization after signing up.</CardDescription>
+      <CardTitle as="h1">Tạo tài khoản</CardTitle>
+      <CardDescription v-if="!done">Sau khi đăng ký, bạn có thể tạo tổ chức mới hoặc tham gia một tổ chức có sẵn.</CardDescription>
     </CardHeader>
     <CardContent>
       <div v-if="done" role="status" class="space-y-2 text-sm">
-        <p>Check <strong>{{ form.email }}</strong> for a link to verify your email address.</p>
-        <NuxtLink to="/login" class="text-primary underline-offset-4 hover:underline">Go to sign in</NuxtLink>
+        <p>Mở hộp thư <strong>{{ form.email }}</strong> và bấm vào liên kết để xác minh địa chỉ email.</p>
+        <NuxtLink to="/login" class="text-primary underline-offset-4 hover:underline">Đến trang đăng nhập</NuxtLink>
       </div>
       <form v-else class="space-y-4" novalidate @submit.prevent="submit">
         <FormError :message="error" />
-        <FormField id="display_name" label="Your name" :error="fields.display_name">
+        <FormField id="display_name" label="Tên của bạn" :error="fields.display_name">
           <template #default="{ describedBy, invalid }">
             <Input id="display_name" v-model="form.display_name" autocomplete="name" :aria-invalid="invalid" :aria-describedby="describedBy" required />
           </template>
@@ -48,16 +48,16 @@ async function submit() {
             <Input id="email" v-model="form.email" type="email" autocomplete="email" :aria-invalid="invalid" :aria-describedby="describedBy" required />
           </template>
         </FormField>
-        <FormField id="password" label="Password" :error="fields.password" hint="At least 12 characters. A short sentence works well.">
+        <FormField id="password" label="Mật khẩu" :error="fields.password" hint="Tối thiểu 12 ký tự. Bạn có thể dùng một câu ngắn dễ nhớ.">
           <template #default="{ describedBy, invalid }">
             <Input id="password" v-model="form.password" type="password" autocomplete="new-password" :aria-invalid="invalid" :aria-describedby="describedBy" required />
           </template>
         </FormField>
-        <Button type="submit" class="w-full" :disabled="busy">{{ busy ? 'Creating…' : 'Create account' }}</Button>
+        <Button type="submit" class="w-full" :disabled="busy">{{ busy ? 'Đang tạo…' : 'Tạo tài khoản' }}</Button>
       </form>
     </CardContent>
     <CardFooter class="text-sm">
-      <NuxtLink to="/login" class="text-muted-foreground underline-offset-4 hover:underline">Already have an account? Sign in</NuxtLink>
+      <NuxtLink to="/login" class="text-muted-foreground underline-offset-4 hover:underline">Đã có tài khoản? Đăng nhập</NuxtLink>
     </CardFooter>
   </Card>
 </template>

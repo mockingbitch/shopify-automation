@@ -39,12 +39,12 @@ const (
 
 // Errors with messages safe to show in row errors.
 var (
-	ErrNotHTTPS     = errors.New("image URL must use https")
-	ErrBlockedHost  = errors.New("image URL points to an address that is not allowed")
-	ErrTooLarge     = errors.New("image is larger than 10 MB")
-	ErrUnsupported  = errors.New("image must be JPEG, PNG or WebP")
-	ErrTooManyPixel = errors.New("image has more than 40 megapixels")
-	ErrBroken       = errors.New("image could not be decoded")
+	ErrNotHTTPS     = errors.New("URL hình ảnh phải dùng https")
+	ErrBlockedHost  = errors.New("URL hình ảnh trỏ tới một địa chỉ không được phép")
+	ErrTooLarge     = errors.New("hình ảnh lớn hơn 10 MB")
+	ErrUnsupported  = errors.New("hình ảnh phải là JPEG, PNG hoặc WebP")
+	ErrTooManyPixel = errors.New("hình ảnh lớn hơn 40 megapixel")
+	ErrBroken       = errors.New("không đọc được hình ảnh (tệp có thể bị hỏng)")
 )
 
 // Fetcher downloads images from the internet safely.
@@ -80,7 +80,7 @@ func NewFetcher(timeout time.Duration, allowPrivate bool) *Fetcher {
 	return &Fetcher{Client: &http.Client{Transport: tr, Timeout: timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
-				return errors.New("too many redirects")
+				return errors.New("quá nhiều lần chuyển hướng")
 			}
 			if req.URL.Scheme != "https" && !allowPrivate {
 				return ErrNotHTTPS
@@ -138,15 +138,15 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string) ([]byte, error) {
 		if errors.Is(err, ErrNotHTTPS) {
 			return nil, ErrNotHTTPS
 		}
-		return nil, errors.New("image could not be downloaded")
+		return nil, errors.New("không tải được hình ảnh")
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("image download failed with HTTP %d", res.StatusCode)
+		return nil, fmt.Errorf("tải hình ảnh thất bại (HTTP %d)", res.StatusCode)
 	}
 	b, err := io.ReadAll(io.LimitReader(res.Body, MaxBytes+1))
 	if err != nil {
-		return nil, errors.New("image could not be downloaded")
+		return nil, errors.New("không tải được hình ảnh")
 	}
 	if len(b) > MaxBytes {
 		return nil, ErrTooLarge

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { components } from '~/types/api'
-import { batchLabels, isBatchActive, type ImportBatch } from '~/utils/products'
+import { batchLabels, importColumnHelp, isBatchActive, type ImportBatch } from '~/utils/products'
 
 definePageMeta({ middleware: 'org' })
-useHead({ title: 'Product Imports' })
+useHead({ title: 'Nhập sản phẩm' })
 
 type Template = components['schemas']['Template']
 
@@ -59,39 +59,51 @@ async function submit() {
     busy.value = false
   }
 }
-const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const fmt = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' })
 </script>
 
 <template>
   <div class="mx-auto max-w-6xl space-y-6">
-    <PageHeader title="Product Imports" description="Import products from CSV or Excel. Every row is checked; fix invalid rows here and import them again." />
+    <PageHeader title="Nhập sản phẩm" description="Nhập sản phẩm từ file CSV hoặc Excel. Hệ thống kiểm tra từng dòng; bạn sửa các dòng lỗi ngay tại đây rồi nhập lại." />
     <FormError :message="error" />
 
     <form v-if="can('imports.write')" class="grid gap-3 rounded-lg border bg-background p-4 sm:grid-cols-[2fr_2fr_auto] sm:items-end" @submit.prevent="submit">
-      <FormField id="imp-file" label="File (CSV or XLSX, up to 20 MB)">
+      <FormField id="imp-file" label="File (CSV hoặc XLSX, tối đa 20 MB)">
         <input id="imp-file" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                class="block w-full text-sm" @change="file = ($event.target as HTMLInputElement).files?.[0] ?? null">
       </FormField>
-      <FormField id="imp-tpl" label="Template defaults (optional)" hint="Category mappings, SKU rules and defaults from a published template.">
+      <FormField id="imp-tpl" label="Dùng giá trị mặc định từ mẫu shop (không bắt buộc)" hint="Lấy ngành hàng, quy tắc SKU và các giá trị mặc định từ một mẫu shop đã phát hành.">
         <select id="imp-tpl" v-model="templateId" class="h-9 w-full rounded-md border bg-background px-3 text-sm">
-          <option value="">None</option>
+          <option value="">Không dùng</option>
           <option v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}</option>
         </select>
       </FormField>
-      <Button type="submit" :disabled="busy || !file">{{ busy ? 'Uploading…' : 'Import' }}</Button>
+      <Button type="submit" :disabled="busy || !file">{{ busy ? 'Đang tải lên…' : 'Nhập file' }}</Button>
     </form>
     <p class="text-sm text-muted-foreground">
-      Not sure about the columns? <a :href="`/api/v1/orgs/${orgId}/imports/sample.csv`" class="underline" download>Download a sample CSV</a>.
+      Chưa rõ file cần những cột nào? <a :href="`/api/v1/orgs/${orgId}/imports/sample.csv`" class="underline" download>Tải file CSV mẫu</a>.
     </p>
+    <details class="rounded-lg border bg-background p-4 text-sm">
+      <summary class="cursor-pointer font-medium">Ý nghĩa các cột trong file</summary>
+      <p class="mt-2 text-muted-foreground">
+        Dòng đầu tiên của file là tên cột. Giữ nguyên tên cột bằng tiếng Anh như bên dưới; các cột khác sẽ bị bỏ qua.
+        Sản phẩm có nhiều phân loại hàng thì mỗi phân loại là một dòng, cùng SKU sản phẩm.
+      </p>
+      <dl class="mt-3 grid gap-x-4 gap-y-1 sm:grid-cols-[auto_1fr]">
+        <template v-for="(help, col) in importColumnHelp" :key="col">
+          <dt class="font-mono">{{ col }}</dt><dd class="text-muted-foreground">{{ help }}</dd>
+        </template>
+      </dl>
+    </details>
 
-    <p v-if="loading && !batches.length" role="status" class="text-sm text-muted-foreground">Loading…</p>
-    <EmptyState v-else-if="!batches.length" title="No imports yet" description="Upload a file to create products in bulk." />
+    <p v-if="loading && !batches.length" role="status" class="text-sm text-muted-foreground">Đang tải…</p>
+    <EmptyState v-else-if="!batches.length" title="Chưa có lô nhập nào" description="Tải file lên để tạo nhiều sản phẩm cùng lúc." />
     <div v-else class="overflow-x-auto rounded-lg border bg-background">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>File</TableHead><TableHead>Status</TableHead><TableHead>Rows</TableHead>
-            <TableHead>Imported</TableHead><TableHead>Need attention</TableHead><TableHead>Uploaded</TableHead>
+            <TableHead>File</TableHead><TableHead>Trạng thái</TableHead><TableHead>Số dòng</TableHead>
+            <TableHead>Đã nhập</TableHead><TableHead>Cần xử lý</TableHead><TableHead>Ngày tải lên</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

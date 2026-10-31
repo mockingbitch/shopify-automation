@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'auth' })
-useHead({ title: 'Verify email' })
+useHead({ title: 'Xác minh email' })
 
 const route = useRoute()
 const state = ref<'working' | 'done' | 'failed'>('working')
@@ -21,12 +21,12 @@ onMounted(async () => {
 
 <template>
   <Card>
-    <CardHeader><CardTitle as="h1">Verify email</CardTitle></CardHeader>
+    <CardHeader><CardTitle as="h1">Xác minh email</CardTitle></CardHeader>
     <CardContent role="status" class="space-y-3 text-sm">
-      <p v-if="state === 'working'">Verifying…</p>
-      <p v-else-if="state === 'done'">Your email address is verified.</p>
+      <p v-if="state === 'working'">Đang xác minh…</p>
+      <p v-else-if="state === 'done'">Địa chỉ email của bạn đã được xác minh.</p>
       <p v-else class="text-destructive">{{ message }}</p>
-      <NuxtLink v-if="state !== 'working'" to="/" class="text-primary underline-offset-4 hover:underline">Continue</NuxtLink>
+      <NuxtLink v-if="state !== 'working'" to="/" class="text-primary underline-offset-4 hover:underline">Tiếp tục</NuxtLink>
     </CardContent>
   </Card>
 </template>

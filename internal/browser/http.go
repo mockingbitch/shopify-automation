@@ -55,7 +55,7 @@ func (h Handler) CORS(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		if origin != "" {
 			if !slices.Contains(h.Origins, origin) {
-				h.Adapter.WriteError(w, r, apperr.Forbidden("origin_not_allowed", "This origin may not call the extension API."))
+				h.Adapter.WriteError(w, r, apperr.Forbidden("origin_not_allowed", "Nguồn (origin) này không được phép gọi API của tiện ích trình duyệt."))
 				return
 			}
 			w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -97,7 +97,7 @@ func (h Handler) limit(r *http.Request, key string, n int, window time.Duration)
 		return nil
 	}
 	if !ok {
-		return apperr.RateLimited(fmt.Sprintf("Too many attempts. Try again in %d seconds.", int(retry.Seconds())+1))
+		return apperr.RateLimited(fmt.Sprintf("Bạn đã thử quá nhiều lần. Hãy thử lại sau %d giây.", int(retry.Seconds())+1))
 	}
 	return nil
 }
@@ -105,7 +105,7 @@ func (h Handler) limit(r *http.Request, key string, n int, window time.Duration)
 func idParam(r *http.Request, name, what string) (uuid.UUID, error) {
 	id, err := uuid.Parse(chi.URLParam(r, name))
 	if err != nil {
-		return uuid.Nil, apperr.NotFound(what + " not found.")
+		return uuid.Nil, apperr.NotFound("Không tìm thấy " + what + ".")
 	}
 	return id, nil
 }
@@ -137,7 +137,7 @@ func (h Handler) ListDevices(w http.ResponseWriter, r *http.Request) error {
 
 // RevokeDevice handles DELETE /orgs/{orgID}/extension/devices/{deviceID}.
 func (h Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) error {
-	id, err := idParam(r, "deviceID", "Device")
+	id, err := idParam(r, "deviceID", "trình duyệt đã ghép nối")
 	if err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ func (h Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) error {
 
 // RunTasks handles GET /orgs/{orgID}/workflows/{runID}/browser-tasks.
 func (h Handler) RunTasks(w http.ResponseWriter, r *http.Request) error {
-	id, err := idParam(r, "runID", "Run")
+	id, err := idParam(r, "runID", "lượt chạy")
 	if err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func (h Handler) RunTasks(w http.ResponseWriter, r *http.Request) error {
 
 // Requeue handles POST /orgs/{orgID}/browser-tasks/{taskID}/requeue.
 func (h Handler) Requeue(w http.ResponseWriter, r *http.Request) error {
-	id, err := idParam(r, "taskID", "Task")
+	id, err := idParam(r, "taskID", "việc")
 	if err != nil {
 		return err
 	}
@@ -174,11 +174,11 @@ func (h Handler) Requeue(w http.ResponseWriter, r *http.Request) error {
 
 // Screenshot handles GET /orgs/{orgID}/browser-tasks/{taskID}/screenshots/{screenshotID}.
 func (h Handler) Screenshot(w http.ResponseWriter, r *http.Request) error {
-	tid, err := idParam(r, "taskID", "Task")
+	tid, err := idParam(r, "taskID", "việc")
 	if err != nil {
 		return err
 	}
-	sid, err := idParam(r, "screenshotID", "Screenshot")
+	sid, err := idParam(r, "screenshotID", "ảnh chụp màn hình")
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (h Handler) CreateRecipe(w http.ResponseWriter, r *http.Request) error {
 
 // UpdateRecipe handles PATCH /admin/browser-recipes/{recipeID}.
 func (h Handler) UpdateRecipe(w http.ResponseWriter, r *http.Request) error {
-	id, err := idParam(r, "recipeID", "Recipe")
+	id, err := idParam(r, "recipeID", "kịch bản thao tác")
 	if err != nil {
 		return err
 	}
@@ -295,7 +295,7 @@ func (h Handler) Tasks(w http.ResponseWriter, r *http.Request) error {
 
 // Claim handles POST /ext/tasks/{taskID}/claim.
 func (h Handler) Claim(w http.ResponseWriter, r *http.Request) error {
-	id, err := idParam(r, "taskID", "Task")
+	id, err := idParam(r, "taskID", "việc")
 	if err != nil {
 		return err
 	}
@@ -309,7 +309,7 @@ func (h Handler) Claim(w http.ResponseWriter, r *http.Request) error {
 
 // Heartbeat handles POST /ext/tasks/{taskID}/heartbeat.
 func (h Handler) Heartbeat(w http.ResponseWriter, r *http.Request) error {
-	id, err := idParam(r, "taskID", "Task")
+	id, err := idParam(r, "taskID", "việc")
 	if err != nil {
 		return err
 	}
@@ -325,7 +325,7 @@ func (h Handler) Heartbeat(w http.ResponseWriter, r *http.Request) error {
 
 // Release handles POST /ext/tasks/{taskID}/release.
 func (h Handler) Release(w http.ResponseWriter, r *http.Request) error {
-	id, err := idParam(r, "taskID", "Task")
+	id, err := idParam(r, "taskID", "việc")
 	if err != nil {
 		return err
 	}
@@ -341,7 +341,7 @@ func (h Handler) Release(w http.ResponseWriter, r *http.Request) error {
 
 // AddScreenshot handles POST /ext/tasks/{taskID}/screenshots (multipart).
 func (h Handler) AddScreenshot(w http.ResponseWriter, r *http.Request) error {
-	id, err := idParam(r, "taskID", "Task")
+	id, err := idParam(r, "taskID", "việc")
 	if err != nil {
 		return err
 	}
@@ -349,18 +349,18 @@ func (h Handler) AddScreenshot(w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseMultipartForm(maxScreenshotSize + 1<<20); err != nil { //nolint:gosec // G120: body is bounded by MaxBytesReader above
 		var mbe *http.MaxBytesError
 		if errors.As(err, &mbe) {
-			return &apperr.Error{Kind: apperr.KindPayloadTooLarge, Code: "payload_too_large", Message: "Screenshots are limited to 5 MB."}
+			return &apperr.Error{Kind: apperr.KindPayloadTooLarge, Code: "payload_too_large", Message: "Ảnh chụp màn hình tối đa 5 MB."}
 		}
-		return &apperr.Error{Kind: apperr.KindUnsupportedMediaType, Code: "unsupported_media_type", Message: "Send multipart/form-data with a file field."}
+		return &apperr.Error{Kind: apperr.KindUnsupportedMediaType, Code: "unsupported_media_type", Message: "Hãy gửi dữ liệu dạng multipart/form-data có trường file."}
 	}
 	defer func() { _ = r.MultipartForm.RemoveAll() }()
 	lease, err := uuid.Parse(r.FormValue("lease_token"))
 	if err != nil {
-		return apperr.Invalid(apperr.FieldError{Field: "lease_token", Code: "invalid", Message: "Must be the task's lease token."})
+		return apperr.Invalid(apperr.FieldError{Field: "lease_token", Code: "invalid", Message: "Phải là mã giữ việc (lease token) của việc này."})
 	}
 	f, _, err := r.FormFile("file")
 	if err != nil {
-		return apperr.Invalid(apperr.FieldError{Field: "file", Code: "required", Message: "Attach the screenshot as file."})
+		return apperr.Invalid(apperr.FieldError{Field: "file", Code: "required", Message: "Hãy đính kèm ảnh chụp màn hình vào trường file."})
 	}
 	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(io.LimitReader(f, maxScreenshotSize+1))
@@ -376,7 +376,7 @@ func (h Handler) AddScreenshot(w http.ResponseWriter, r *http.Request) error {
 
 // Result handles POST /ext/tasks/{taskID}/result.
 func (h Handler) Result(w http.ResponseWriter, r *http.Request) error {
-	id, err := idParam(r, "taskID", "Task")
+	id, err := idParam(r, "taskID", "việc")
 	if err != nil {
 		return err
 	}

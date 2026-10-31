@@ -65,7 +65,7 @@ func (a Adapter) WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	p := Problem{
 		Type:      "about:blank",
-		Title:     http.StatusText(status),
+		Title:     statusTitle(status),
 		Status:    status,
 		Code:      e.Code,
 		Detail:    e.Message,
@@ -148,7 +148,7 @@ func Decode(w http.ResponseWriter, r *http.Request, dst any) error {
 	mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mt != "application/json" {
 		return &apperr.Error{Kind: apperr.KindUnsupportedMediaType, Code: "unsupported_media_type",
-			Message: "Content-Type must be application/json."}
+			Message: "Content-Type phải là application/json."}
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, MaxJSONBody)
 	dec := json.NewDecoder(r.Body)
@@ -160,21 +160,21 @@ func Decode(w http.ResponseWriter, r *http.Request, dst any) error {
 		switch {
 		case errors.As(err, &tooBig):
 			return &apperr.Error{Kind: apperr.KindPayloadTooLarge, Code: "payload_too_large",
-				Message: "Request body is too large."}
+				Message: "Dữ liệu gửi lên quá lớn."}
 		case errors.Is(err, io.EOF):
-			return apperr.BadRequest("bad_request", "Request body is empty.")
+			return apperr.BadRequest("bad_request", "Dữ liệu gửi lên đang trống.")
 		case errors.As(err, &syntax), errors.Is(err, io.ErrUnexpectedEOF):
-			return apperr.BadRequest("bad_request", "Request body is not valid JSON.")
+			return apperr.BadRequest("bad_request", "Dữ liệu gửi lên không phải JSON hợp lệ.")
 		case errors.As(err, &typ):
 			return apperr.Invalid(apperr.FieldError{Field: typ.Field, Code: "invalid_type",
-				Message: "Has the wrong type."})
+				Message: "Sai kiểu dữ liệu."})
 		default:
 			// Unknown field errors from encoding/json have no typed error.
-			return apperr.BadRequest("bad_request", "Request body is invalid: "+safeJSONMsg(err))
+			return apperr.BadRequest("bad_request", "Dữ liệu gửi lên không hợp lệ: "+safeJSONMsg(err))
 		}
 	}
 	if dec.More() {
-		return apperr.BadRequest("bad_request", "Request body must contain a single JSON object.")
+		return apperr.BadRequest("bad_request", "Dữ liệu gửi lên chỉ được chứa một đối tượng JSON.")
 	}
 	return nil
 }
@@ -184,9 +184,9 @@ func Decode(w http.ResponseWriter, r *http.Request, dst any) error {
 func safeJSONMsg(err error) string {
 	const prefix = "json: unknown field "
 	if s := err.Error(); len(s) > len(prefix) && s[:len(prefix)] == prefix {
-		return "unknown field " + s[len(prefix):]
+		return "trường không xác định " + s[len(prefix):]
 	}
-	return "malformed body"
+	return "sai định dạng"
 }
 
 // QueryInt parses an optional integer query parameter within [min, max].
@@ -198,7 +198,35 @@ func QueryInt(r *http.Request, key string, def, min, max int) (int, error) {
 	n, err := strconv.Atoi(raw)
 	if err != nil || n < min || n > max {
 		return 0, apperr.Invalid(apperr.FieldError{Field: key, Code: "out_of_range",
-			Message: "Must be an integer between " + strconv.Itoa(min) + " and " + strconv.Itoa(max) + "."})
+			Message: "Phải là số nguyên từ " + strconv.Itoa(min) + " đến " + strconv.Itoa(max) + "."})
 	}
 	return n, nil
+}
+
+// statusTitles are the user-facing problem titles (RFC 9457 "title") per
+// HTTP status. The product UI is Vietnamese only.
+var statusTitles = map[int]string{
+	http.StatusBadRequest:            "Yêu cầu không hợp lệ",
+	http.StatusUnauthorized:          "Chưa đăng nhập",
+	http.StatusForbidden:             "Không có quyền",
+	http.StatusNotFound:              "Không tìm thấy",
+	http.StatusMethodNotAllowed:      "Phương thức không được hỗ trợ",
+	http.StatusConflict:              "Xung đột dữ liệu",
+	http.StatusGone:                  "Không còn khả dụng",
+	http.StatusPreconditionFailed:    "Dữ liệu đã thay đổi",
+	http.StatusRequestEntityTooLarge: "Dữ liệu quá lớn",
+	http.StatusUnsupportedMediaType:  "Định dạng không được hỗ trợ",
+	http.StatusUnprocessableEntity:   "Dữ liệu không hợp lệ",
+	http.StatusFailedDependency:      "Cần xử lý trước",
+	http.StatusTooManyRequests:       "Quá nhiều yêu cầu",
+	http.StatusInternalServerError:   "Lỗi hệ thống",
+	http.StatusBadGateway:            "Lỗi từ Shopee",
+	http.StatusServiceUnavailable:    "Dịch vụ tạm thời không khả dụng",
+}
+
+func statusTitle(status int) string {
+	if t, ok := statusTitles[status]; ok {
+		return t
+	}
+	return http.StatusText(status)
 }

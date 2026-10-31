@@ -2,7 +2,7 @@
 import type { ProductInput } from '~/utils/products'
 
 definePageMeta({ middleware: 'org' })
-useHead({ title: 'New product' })
+useHead({ title: 'Thêm sản phẩm' })
 
 const api = useApi()
 const { orgId } = useOrg()
@@ -20,7 +20,7 @@ async function create(input: ProductInput) {
   } catch (e) {
     const err = toApiError(e)
     errors.value = err.fields
-    error.value = Object.keys(err.fields).length ? 'Some fields need attention.' : err.message
+    error.value = Object.keys(err.fields).length ? 'Vui lòng sửa các ô được đánh dấu bên dưới.' : err.message
   } finally {
     busy.value = false
   }
@@ -29,10 +29,10 @@ async function create(input: ProductInput) {
 
 <template>
   <div class="mx-auto max-w-4xl space-y-6">
-    <PageHeader title="New product" description="Add images after saving." />
+    <PageHeader title="Thêm sản phẩm" description="Bạn có thể thêm hình ảnh sau khi lưu." />
     <FormError :message="error" />
-    <ProductForm :errors="errors" :busy="busy" submit-label="Create product" @submit="create">
-      <template #actions><Button variant="outline" as-child><NuxtLink :to="`/orgs/${orgId}/products`">Cancel</NuxtLink></Button></template>
+    <ProductForm :errors="errors" :busy="busy" submit-label="Tạo sản phẩm" @submit="create">
+      <template #actions><Button variant="outline" as-child><NuxtLink :to="`/orgs/${orgId}/products`">Hủy</NuxtLink></Button></template>
     </ProductForm>
   </div>
 </template>

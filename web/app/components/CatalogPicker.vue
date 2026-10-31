@@ -94,49 +94,49 @@ const mandatory = computed(() => attributes.value.filter((a) => a.mandatory))
 
 <template>
   <section class="space-y-3 rounded-md border border-dashed p-3" aria-labelledby="picker-heading">
-    <h3 id="picker-heading" class="text-sm font-semibold">Look up on Shopee</h3>
-    <p v-if="!shops.length" class="text-sm text-muted-foreground">Connect a shop to browse its categories, attributes and brands.</p>
+    <h3 id="picker-heading" class="text-sm font-semibold">Tra cứu trên Shopee</h3>
+    <p v-if="!shops.length" class="text-sm text-muted-foreground">Kết nối một shop để xem ngành hàng, thuộc tính và thương hiệu của shop đó.</p>
     <template v-else>
       <div class="grid gap-3 sm:grid-cols-[1fr_2fr]">
         <div class="space-y-1.5">
-          <Label for="picker-shop">Market of shop</Label>
+          <Label for="picker-shop">Tra cứu theo thị trường của shop</Label>
           <select id="picker-shop" v-model="shopId" class="h-9 w-full rounded-md border bg-background px-3 text-sm">
             <option v-for="s in shops" :key="s.id" :value="s.id">{{ s.shop_name ?? `Shop ${s.shopee_shop_id}` }} ({{ s.region }})</option>
           </select>
         </div>
         <div class="space-y-1.5">
-          <Label for="picker-q">Search categories</Label>
-          <Input id="picker-q" v-model="q" type="search" :disabled="!categories.length" :placeholder="categories.length ? 'At least 2 letters' : ''" />
+          <Label for="picker-q">Tìm ngành hàng</Label>
+          <Input id="picker-q" v-model="q" type="search" :disabled="!categories.length" :placeholder="categories.length ? 'Nhập ít nhất 2 ký tự' : ''" />
         </div>
       </div>
       <Button v-if="!categories.length" type="button" variant="outline" size="sm" :disabled="loading" @click="loadCategories">
-        {{ loading ? 'Loading…' : 'Load categories' }}
+        {{ loading ? 'Đang tải…' : 'Tải danh sách ngành hàng' }}
       </Button>
       <FormError :message="error" />
-      <ul v-if="matches.length" class="max-h-56 overflow-y-auto rounded-md border text-sm" aria-label="Matching categories">
+      <ul v-if="matches.length" class="max-h-56 overflow-y-auto rounded-md border text-sm" aria-label="Ngành hàng phù hợp">
         <li v-for="c in matches" :key="c.category_id">
           <button type="button" class="w-full px-3 py-1.5 text-left hover:bg-muted focus-visible:bg-muted" @click="choose(c)">
             {{ pathOf(c) }} <span class="text-xs text-muted-foreground">({{ c.category_id }})</span>
           </button>
         </li>
       </ul>
-      <p v-else-if="q.trim().length >= 2" class="text-sm text-muted-foreground">No leaf category matches.</p>
+      <p v-else-if="q.trim().length >= 2" class="text-sm text-muted-foreground">Không tìm thấy ngành hàng cấp cuối nào phù hợp.</p>
 
       <div v-if="mandatory.length" class="space-y-2">
-        <p class="text-sm font-medium">Mandatory attributes</p>
+        <p class="text-sm font-medium">Thuộc tính bắt buộc</p>
         <div v-for="a in mandatory" :key="a.attribute_id" class="grid items-center gap-2 sm:grid-cols-[1fr_2fr]">
           <Label :for="`pick-attr-${a.attribute_id}`">{{ a.name }}</Label>
           <select v-if="a.attribute_value_list?.length" :id="`pick-attr-${a.attribute_id}`" class="h-9 rounded-md border bg-background px-3 text-sm"
                   @change="emit('attribute', a.attribute_id, Number(($event.target as HTMLSelectElement).value), '')">
-            <option value="">Choose…</option>
+            <option value="">Chọn…</option>
             <option v-for="v in a.attribute_value_list" :key="v.value_id" :value="v.value_id">{{ v.name }}</option>
           </select>
-          <Input v-else :id="`pick-attr-${a.attribute_id}`" placeholder="Custom value"
+          <Input v-else :id="`pick-attr-${a.attribute_id}`" placeholder="Giá trị tự điền"
                  @change="emit('attribute', a.attribute_id, 0, ($event.target as HTMLInputElement).value)" />
         </div>
       </div>
       <div v-if="brands.list.length || brands.mandatory" class="grid items-center gap-2 sm:grid-cols-[1fr_2fr]">
-        <Label for="pick-brand">Brand{{ brands.mandatory ? ' (required in this category)' : '' }}</Label>
+        <Label for="pick-brand">Thương hiệu{{ brands.mandatory ? ' (bắt buộc với ngành hàng này)' : '' }}</Label>
         <select id="pick-brand" class="h-9 rounded-md border bg-background px-3 text-sm" @change="emit('brand', ($event.target as HTMLSelectElement).value)">
           <option value="">No Brand</option>
           <option v-for="b in brands.list" :key="b.brand_id" :value="b.original_brand_name">{{ b.display_brand_name || b.original_brand_name }}</option>

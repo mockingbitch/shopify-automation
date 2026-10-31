@@ -88,7 +88,7 @@ func (s *Service) Shop(ctx context.Context, p authctx.Principal, t authctx.Tenan
 			return err
 		}
 		if !ok {
-			return apperr.NotFound("Shop not found.")
+			return apperr.NotFound("Không tìm thấy shop.")
 		}
 		c, err := q.ShopCounts(ctx, overviewdb.ShopCountsParams{OrgID: t.OrgID, ShopID: shopID})
 		if err != nil {
@@ -131,7 +131,7 @@ func (h Handler) Org(w http.ResponseWriter, r *http.Request) error {
 func (h Handler) Shop(w http.ResponseWriter, r *http.Request) error {
 	id, err := uuid.Parse(chi.URLParam(r, "shopID"))
 	if err != nil {
-		return apperr.NotFound("Shop not found.")
+		return apperr.NotFound("Không tìm thấy shop.")
 	}
 	a, err := h.Svc.Shop(r.Context(), authctx.MustPrincipal(r.Context()), authctx.MustTenant(r.Context()), id)
 	if err != nil {

@@ -6,11 +6,12 @@
 package shopeefake
 
 import (
-	"net"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -105,14 +106,14 @@ func Listen(addr string, partnerID int64, partnerKey []byte) (*Server, error) {
 	s := build(partnerID, partnerKey)
 	s.mux.HandleFunc("GET /auth", s.authPage)
 	s.mux.HandleFunc("POST /auth", s.authGrant)
-	ln, err := net.Listen("tcp", addr)
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 	s.Server = httptest.NewUnstartedServer(s.mux)
-	_ = s.Server.Listener.Close()
-	s.Server.Listener = ln
-	s.Server.Start()
+	_ = s.Listener.Close()
+	s.Listener = ln
+	s.Start()
 	return s, nil
 }
 

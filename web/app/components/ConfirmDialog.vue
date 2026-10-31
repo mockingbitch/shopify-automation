@@ -16,9 +16,9 @@ const emit = defineEmits<{ confirm: [] }>()
       </AlertDialogHeader>
       <slot />
       <AlertDialogFooter>
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
+        <AlertDialogCancel>Hủy</AlertDialogCancel>
         <AlertDialogAction :disabled="disabled" class="bg-destructive text-destructive-foreground hover:bg-destructive/90" @click="emit('confirm')">
-          {{ confirmLabel ?? 'Confirm' }}
+          {{ confirmLabel ?? 'Xác nhận' }}
         </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>

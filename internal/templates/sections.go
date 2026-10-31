@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 
 	"shopee-automation/internal/platform/apperr"
 )
@@ -119,11 +120,11 @@ func Empty() Sections {
 func (r *Registry) ValidateSection(key string, content json.RawMessage) []apperr.FieldError {
 	s, ok := r.sections[key]
 	if !ok {
-		return []apperr.FieldError{{Field: "section_key", Code: "unknown_section", Message: "Unknown section."}}
+		return []apperr.FieldError{{Field: "section_key", Code: "unknown_section", Message: "Mục không tồn tại."}}
 	}
 	inst, err := jsonschema.UnmarshalJSON(bytes.NewReader(content))
 	if err != nil {
-		return []apperr.FieldError{{Field: "sections." + key, Code: "invalid_json", Message: "Section must be a JSON object."}}
+		return []apperr.FieldError{{Field: "sections." + key, Code: "invalid_json", Message: "Mục phải là một đối tượng JSON."}}
 	}
 	err = s.schema.Validate(inst)
 	if err == nil {
@@ -131,7 +132,7 @@ func (r *Registry) ValidateSection(key string, content json.RawMessage) []apperr
 	}
 	var ve *jsonschema.ValidationError
 	if !errors.As(err, &ve) {
-		return []apperr.FieldError{{Field: "sections." + key, Code: "invalid", Message: "Section is invalid."}}
+		return []apperr.FieldError{{Field: "sections." + key, Code: "invalid", Message: "Nội dung mục không hợp lệ."}}
 	}
 	return flatten(key, ve.BasicOutput())
 }
@@ -150,11 +151,11 @@ func flatten(key string, out *jsonschema.OutputUnit) []apperr.FieldError {
 		}
 		loc := u.InstanceLocation
 		if _, seen := byLoc[loc]; !seen {
-			byLoc[loc] = msg
+			byLoc[loc] = viMessage(u.Error.Kind)
 		}
 	}
 	if len(byLoc) == 0 {
-		return []apperr.FieldError{{Field: "sections." + key, Code: "invalid", Message: "Section is invalid."}}
+		return []apperr.FieldError{{Field: "sections." + key, Code: "invalid", Message: "Nội dung mục không hợp lệ."}}
 	}
 	locs := make([]string, 0, len(byLoc))
 	for l := range byLoc {
@@ -167,6 +168,58 @@ func flatten(key string, out *jsonschema.OutputUnit) []apperr.FieldError {
 		out2 = append(out2, apperr.FieldError{Field: field, Code: "invalid", Message: byLoc[l]})
 	}
 	return out2
+}
+
+// viMessage describes a JSON Schema validation failure in Vietnamese.
+func viMessage(k jsonschema.ErrorKind) string {
+	switch k := k.(type) {
+	case *kind.Required:
+		return "Thiếu trường bắt buộc: " + strings.Join(k.Missing, ", ") + "."
+	case *kind.Type:
+		return "Sai kiểu dữ liệu: cần " + strings.Join(k.Want, " hoặc ") + "."
+	case *kind.Enum:
+		want := make([]string, 0, len(k.Want))
+		for _, w := range k.Want {
+			want = append(want, fmt.Sprint(w))
+		}
+		return "Chỉ nhận một trong các giá trị: " + strings.Join(want, ", ") + "."
+	case *kind.Const:
+		return fmt.Sprintf("Chỉ nhận giá trị %v.", k.Want)
+	case *kind.Format:
+		return "Không đúng định dạng " + k.Want + "."
+	case *kind.Pattern:
+		return "Không đúng định dạng yêu cầu."
+	case *kind.MinLength:
+		if k.Want == 1 {
+			return "Không được để trống."
+		}
+		return fmt.Sprintf("Tối thiểu %d ký tự.", k.Want)
+	case *kind.MaxLength:
+		return fmt.Sprintf("Tối đa %d ký tự.", k.Want)
+	case *kind.MinItems:
+		return fmt.Sprintf("Cần ít nhất %d mục.", k.Want)
+	case *kind.MaxItems:
+		return fmt.Sprintf("Tối đa %d mục.", k.Want)
+	case *kind.UniqueItems:
+		return "Các mục không được trùng nhau."
+	case *kind.Minimum:
+		return "Phải lớn hơn hoặc bằng " + k.Want.RatString() + "."
+	case *kind.Maximum:
+		return "Phải nhỏ hơn hoặc bằng " + k.Want.RatString() + "."
+	case *kind.ExclusiveMinimum:
+		return "Phải lớn hơn " + k.Want.RatString() + "."
+	case *kind.ExclusiveMaximum:
+		return "Phải nhỏ hơn " + k.Want.RatString() + "."
+	case *kind.MultipleOf:
+		return "Phải là bội số của " + k.Want.RatString() + "."
+	case *kind.AdditionalProperties:
+		return "Trường không được hỗ trợ: " + strings.Join(k.Properties, ", ") + "."
+	case *kind.MinProperties:
+		return fmt.Sprintf("Cần ít nhất %d trường.", k.Want)
+	case *kind.MaxProperties:
+		return fmt.Sprintf("Tối đa %d trường.", k.Want)
+	}
+	return "Giá trị không đúng yêu cầu của mục này."
 }
 
 // Issue is a semantic validation result.
@@ -236,7 +289,7 @@ func semantic(secs Sections, rep *Report) {
 	var g general
 	_ = json.Unmarshal(secs["general"], &g)
 	if g.Region == "" {
-		warn("sections.general.region", "no_region", "No target market set. Logistics channel IDs and categories are market-specific.")
+		warn("sections.general.region", "no_region", "Chưa chọn thị trường. ID đơn vị vận chuyển và ngành hàng khác nhau theo từng thị trường.")
 	}
 
 	var ra returnAddress
@@ -246,12 +299,12 @@ func semantic(secs Sections, rep *Report) {
 	if anyAddr {
 		for f, v := range map[string]*string{"name": ra.Name, "phone": ra.Phone, "address": ra.Address, "city": ra.City} {
 			if v == nil {
-				errf("sections.return_address."+f, "required", "Required when an address is set.")
+				errf("sections.return_address."+f, "required", "Bắt buộc khi đã nhập địa chỉ.")
 			}
 		}
 	}
 	if len(ra.UseAs) > 0 && !anyAddr {
-		errf("sections.return_address.use_as", "address_required", "Set the address fields before choosing how it is used.")
+		errf("sections.return_address.use_as", "address_required", "Hãy nhập địa chỉ trước khi chọn cách dùng địa chỉ.")
 	}
 
 	var lg logistics
@@ -259,15 +312,15 @@ func semantic(secs Sections, rep *Report) {
 	seen := map[int64]bool{}
 	for i, ch := range lg.Channels {
 		if seen[ch.ID] {
-			errf(fmt.Sprintf("sections.logistics.channels.%d.logistics_channel_id", i), "duplicate", "Each channel may appear once.")
+			errf(fmt.Sprintf("sections.logistics.channels.%d.logistics_channel_id", i), "duplicate", "Mỗi đơn vị vận chuyển chỉ được xuất hiện một lần.")
 		}
 		seen[ch.ID] = true
 		if ch.CODEnabled != nil && *ch.CODEnabled && !ch.Enabled {
-			errf(fmt.Sprintf("sections.logistics.channels.%d.cod_enabled", i), "cod_requires_enabled", "COD needs the channel to be enabled.")
+			errf(fmt.Sprintf("sections.logistics.channels.%d.cod_enabled", i), "cod_requires_enabled", "Muốn bật COD thì phải bật đơn vị vận chuyển này.")
 		}
 	}
 	if len(lg.Channels) > 0 && g.Region == "" {
-		warn("sections.logistics.channels", "channels_without_region", "Channel IDs differ per market; set the target market.")
+		warn("sections.logistics.channels", "channels_without_region", "ID đơn vị vận chuyển khác nhau theo thị trường; hãy chọn thị trường.")
 	}
 
 	var cm struct {
@@ -280,7 +333,7 @@ func semantic(secs Sections, rep *Report) {
 	for i, m := range cm.Mappings {
 		k := strings.ToLower(strings.TrimSpace(m.Key))
 		if keys[k] {
-			errf(fmt.Sprintf("sections.category_mappings.mappings.%d.key", i), "duplicate", "Each category label may appear once.")
+			errf(fmt.Sprintf("sections.category_mappings.mappings.%d.key", i), "duplicate", "Mỗi nhãn ngành hàng chỉ được xuất hiện một lần.")
 		}
 		keys[k] = true
 	}
@@ -296,7 +349,7 @@ func semantic(secs Sections, rep *Report) {
 	for i, a := range da.Attributes {
 		k := fmt.Sprintf("%v/%d", deref(a.CategoryID), a.AttributeID)
 		if attrs[k] {
-			errf(fmt.Sprintf("sections.default_attributes.attributes.%d.attribute_id", i), "duplicate", "This attribute is already set for this category.")
+			errf(fmt.Sprintf("sections.default_attributes.attributes.%d.attribute_id", i), "duplicate", "Thuộc tính này đã được đặt cho ngành hàng này.")
 		}
 		attrs[k] = true
 	}
@@ -308,7 +361,7 @@ func semantic(secs Sections, rep *Report) {
 	}
 	_ = json.Unmarshal(secs["sku_rules"], &sku)
 	if sku.Generate && sku.Digits == nil {
-		errf("sections.sku_rules.sequence_digits", "required", "Required when SKUs are generated.")
+		errf("sections.sku_rules.sequence_digits", "required", "Bắt buộc khi tự tạo SKU.")
 	}
 }
 

@@ -38,13 +38,13 @@ func (s *Service) List(ctx context.Context, t authctx.Tenant, f ListFilter) ([]S
 			ok = ok || st == *f.Status
 		}
 		if !ok {
-			return nil, apperr.Invalid(apperr.FieldError{Field: "status", Code: "invalid", Message: "Unknown status."})
+			return nil, apperr.Invalid(apperr.FieldError{Field: "status", Code: "invalid", Message: "Trạng thái không hợp lệ."})
 		}
 	}
 	if f.Q != nil {
 		q := strings.TrimSpace(*f.Q)
 		if len(q) > 100 {
-			return nil, apperr.Invalid(apperr.FieldError{Field: "q", Code: "too_long", Message: "Must be at most 100 characters."})
+			return nil, apperr.Invalid(apperr.FieldError{Field: "q", Code: "too_long", Message: "Tối đa 100 ký tự."})
 		}
 		// Escape LIKE wildcards so the search is literal.
 		q = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q)
@@ -225,7 +225,7 @@ func (s *Service) RequestSync(ctx context.Context, p authctx.Principal, t authct
 	jobID := "sync:" + id.String() + ":" + strconv.FormatInt(s.now().Unix()/60, 10)
 	if _, err := s.Queue.Enqueue(ctx, queue.TypeShopSync, SyncPayload{OrgID: t.OrgID, ConnectionID: id},
 		queue.Options{ID: jobID, MaxRetry: 3, Timeout: 2 * time.Minute}); err != nil {
-		return SyncJob{}, apperr.Unavailable("queue_unavailable", "Could not queue the sync. Try again shortly.")
+		return SyncJob{}, apperr.Unavailable("queue_unavailable", "Chưa thể bắt đầu đồng bộ. Hãy thử lại sau ít phút.")
 	}
 	return SyncJob{JobID: jobID}, nil
 }
@@ -353,7 +353,7 @@ type DisconnectInput struct {
 // also revoke the authorization in Shopee Seller Centre.
 func (s *Service) Disconnect(ctx context.Context, p authctx.Principal, t authctx.Tenant, id uuid.UUID, in DisconnectInput) error {
 	if !in.Confirm {
-		return apperr.Invalid(apperr.FieldError{Field: "confirm", Code: "required", Message: "Confirm the disconnect."})
+		return apperr.Invalid(apperr.FieldError{Field: "confirm", Code: "required", Message: "Hãy xác nhận ngắt kết nối."})
 	}
 	return wrap(s.tx(ctx, db.Scope{OrgID: t.OrgID, UserID: p.UserID}, func(q *shopsdb.Queries, tx pgx.Tx) error {
 		conn, err := q.LockConnection(ctx, shopsdb.LockConnectionParams{OrgID: t.OrgID, ID: id})

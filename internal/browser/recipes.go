@@ -66,7 +66,7 @@ type CreateRecipeInput struct {
 // because those bytes are what the extension verifies.
 func (s *Service) CreateRecipe(ctx context.Context, p authctx.Principal, in CreateRecipeInput) (RecipeView, error) {
 	if len(in.Recipe) == 0 || len(in.Recipe) > 65536 {
-		return RecipeView{}, apperr.Invalid(apperr.FieldError{Field: "recipe", Code: "invalid", Message: "Send the recipe as a JSON object (at most 64 KB)."})
+		return RecipeView{}, apperr.Invalid(apperr.FieldError{Field: "recipe", Code: "invalid", Message: "Hãy gửi kịch bản thao tác dưới dạng đối tượng JSON (tối đa 64 KB)."})
 	}
 	rec, errs := ValidateRecipe(in.Recipe)
 	if errs != nil {
@@ -76,14 +76,14 @@ func (s *Service) CreateRecipe(ctx context.Context, p authctx.Principal, in Crea
 	err := s.adminTx(ctx, p, func(q *browserdb.Queries, tx pgx.Tx) error {
 		cs, err := q.CapabilityState(ctx, browserdb.CapabilityStateParams{Market: rec.Market, Key: rec.Capability})
 		if db.IsNoRows(err) {
-			return apperr.Invalid(apperr.FieldError{Field: "recipe.capability", Code: "unknown", Message: "Unknown capability."})
+			return apperr.Invalid(apperr.FieldError{Field: "recipe.capability", Code: "unknown", Message: "Không có chức năng này."})
 		}
 		if err != nil {
 			return err
 		}
 		if cs.DefaultMode != "BROWSER" {
 			return apperr.Invalid(apperr.FieldError{Field: "recipe.capability", Code: "not_browser",
-				Message: "Only capabilities without an Open API (mode BROWSER) can have recipes."})
+				Message: "Chỉ những chức năng không có Open API (chế độ BROWSER) mới có kịch bản thao tác."})
 		}
 		next, err := q.NextRecipeVersion(ctx, browserdb.NextRecipeVersionParams{CapabilityKey: rec.Capability, Market: rec.Market})
 		if err != nil {
@@ -91,7 +91,7 @@ func (s *Service) CreateRecipe(ctx context.Context, p authctx.Principal, in Crea
 		}
 		if int(next) != rec.Version {
 			return apperr.Invalid(apperr.FieldError{Field: "recipe.version", Code: "version",
-				Message: fmt.Sprintf("The next version for %s in %s is %d.", rec.Capability, rec.Market, next)})
+				Message: fmt.Sprintf("Phiên bản tiếp theo của %s tại %s phải là %d.", rec.Capability, rec.Market, next)})
 		}
 		r, err := q.InsertRecipe(ctx, browserdb.InsertRecipeParams{ID: db.NewID(), CapabilityKey: rec.Capability, Market: rec.Market,
 			Version: next, RecipeJson: string(in.Recipe), Notes: clean(in.Notes, 2000), CreatedBy: &p.UserID})
@@ -120,7 +120,7 @@ func (s *Service) UpdateRecipe(ctx context.Context, p authctx.Principal, id uuid
 	err := s.adminTx(ctx, p, func(q *browserdb.Queries, tx pgx.Tx) error {
 		r, err := q.LockRecipe(ctx, id)
 		if err != nil {
-			return apperr.NotFound("Recipe not found.")
+			return apperr.NotFound("Không tìm thấy kịch bản thao tác.")
 		}
 		verifiedAt, verifiedBy, enabled, reason, notes := r.VerifiedAt, r.VerifiedBy, r.Enabled, r.DisabledReason, r.Notes
 		if in.Notes != nil {
@@ -132,19 +132,19 @@ func (s *Service) UpdateRecipe(ctx context.Context, p authctx.Principal, id uuid
 				verifiedAt, verifiedBy = &now, &p.UserID
 			} else {
 				verifiedAt, verifiedBy, enabled = nil, nil, false
-				m := "Verification removed"
+				m := "Đã bỏ xác minh"
 				reason = &m
 			}
 		}
 		if in.Enabled != nil {
 			if *in.Enabled && verifiedAt == nil {
-				return apperr.Conflict("not_verified", "Verify the recipe on a real seller account before enabling it.")
+				return apperr.Conflict("not_verified", "Hãy kiểm tra kịch bản thao tác trên một tài khoản người bán thật trước khi bật.")
 			}
 			enabled = *in.Enabled
 			if enabled {
 				reason = nil
 			} else {
-				m := "Disabled by a platform admin"
+				m := "Đã bị quản trị nền tảng tắt"
 				reason = &m
 			}
 		}

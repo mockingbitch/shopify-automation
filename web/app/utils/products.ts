@@ -9,12 +9,12 @@ export type PublishState = components['schemas']['ProductMapping']['publish_stat
 export const currencies = ['VND', 'SGD', 'MYR', 'THB', 'PHP', 'IDR', 'TWD'] as const
 
 export const publishLabels: Record<PublishState, string> = {
-  PLANNED: 'Planned',
-  CREATING: 'Creating',
-  CREATED: 'Created',
-  VERIFIED: 'Published',
-  FAILED: 'Failed',
-  UNKNOWN: 'Checking',
+  PLANNED: 'Chờ đăng',
+  CREATING: 'Đang tạo',
+  CREATED: 'Đã tạo',
+  VERIFIED: 'Đã đăng',
+  FAILED: 'Thất bại',
+  UNKNOWN: 'Đang kiểm tra',
 }
 
 export function publishVariant(s: PublishState): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -25,19 +25,43 @@ export function publishVariant(s: PublishState): 'default' | 'secondary' | 'dest
 }
 
 export const batchLabels: Record<ImportBatch['status'], string> = {
-  UPLOADED: 'Queued',
-  PARSING: 'Reading the file',
-  IMPORTING: 'Importing',
-  COMPLETED: 'Completed',
-  FAILED: 'Failed',
+  UPLOADED: 'Đang chờ xử lý',
+  PARSING: 'Đang đọc file',
+  IMPORTING: 'Đang nhập',
+  COMPLETED: 'Hoàn tất',
+  FAILED: 'Thất bại',
 }
 
 export const rowLabels: Record<ImportRow['status'], string> = {
-  PENDING: 'Pending',
-  VALID: 'Valid',
-  INVALID: 'Invalid',
-  IMPORTED: 'Imported',
-  FAILED: 'Failed',
+  PENDING: 'Đang chờ',
+  VALID: 'Hợp lệ',
+  INVALID: 'Có lỗi',
+  IMPORTED: 'Đã nhập',
+  FAILED: 'Thất bại',
+}
+
+/** importColumnHelp explains each import-file column (the keys stay in English). */
+export const importColumnHelp: Record<string, string> = {
+  sku: 'Mã SKU',
+  name: 'Tên sản phẩm',
+  description: 'Mô tả',
+  category: 'ID ngành hàng Shopee',
+  brand: 'Thương hiệu',
+  condition: 'Tình trạng: NEW (mới) hoặc USED (đã sử dụng)',
+  price: 'Giá',
+  currency: 'Tiền tệ, ví dụ VND',
+  stock: 'Tồn kho',
+  weight_kg: 'Cân nặng (kg)',
+  length_cm: 'Chiều dài gói hàng (cm)',
+  width_cm: 'Chiều rộng gói hàng (cm)',
+  height_cm: 'Chiều cao gói hàng (cm)',
+  days_to_ship: 'Số ngày chuẩn bị hàng',
+  image_urls: 'Link ảnh (URL), cách nhau bằng dấu |',
+  tier1_name: 'Tên nhóm phân loại 1, ví dụ Màu sắc',
+  tier1_option: 'Lựa chọn của nhóm 1, ví dụ Đỏ',
+  tier2_name: 'Tên nhóm phân loại 2, ví dụ Kích cỡ',
+  tier2_option: 'Lựa chọn của nhóm 2, ví dụ M',
+  variation_sku: 'SKU của phân loại hàng',
 }
 
 export function isBatchActive(s: ImportBatch['status']): boolean {
@@ -47,7 +71,7 @@ export function isBatchActive(s: ImportBatch['status']): boolean {
 export function formatMoney(m: { amount: string; currency: string }): string {
   const n = Number(m.amount)
   if (!Number.isFinite(n)) return `${m.amount} ${m.currency}`
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: m.currency }).format(n)
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: m.currency }).format(n)
 }
 
 /** toInput turns a product into the body PUT expects. */

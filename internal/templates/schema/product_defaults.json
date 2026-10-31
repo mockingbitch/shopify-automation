@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.shopee-automation.local/templates/product_defaults.json",
-  "title": "Product defaults",
-  "description": "Defaults for products created from imports (product/add_item).",
+  "title": "Mặc định cho sản phẩm",
+  "description": "Giá trị mặc định cho sản phẩm tạo từ file nhập.",
   "type": "object",
   "additionalProperties": false,
   "x-applies-to": "products",
@@ -13,7 +13,7 @@
         "NEW",
         "USED"
       ],
-      "title": "Condition"
+      "title": "Tình trạng"
     },
     "item_status": {
       "type": "string",
@@ -21,15 +21,15 @@
         "NORMAL",
         "UNLIST"
       ],
-      "title": "Status after creation",
-      "description": "UNLIST keeps new products hidden until reviewed."
+      "title": "Trạng thái sau khi tạo",
+      "description": "UNLIST giữ sản phẩm mới ở trạng thái ẩn cho đến khi được kiểm tra."
     },
     "weight_kg": {
       "type": "number",
       "exclusiveMinimum": 0,
       "maximum": 1000,
-      "title": "Weight (kg)",
-      "description": "maximum: Internal limit; Shopee does not document one. Channel weight limits are checked when applying."
+      "title": "Cân nặng (kg)",
+      "description": "Giới hạn cân nặng của từng đơn vị vận chuyển được kiểm tra khi áp dụng."
     },
     "package_cm": {
       "type": "object",
@@ -39,20 +39,23 @@
         "width",
         "height"
       ],
-      "title": "Package size (cm)",
+      "title": "Kích thước đóng gói (cm)",
       "properties": {
         "length": {
           "type": "integer",
+          "title": "Dài",
           "minimum": 1,
           "maximum": 1000
         },
         "width": {
           "type": "integer",
+          "title": "Rộng",
           "minimum": 1,
           "maximum": 1000
         },
         "height": {
           "type": "integer",
+          "title": "Cao",
           "minimum": 1,
           "maximum": 1000
         }
@@ -64,16 +67,18 @@
       "required": [
         "is_pre_order"
       ],
-      "title": "Pre-order",
+      "title": "Hàng đặt trước",
       "properties": {
         "is_pre_order": {
-          "type": "boolean"
+          "type": "boolean",
+          "title": "Là hàng đặt trước"
         },
         "days_to_ship": {
           "type": "integer",
+          "title": "Số ngày chuẩn bị hàng",
           "minimum": 1,
           "maximum": 90,
-          "description": "Allowed range comes from Shopee per category; checked when applying."
+          "description": "Khoảng cho phép do Shopee quy định theo ngành hàng; được kiểm tra khi áp dụng."
         }
       }
     },
@@ -84,15 +89,17 @@
         "brand_id",
         "original_brand_name"
       ],
-      "title": "Brand",
+      "title": "Thương hiệu",
       "properties": {
         "brand_id": {
           "type": "integer",
+          "title": "ID thương hiệu",
           "minimum": 0,
-          "description": "0 with \"No Brand\" when the product has no brand."
+          "description": "Nhập 0 kèm tên \"No Brand\" nếu sản phẩm không có thương hiệu."
         },
         "original_brand_name": {
           "type": "string",
+          "title": "Tên thương hiệu",
           "minLength": 1,
           "maxLength": 100
         }
@@ -102,7 +109,7 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 10000000,
-      "title": "Default stock"
+      "title": "Tồn kho mặc định"
     }
   }
 }

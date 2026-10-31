@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'auth' })
-useHead({ title: 'Choose a new password' })
+useHead({ title: 'Đặt mật khẩu mới' })
 
 const route = useRoute()
 const password = ref('')
@@ -30,20 +30,20 @@ async function submit() {
 
 <template>
   <Card>
-    <CardHeader><CardTitle as="h1">Choose a new password</CardTitle></CardHeader>
+    <CardHeader><CardTitle as="h1">Đặt mật khẩu mới</CardTitle></CardHeader>
     <CardContent>
       <div v-if="done" role="status" class="space-y-2 text-sm">
-        <p>Your password was changed and you were signed out everywhere.</p>
-        <NuxtLink to="/login" class="text-primary underline-offset-4 hover:underline">Sign in</NuxtLink>
+        <p>Đã đổi mật khẩu. Bạn đã được đăng xuất khỏi mọi thiết bị.</p>
+        <NuxtLink to="/login" class="text-primary underline-offset-4 hover:underline">Đăng nhập</NuxtLink>
       </div>
       <form v-else class="space-y-4" novalidate @submit.prevent="submit">
         <FormError :message="error" />
-        <FormField id="new_password" label="New password" :error="fields.new_password" hint="At least 12 characters.">
+        <FormField id="new_password" label="Mật khẩu mới" :error="fields.new_password" hint="Tối thiểu 12 ký tự.">
           <template #default="{ describedBy, invalid }">
             <Input id="new_password" v-model="password" type="password" autocomplete="new-password" :aria-invalid="invalid" :aria-describedby="describedBy" required />
           </template>
         </FormField>
-        <Button type="submit" class="w-full" :disabled="busy">Change password</Button>
+        <Button type="submit" class="w-full" :disabled="busy">Đổi mật khẩu</Button>
       </form>
     </CardContent>
   </Card>

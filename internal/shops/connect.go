@@ -67,7 +67,7 @@ func (s *Service) Reconnect(ctx context.Context, p authctx.Principal, t authctx.
 		return ConnectResult{}, wrap(err, nil)
 	}
 	if !app.Enabled {
-		return ConnectResult{}, apperr.FailedDependency("shopee_app_disabled", "The Shopee app for this shop is disabled. Contact the platform administrator.")
+		return ConnectResult{}, apperr.FailedDependency("shopee_app_disabled", "Ứng dụng Shopee của shop này đang bị tắt. Hãy liên hệ quản trị nền tảng.")
 	}
 	return s.startFlow(ctx, p, t, app, &conn.ID)
 }
@@ -88,15 +88,15 @@ func (s *Service) pickApp(ctx context.Context, id *uuid.UUID) (shopsdb.ShopeeApp
 				return a, nil
 			}
 		}
-		return shopsdb.ShopeeApp{}, apperr.Invalid(apperr.FieldError{Field: "shopee_app_id", Code: "invalid", Message: "Unknown or disabled Shopee app."})
+		return shopsdb.ShopeeApp{}, apperr.Invalid(apperr.FieldError{Field: "shopee_app_id", Code: "invalid", Message: "Ứng dụng Shopee không tồn tại hoặc đang bị tắt."})
 	}
 	switch len(apps) {
 	case 0:
-		return shopsdb.ShopeeApp{}, apperr.FailedDependency("no_shopee_app", "No Shopee app is configured yet. Ask the platform administrator to add one.")
+		return shopsdb.ShopeeApp{}, apperr.FailedDependency("no_shopee_app", "Chưa có ứng dụng Shopee nào được cấu hình. Hãy nhờ quản trị nền tảng thêm một ứng dụng.")
 	case 1:
 		return apps[0], nil
 	default:
-		return shopsdb.ShopeeApp{}, apperr.Invalid(apperr.FieldError{Field: "shopee_app_id", Code: "required", Message: "Choose which Shopee app to use."})
+		return shopsdb.ShopeeApp{}, apperr.Invalid(apperr.FieldError{Field: "shopee_app_id", Code: "required", Message: "Hãy chọn ứng dụng Shopee muốn dùng."})
 	}
 }
 
@@ -384,7 +384,7 @@ type Selection struct {
 }
 
 func (s *Service) loadSelection(ctx context.Context, q *shopsdb.Queries, p authctx.Principal, t authctx.Tenant, stateID uuid.UUID) (shopsdb.OauthState, pendingTokens, error) {
-	notFound := apperr.NotFound("Shop selection not found or expired.")
+	notFound := apperr.NotFound("Không tìm thấy danh sách chọn shop hoặc danh sách đã hết hạn. Hãy kết nối shop lại từ đầu.")
 	st, err := q.GetOAuthState(ctx, shopsdb.GetOAuthStateParams{OrgID: t.OrgID, ID: stateID})
 	if err != nil {
 		return st, pendingTokens{}, wrap(err, notFound)
@@ -444,13 +444,13 @@ type SelectInput struct {
 // SelectShops attaches the chosen shops of a main-account authorization.
 func (s *Service) SelectShops(ctx context.Context, p authctx.Principal, t authctx.Tenant, stateID uuid.UUID, in SelectInput) ([]Shop, error) {
 	if len(in.ShopeeShopIDs) == 0 || len(in.ShopeeShopIDs) > maxSelectShops {
-		return nil, apperr.Invalid(apperr.FieldError{Field: "shopee_shop_ids", Code: "invalid", Message: "Choose between 1 and 50 shops."})
+		return nil, apperr.Invalid(apperr.FieldError{Field: "shopee_shop_ids", Code: "invalid", Message: "Chọn từ 1 đến 50 shop."})
 	}
 	var chosen []int64
 	for _, raw := range in.ShopeeShopIDs {
 		id, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || id <= 0 || slices.Contains(chosen, id) {
-			return nil, apperr.Invalid(apperr.FieldError{Field: "shopee_shop_ids", Code: "invalid", Message: "Shop IDs must be unique positive integers."})
+			return nil, apperr.Invalid(apperr.FieldError{Field: "shopee_shop_ids", Code: "invalid", Message: "ID shop phải là số nguyên dương và không được trùng nhau."})
 		}
 		chosen = append(chosen, id)
 	}
@@ -463,7 +463,7 @@ func (s *Service) SelectShops(ctx context.Context, p authctx.Principal, t authct
 		}
 		for _, id := range chosen {
 			if !slices.Contains(st.PendingShopIds, id) {
-				return apperr.Invalid(apperr.FieldError{Field: "shopee_shop_ids", Code: "not_authorized", Message: "Shop " + strconv.FormatInt(id, 10) + " was not part of this authorization."})
+				return apperr.Invalid(apperr.FieldError{Field: "shopee_shop_ids", Code: "not_authorized", Message: "Shop " + strconv.FormatInt(id, 10) + " không nằm trong lần ủy quyền này."})
 			}
 		}
 		app, err := q.GetApp(ctx, st.ShopeeAppID)
@@ -475,7 +475,7 @@ func (s *Service) SelectShops(ctx context.Context, p authctx.Principal, t authct
 		for _, id := range chosen {
 			c, err := s.attachShop(ctx, q, tx, p.UserID, t.OrgID, st.ShopeeAppID, id, tokens, map[string]any{"main_account_id": deref(st.MainAccountID, 0)})
 			if errors.Is(err, errElsewhere) {
-				return apperr.Conflict(cbConnectedElse, "Shop "+strconv.FormatInt(id, 10)+" is already connected to another organization.")
+				return apperr.Conflict(cbConnectedElse, "Shop "+strconv.FormatInt(id, 10)+" đã được kết nối với một tổ chức khác.")
 			}
 			if err != nil {
 				return err

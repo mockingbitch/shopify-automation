@@ -114,9 +114,9 @@ func utcPtr(t *time.Time) *time.Time {
 }
 
 var (
-	errShopNotFound      = apperr.NotFound("Shop not found.")
+	errShopNotFound      = apperr.NotFound("Không tìm thấy shop.")
 	errReconnectRequired = apperr.FailedDependency("shop_reconnect_required",
-		"This shop's Shopee connection is not active. Reconnect the shop to continue.")
+		"Kết nối Shopee của shop này không còn hoạt động. Hãy kết nối lại shop để tiếp tục.")
 )
 
 // wrap maps "no rows" to notFound and unknown errors to internal errors.
@@ -148,9 +148,9 @@ func upstreamError(err error, showDetails bool) error {
 		out = errReconnectRequired
 		out = &apperr.Error{Kind: out.Kind, Code: out.Code, Message: out.Message}
 	case shopee.KindRateLimited, shopee.KindTransient, shopee.KindAmbiguous:
-		out = apperr.Unavailable("upstream_unavailable", "Shopee is not responding right now. Try again in a few minutes.")
+		out = apperr.Unavailable("upstream_unavailable", "Shopee hiện không phản hồi. Hãy thử lại sau vài phút.")
 	default:
-		out = apperr.UpstreamFailed("upstream_error", "Shopee rejected the request.")
+		out = apperr.UpstreamFailed("upstream_error", "Shopee đã từ chối yêu cầu.")
 	}
 	out.Err = err
 	if showDetails {

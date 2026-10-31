@@ -9,7 +9,7 @@ include .env
 export
 endif
 
-.PHONY: help env up down worker fake-shopee migrate run test test-integration lint sqlc sqlc-check tools build docker
+.PHONY: help env up down worker fake-shopee local-up local-down migrate run test test-integration lint sqlc sqlc-check tools build docker
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -30,6 +30,12 @@ migrate: ## Apply migrations to the dev database
 
 run: migrate ## Run the API locally
 	go run ./cmd/api
+
+local-up: ## Start API, worker, FAKE Shopee and the dashboard in the background (.local-logs/)
+	./scripts/local-up.sh
+
+local-down: ## Stop what local-up started
+	./scripts/local-down.sh
 
 fake-shopee: ## Run the FAKE Shopee server on :8099 (local testing without a sandbox account)
 	go run ./cmd/shopeefake

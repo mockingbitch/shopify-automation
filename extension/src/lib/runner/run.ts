@@ -4,6 +4,7 @@ import { FILES_REF, render, TemplateError } from '../recipe/templates';
 import { DEFAULT_PACE_MS, actionOf, type Recipe, type Step } from '../recipe/types';
 import { formatIssues, originOf, validateRecipe } from '../recipe/validate';
 import type { Command, CommandResult, WireFile } from './protocol';
+import { STOPPED_MESSAGE, TAKEN_OVER_MESSAGE, failureMessage, stepMessage } from './user-messages';
 
 /** What the service worker needs from the tab. Real implementation: chrome-tab-driver.ts. */
 export interface TabDriver {
@@ -171,7 +172,7 @@ export class TaskRun {
 
   /** Runs the whole task and reports the result. Never throws. */
   async run(): Promise<RunState> {
-    this.set({ phase: 'preparing', message: 'Checking the recipe…' });
+    this.set({ phase: 'preparing', message: 'Đang kiểm tra kịch bản thao tác…' });
     const every = this.deps.heartbeatEveryMs ?? 60_000;
     this.heartbeatTimer = setInterval(() => {
       const s = this.state.phase === 'paused' ? 'WAITING_USER' : 'RUNNING';
@@ -182,7 +183,7 @@ export class TaskRun {
       this.recipe = recipe;
       await this.execute(recipe, files);
       await this.finish({ status: 'SUCCEEDED' });
-      this.set({ phase: 'succeeded', message: 'Done. The change was applied and verified.' });
+      this.set({ phase: 'succeeded', message: 'Xong. Thay đổi đã được áp dụng và kiểm tra lại.' });
     } catch (e) {
       await this.handleError(e);
     } finally {
@@ -193,14 +194,14 @@ export class TaskRun {
 
   private async handleError(e: unknown): Promise<void> {
     if (e instanceof LeaseLost || this.leaseLost || isLeaseLost(e)) {
-      this.set({ phase: 'lease_lost', message: 'This task was taken over.', errorCode: 'lease_lost' });
+      this.set({ phase: 'lease_lost', message: TAKEN_OVER_MESSAGE, errorCode: 'lease_lost' });
       return;
     }
     let code = 'step_failed';
     let message = String((e as Error)?.message ?? e);
     if (e instanceof StoppedByUser) {
       code = 'stopped_by_user';
-      message = 'Stopped by the seller.';
+      message = 'stopped by the seller';
     } else if (e instanceof RunFailure) {
       code = e.code;
     } else if (e instanceof DriverError) {
@@ -217,11 +218,13 @@ export class TaskRun {
       else await this.finish({ status: 'FAILED', error_code: code, message: message.slice(0, 500) });
     } catch (err) {
       if (isLeaseLost(err)) {
-        this.set({ phase: 'lease_lost', message: 'This task was taken over.', errorCode: 'lease_lost' });
+        this.set({ phase: 'lease_lost', message: TAKEN_OVER_MESSAGE, errorCode: 'lease_lost' });
         return;
       }
     }
-    this.set({ phase: code === 'stopped_by_user' ? 'stopped' : 'failed', message, errorCode: code });
+    // The API gets the technical message above; the seller sees what to do next.
+    const shown = code === 'stopped_by_user' ? STOPPED_MESSAGE : failureMessage(code, message);
+    this.set({ phase: code === 'stopped_by_user' ? 'stopped' : 'failed', message: shown, errorCode: code });
   }
 
   private async finish(r: { status: 'SUCCEEDED' | 'FAILED'; error_code?: string; message?: string }): Promise<void> {
@@ -296,7 +299,7 @@ export class TaskRun {
   private async execute(recipe: Recipe, files: Map<string, WireFile[]>): Promise<void> {
     const all: Step[] = [...recipe.steps, ...(recipe.verify ?? [])];
     this.logs = all.map((s, index) => ({ index, action: actionOf(s), outcome: 'skipped', duration_ms: 0 }));
-    this.set({ phase: 'running', stepCount: all.length, stepIndex: 0, message: 'Starting…' });
+    this.set({ phase: 'running', stepCount: all.length, stepIndex: 0, message: 'Đang bắt đầu…' });
     await this.heartbeat('RUNNING');
 
     const pace = recipe.pace_ms ?? DEFAULT_PACE_MS;
@@ -310,7 +313,7 @@ export class TaskRun {
     // Act only in an allowed tab: open start_url in the same tab if needed.
     const startOrigin = originOf((await this.deps.driver.url()) ?? '');
     if (!startOrigin || !allowed.has(startOrigin)) {
-      this.set({ message: 'Opening Seller Centre in this tab…' });
+      this.set({ message: 'Đang mở Kênh Người Bán trong tab này…' });
       await this.deps.driver.navigate(recipe.start_url, NAVIGATION_TIMEOUT_MS);
     }
 
@@ -320,7 +323,7 @@ export class TaskRun {
       const action = actionOf(step);
       this.checkAbort();
       await this.beforeAction(recipe, allowed);
-      this.set({ phase: 'running', stepIndex: i, message: `Step ${i + 1} of ${all.length}: ${action}` });
+      this.set({ phase: 'running', stepIndex: i, message: stepMessage(i, all.length, action) });
       const started = this.now();
       try {
         if ((action === 'click' || action === 'fill' || action === 'select' || action === 'upload') && !asserted) {
@@ -355,12 +358,12 @@ export class TaskRun {
       let message = '';
       if (!origin || !allowed.has(origin)) {
         reason = 'unexpected_page';
-        message = 'This tab left Seller Centre. Finish what the page asks (for example, sign in), return to Seller Centre in this tab, then click Continue.';
+        message = 'Tab này đã rời khỏi Kênh Người Bán. Hãy làm theo yêu cầu trên trang (ví dụ đăng nhập), quay lại Kênh Người Bán trong tab này, rồi bấm Tiếp tục.';
       } else {
         const r = await this.sendWithRetry({ op: 'stop_check', stop_on: recipe.stop_on }, DEFAULT_STEP_TIMEOUT_MS, true);
         if (r.ok && r.matched !== undefined) {
           reason = 'verification';
-          message = 'Seller Centre is asking for a login or verification. Please finish it in the tab, then click Continue.';
+          message = 'Kênh Người Bán đang yêu cầu đăng nhập hoặc xác minh. Hãy hoàn tất trong tab, rồi bấm Tiếp tục.';
         }
       }
       if (!reason) return;
@@ -370,7 +373,7 @@ export class TaskRun {
 
   private async pause(reason: NonNullable<RunState['pauseReason']>, message: string): Promise<void> {
     this.set({ phase: 'paused', pauseReason: reason, message });
-    await this.heartbeat('WAITING_USER', reason === 'verification' ? 'Waiting for the seller to finish verification' : 'Waiting for the seller to return to Seller Centre');
+    await this.heartbeat('WAITING_USER', reason === 'verification' ? 'Đang chờ người bán hoàn tất xác minh' : 'Đang chờ người bán quay lại Kênh Người Bán');
     const choice = await new Promise<'continue' | 'stop'>((resolve) => {
       this.resume = resolve;
       if (this.stopped || this.leaseLost) resolve('stop');
@@ -378,7 +381,7 @@ export class TaskRun {
     this.resume = null;
     this.checkAbort();
     if (choice === 'stop') throw new StoppedByUser();
-    this.set({ phase: 'running', message: 'Continuing…' });
+    this.set({ phase: 'running', message: 'Đang tiếp tục…' });
     await this.heartbeat('RUNNING');
   }
 

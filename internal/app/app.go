@@ -359,9 +359,11 @@ func (a *App) Handler() http.Handler {
 	cfg := a.deps.Config
 	r := chi.NewRouter()
 	r.Use(httpx.RequestMeta(cfg.TrustProxyHeaders), httpx.Recoverer(a.adapter), httpx.AccessLog(a.deps.Log), httpx.SecurityHeaders)
-	r.NotFound(a.adapter.H(func(http.ResponseWriter, *http.Request) error { return apperr.NotFound("Route not found.") }).ServeHTTP)
+	r.NotFound(a.adapter.H(func(http.ResponseWriter, *http.Request) error {
+		return apperr.NotFound("Không tìm thấy đường dẫn này.")
+	}).ServeHTTP)
 	r.MethodNotAllowed(a.adapter.H(func(http.ResponseWriter, *http.Request) error {
-		return &apperr.Error{Kind: apperr.KindNotFound, Code: "method_not_allowed", Message: "Method not allowed."}
+		return &apperr.Error{Kind: apperr.KindNotFound, Code: "method_not_allowed", Message: "Phương thức này không được hỗ trợ."}
 	}).ServeHTTP)
 
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
@@ -427,7 +429,7 @@ func approvalPolicy(t *tenancy.Service) workflow.ApprovalPolicy {
 			return err
 		}
 		if !org.Settings.AllowSelfApproval {
-			return apperr.Forbidden("self_approval_not_allowed", "Operators cannot approve their own runs in this organization.")
+			return apperr.Forbidden("self_approval_not_allowed", "Trong tổ chức này, Nhân viên vận hành không được tự duyệt lượt chạy của chính mình.")
 		}
 		return nil
 	}
@@ -438,11 +440,11 @@ func (a *App) requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p, ok := authctx.PrincipalFrom(r.Context())
 		if !ok || !p.IsPlatformAdmin {
-			a.adapter.WriteError(w, r, apperr.NotFound("Route not found."))
+			a.adapter.WriteError(w, r, apperr.NotFound("Không tìm thấy đường dẫn này."))
 			return
 		}
 		if a.deps.Config.RequireAdminMFA && !p.MFAEnabled {
-			a.adapter.WriteError(w, r, apperr.Forbidden("mfa_required", "Platform administration requires two-step verification. Turn it on in your account settings."))
+			a.adapter.WriteError(w, r, apperr.Forbidden("mfa_required", "Quản trị nền tảng yêu cầu xác minh hai bước. Hãy bật xác minh hai bước trong cài đặt tài khoản."))
 			return
 		}
 		next.ServeHTTP(w, r)

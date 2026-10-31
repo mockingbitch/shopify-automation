@@ -2,7 +2,7 @@
 import type { components } from '~/types/api'
 
 definePageMeta({ middleware: 'org' })
-useHead({ title: 'Audit log' })
+useHead({ title: 'Nhật ký hoạt động' })
 const { orgId, can } = useOrg()
 
 const rows = ref<components['schemas']['AuditLog'][]>([])
@@ -30,15 +30,15 @@ onMounted(() => { if (can('audit.read')) void load() })
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <PageHeader title="Audit log" description="Every change made in this organization, newest first." />
-    <EmptyState v-if="!can('audit.read')" title="You do not have access" description="Only owners and admins can view the audit log." />
+    <PageHeader title="Nhật ký hoạt động" description="Mọi thay đổi trong tổ chức này, mới nhất ở trên cùng." />
+    <EmptyState v-if="!can('audit.read')" title="Bạn không có quyền xem trang này" description="Chỉ chủ sở hữu và quản trị viên mới xem được nhật ký hoạt động." />
     <template v-else>
       <FormError :message="error" />
-      <p v-if="loading && !rows.length" role="status" class="text-sm text-muted-foreground">Loading…</p>
+      <p v-if="loading && !rows.length" role="status" class="text-sm text-muted-foreground">Đang tải…</p>
       <AuditTable v-else-if="rows.length" :rows="rows" />
-      <EmptyState v-else-if="!error" title="No entries yet" />
+      <EmptyState v-else-if="!error" title="Chưa có hoạt động nào" />
       <div v-if="cursor" class="mt-4">
-        <Button variant="outline" :disabled="loading" @click="load(true)">Load more</Button>
+        <Button variant="outline" :disabled="loading" @click="load(true)">Tải thêm</Button>
       </div>
     </template>
   </div>

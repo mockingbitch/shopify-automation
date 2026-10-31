@@ -2,7 +2,7 @@
 import { connectErrors, daysUntil, statusLabels, statusVariant, type ConnectionStatus, type Shop } from '~/utils/shops'
 
 definePageMeta({ middleware: 'org' })
-useHead({ title: 'Shops' })
+useHead({ title: 'Shop' })
 
 const api = useApi()
 const route = useRoute()
@@ -78,67 +78,67 @@ function dismissConnectError() {
   void router.replace({ query })
 }
 
-const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const fmt = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' })
 const date = (iso: string | null) => (iso ? fmt.format(new Date(iso)) : '—')
 </script>
 
 <template>
   <div class="mx-auto max-w-6xl space-y-6">
-    <PageHeader title="Shops" description="Shopee shops connected to this organization.">
+    <PageHeader title="Shop" description="Các shop Shopee đã kết nối với tổ chức này.">
       <template #actions>
         <div v-if="can('shops.connect') && apps.length > 1" class="flex items-center gap-2">
-          <Label for="connect-app" class="text-sm">Shopee app</Label>
+          <Label for="connect-app" class="text-sm">Ứng dụng Shopee</Label>
           <select id="connect-app" v-model="appId" class="h-9 rounded-md border bg-background px-3 text-sm">
             <option v-for="a in apps" :key="a.id" :value="a.id">{{ a.name }} ({{ a.environment }})</option>
           </select>
         </div>
         <Button v-if="can('shops.connect')" :disabled="connecting" @click="connect">
-          {{ connecting ? 'Opening Shopee…' : 'Connect shop' }}
+          {{ connecting ? 'Đang mở Shopee…' : 'Kết nối shop' }}
         </Button>
       </template>
     </PageHeader>
 
     <Alert v-if="connectError" variant="destructive" role="alert">
-      <AlertTitle>Shop not connected</AlertTitle>
+      <AlertTitle>Chưa kết nối được shop</AlertTitle>
       <AlertDescription class="flex flex-wrap items-center gap-3">
         {{ connectError }}
-        <Button variant="outline" size="sm" @click="dismissConnectError">Dismiss</Button>
+        <Button variant="outline" size="sm" @click="dismissConnectError">Đóng</Button>
       </AlertDescription>
     </Alert>
     <FormError :message="error" />
 
     <div class="flex flex-col gap-3 sm:flex-row">
       <div class="flex-1">
-        <Label for="shop-search" class="sr-only">Search shops</Label>
-        <Input id="shop-search" v-model="filter.q" type="search" placeholder="Search by name or Shopee shop ID" />
+        <Label for="shop-search" class="sr-only">Tìm shop</Label>
+        <Input id="shop-search" v-model="filter.q" type="search" placeholder="Tìm theo tên hoặc ID shop Shopee" />
       </div>
       <div class="sm:w-56">
-        <Label for="shop-status" class="sr-only">Status</Label>
+        <Label for="shop-status" class="sr-only">Trạng thái</Label>
         <select id="shop-status" v-model="filter.status" class="h-9 w-full rounded-md border bg-background px-3 text-sm">
-          <option value="">All statuses</option>
+          <option value="">Tất cả trạng thái</option>
           <option v-for="(label, key) in statusLabels" :key="key" :value="key">{{ label }}</option>
         </select>
       </div>
     </div>
 
-    <p v-if="loading && !shops.length" role="status" class="text-sm text-muted-foreground">Loading…</p>
+    <p v-if="loading && !shops.length" role="status" class="text-sm text-muted-foreground">Đang tải…</p>
     <EmptyState
       v-else-if="!shops.length && !filter.q && !filter.status"
-      title="No shops yet"
-      description="Connect a Shopee shop to sync its information and automate setup. You will sign in on Shopee to authorize access."
+      title="Chưa có shop nào"
+      description="Kết nối shop Shopee để đồng bộ thông tin và tự động thiết lập shop. Bạn sẽ đăng nhập Shopee để ủy quyền truy cập."
     >
-      <Button v-if="can('shops.connect')" :disabled="connecting" @click="connect">Connect shop</Button>
+      <Button v-if="can('shops.connect')" :disabled="connecting" @click="connect">Kết nối shop</Button>
     </EmptyState>
-    <p v-else-if="!shops.length" class="text-sm text-muted-foreground">No shops match the filters.</p>
+    <p v-else-if="!shops.length" class="text-sm text-muted-foreground">Không có shop nào khớp với bộ lọc.</p>
     <div v-else class="overflow-x-auto rounded-lg border bg-background">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Shop</TableHead>
-            <TableHead>Market</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Authorization ends</TableHead>
-            <TableHead>Last synced</TableHead>
+            <TableHead>Thị trường</TableHead>
+            <TableHead>Trạng thái</TableHead>
+            <TableHead>Ủy quyền hết hạn</TableHead>
+            <TableHead>Đồng bộ gần nhất</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -158,11 +158,11 @@ const date = (iso: string | null) => (iso ? fmt.format(new Date(iso)) : '—')
               <span
                 v-if="s.connection_status === 'ACTIVE' && (daysUntil(s.authorization_expires_at) ?? 99) <= 7"
                 class="block text-xs text-destructive"
-              >Ends in {{ Math.max(0, daysUntil(s.authorization_expires_at) ?? 0) }} days, reconnect soon</span>
+              >Hết hạn sau {{ Math.max(0, daysUntil(s.authorization_expires_at) ?? 0) }} ngày, hãy kết nối lại sớm</span>
             </TableCell>
             <TableCell>
               {{ date(s.last_synced_at) }}
-              <span v-if="s.last_sync_error" class="block text-xs text-destructive">Last sync failed ({{ s.last_sync_error }})</span>
+              <span v-if="s.last_sync_error" class="block text-xs text-destructive">Lần đồng bộ gần nhất thất bại ({{ s.last_sync_error }})</span>
             </TableCell>
           </TableRow>
         </TableBody>

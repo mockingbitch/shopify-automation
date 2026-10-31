@@ -105,7 +105,7 @@ func (h Handler) Reconnect(w http.ResponseWriter, r *http.Request) error {
 	return httpx.JSON(w, http.StatusOK, httpx.Data[ConnectResult]{Data: res})
 }
 
-var errSelectionNotFound = apperr.NotFound("Shop selection not found or expired.")
+var errSelectionNotFound = apperr.NotFound("Không tìm thấy danh sách chọn shop hoặc danh sách đã hết hạn. Hãy kết nối shop lại từ đầu.")
 
 // GetSelection handles GET /orgs/{orgID}/shops/connect/{stateID}.
 func (h Handler) GetSelection(w http.ResponseWriter, r *http.Request) error {
@@ -189,16 +189,16 @@ func (h Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 // Webhook handles POST /webhooks/shopee/{appID}. Success is an empty 204,
 // as Shopee expects a fast 2xx without a body.
 func (h Handler) Webhook(w http.ResponseWriter, r *http.Request) error {
-	id, err := pathUUID(r, "appID", apperr.NotFound("Route not found."))
+	id, err := pathUUID(r, "appID", apperr.NotFound("Không tìm thấy đường dẫn này."))
 	if err != nil {
 		return err
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, MaxWebhookBody+1))
 	if err != nil {
-		return apperr.BadRequest("bad_request", "Could not read body.")
+		return apperr.BadRequest("bad_request", "Không đọc được dữ liệu gửi lên.")
 	}
 	if len(body) > MaxWebhookBody {
-		return &apperr.Error{Kind: apperr.KindPayloadTooLarge, Code: "payload_too_large", Message: "Body is too large."}
+		return &apperr.Error{Kind: apperr.KindPayloadTooLarge, Code: "payload_too_large", Message: "Dữ liệu gửi lên quá lớn."}
 	}
 	if err := h.Svc.ReceiveWebhook(r.Context(), id, body, r.Header.Get("Authorization")); err != nil {
 		return err
@@ -237,7 +237,7 @@ func (h Handler) UpdateApp(w http.ResponseWriter, r *http.Request) error {
 	if err := requireAdmin(p); err != nil {
 		return err
 	}
-	id, err := pathUUID(r, "appID", apperr.NotFound("Shopee app not found."))
+	id, err := pathUUID(r, "appID", apperr.NotFound("Không tìm thấy ứng dụng Shopee."))
 	if err != nil {
 		return err
 	}
@@ -287,7 +287,7 @@ func (h Handler) PutOverride(w http.ResponseWriter, r *http.Request) error {
 func (h Handler) DeleteOverride(w http.ResponseWriter, r *http.Request) error {
 	id, err := uuid.Parse(chi.URLParam(r, "overrideID"))
 	if err != nil {
-		return apperr.NotFound("Override not found.")
+		return apperr.NotFound("Không tìm thấy thiết lập riêng này.")
 	}
 	if err := h.Svc.DeleteOverride(r.Context(), authctx.MustPrincipal(r.Context()), id); err != nil {
 		return err

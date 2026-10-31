@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.shopee-automation.local/templates/general.json",
-  "title": "General",
-  "description": "Target market and shop name.",
+  "title": "Thông tin chung",
+  "description": "Thị trường và tên shop.",
   "type": "object",
   "additionalProperties": false,
   "x-applies-to": "shop",
@@ -18,17 +18,17 @@
         "ID",
         "TW"
       ],
-      "title": "Target market",
-      "description": "Launch markets (assumption A-2). Preview warns when a shop is in another market."
+      "title": "Thị trường",
+      "description": "Khi xem trước, hệ thống sẽ cảnh báo nếu shop thuộc thị trường khác."
     },
     "shop_name": {
       "type": "string",
       "minLength": 1,
       "maxLength": 100,
-      "title": "Shop name",
+      "title": "Tên shop",
       "x-capability": "shop.profile.update",
       "x-sensitive": true,
-      "description": "Applied with shop/update_profile. Shopee rejects a name change within 30 days of the last one and enforces its own length range. maxLength: Internal limit; Shopee does not document one."
+      "description": "Được cập nhật vào hồ sơ shop. Shopee không cho đổi tên shop trong vòng 30 ngày kể từ lần đổi trước và có giới hạn độ dài riêng."
     }
   }
 }

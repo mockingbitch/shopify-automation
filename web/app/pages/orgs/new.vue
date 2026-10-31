@@ -1,5 +1,5 @@
 <script setup lang="ts">
-useHead({ title: 'New organization' })
+useHead({ title: 'Tổ chức mới' })
 
 const form = reactive({ name: '', slug: '' })
 const slugEdited = ref(false)
@@ -33,22 +33,22 @@ async function submit() {
 
 <template>
   <div class="mx-auto max-w-lg">
-    <PageHeader title="New organization" description="You will be its owner. You can invite members afterwards." />
+    <PageHeader title="Tổ chức mới" description="Bạn sẽ là chủ sở hữu. Bạn có thể mời thành viên sau." />
     <Card>
       <CardContent class="pt-6">
         <form class="space-y-4" novalidate @submit.prevent="submit">
           <FormError :message="error" />
-          <FormField id="name" label="Name" :error="fields.name">
+          <FormField id="name" label="Tên" :error="fields.name">
             <template #default="{ describedBy, invalid }">
               <Input id="name" v-model="form.name" :aria-invalid="invalid" :aria-describedby="describedBy" required />
             </template>
           </FormField>
-          <FormField id="slug" label="URL name" :error="fields.slug" hint="Lowercase letters, digits and hyphens.">
+          <FormField id="slug" label="Tên trong URL" :error="fields.slug" hint="Chỉ dùng chữ thường không dấu, chữ số và dấu gạch ngang.">
             <template #default="{ describedBy, invalid }">
               <Input id="slug" v-model="form.slug" :aria-invalid="invalid" :aria-describedby="describedBy" required @input="slugEdited = true" />
             </template>
           </FormField>
-          <Button type="submit" :disabled="busy">Create organization</Button>
+          <Button type="submit" :disabled="busy">Tạo tổ chức</Button>
         </form>
       </CardContent>
     </Card>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-useHead({ title: 'Account security' })
+useHead({ title: 'Bảo mật tài khoản' })
 
 const api = useApi()
 const route = useRoute()
@@ -45,14 +45,14 @@ const confirm = () => act(async () => {
   codes.value = unwrap(await api.POST('/auth/mfa/confirm', { body: { code: code.value } })).data.recovery_codes
   setup.value = null
   code.value = ''
-  notice.value = 'Two-step verification is on. Save the recovery codes below.'
+  notice.value = 'Đã bật xác minh hai bước. Bạn hãy lưu các mã khôi phục bên dưới.'
   await session.load(true)
   await load()
 })
 const regenerate = () => act(async () => {
   codes.value = unwrap(await api.POST('/auth/mfa/recovery-codes', { body: { code: code.value } })).data.recovery_codes
   code.value = ''
-  notice.value = 'New recovery codes. The old ones no longer work.'
+  notice.value = 'Đã tạo mã khôi phục mới. Các mã cũ không còn dùng được.'
   await load()
 })
 const disable = () => act(async () => {
@@ -60,7 +60,7 @@ const disable = () => act(async () => {
   code.value = ''
   password.value = ''
   codes.value = []
-  notice.value = 'Two-step verification is off.'
+  notice.value = 'Đã tắt xác minh hai bước.'
   await session.load(true)
   await load()
 })
@@ -69,65 +69,65 @@ const grouped = computed(() => setup.value?.secret.match(/.{1,4}/g)?.join(' ') ?
 
 <template>
   <div class="mx-auto max-w-2xl space-y-6">
-    <PageHeader title="Account security" description="Two-step verification protects your account with a code from an authenticator app." />
+    <PageHeader title="Bảo mật tài khoản" description="Xác minh hai bước bảo vệ tài khoản của bạn bằng mã từ ứng dụng xác thực." />
     <Alert v-if="requiredBy && !status?.enabled" role="alert">
-      <AlertDescription>{{ requiredBy }} requires two-step verification for owners and admins. Turn it on to continue.</AlertDescription>
+      <AlertDescription>{{ requiredBy }} yêu cầu chủ sở hữu và quản trị viên bật xác minh hai bước. Bạn hãy bật để tiếp tục.</AlertDescription>
     </Alert>
     <div aria-live="polite"><Alert v-if="notice"><AlertDescription>{{ notice }}</AlertDescription></Alert></div>
     <FormError :message="error" />
 
-    <p v-if="!status" role="status" class="text-sm text-muted-foreground">Loading…</p>
+    <p v-if="!status" role="status" class="text-sm text-muted-foreground">Đang tải…</p>
     <Alert v-else-if="!status.available" variant="destructive">
-      <AlertDescription>Two-step verification is not available on this server.</AlertDescription>
+      <AlertDescription>Máy chủ này chưa hỗ trợ xác minh hai bước.</AlertDescription>
     </Alert>
 
     <Card v-else-if="!status.enabled">
       <CardHeader>
-        <CardTitle as="h2" class="text-base">Two-step verification is off</CardTitle>
-        <CardDescription>Organizations can require it for owners and admins.</CardDescription>
+        <CardTitle as="h2" class="text-base">Xác minh hai bước đang tắt</CardTitle>
+        <CardDescription>Tổ chức có thể yêu cầu chủ sở hữu và quản trị viên bật tính năng này.</CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        <Button v-if="!setup" :disabled="busy" @click="start">Turn on</Button>
+        <Button v-if="!setup" :disabled="busy" @click="start">Bật</Button>
         <form v-else class="space-y-4" @submit.prevent="confirm">
           <ol class="list-decimal space-y-2 pl-5 text-sm">
             <li>
-              In your authenticator app (Google Authenticator, 1Password, Authy…), add an account with this key:
+              Trong ứng dụng xác thực (Google Authenticator, 1Password, Authy…), thêm tài khoản bằng khóa này:
               <code class="mt-1 block break-all rounded bg-muted px-2 py-1 font-mono text-base tracking-wider">{{ grouped }}</code>
-              <a :href="setup.otpauth_uri" class="text-xs underline">Open in an authenticator app on this device</a>
+              <a :href="setup.otpauth_uri" class="text-xs underline">Mở bằng ứng dụng xác thực trên thiết bị này</a>
             </li>
-            <li>Enter the 6-digit code it shows.</li>
+            <li>Nhập mã 6 chữ số mà ứng dụng hiển thị.</li>
           </ol>
-          <FormField id="mfa-code" label="Code">
+          <FormField id="mfa-code" label="Mã">
             <Input id="mfa-code" v-model="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required />
           </FormField>
-          <Button type="submit" :disabled="busy || code.length < 6">Confirm</Button>
+          <Button type="submit" :disabled="busy || code.length < 6">Xác nhận</Button>
         </form>
       </CardContent>
     </Card>
 
     <Card v-else>
       <CardHeader>
-        <CardTitle as="h2" class="text-base">Two-step verification is on</CardTitle>
-        <CardDescription>{{ status.recovery_codes_left }} recovery codes left.</CardDescription>
+        <CardTitle as="h2" class="text-base">Xác minh hai bước đang bật</CardTitle>
+        <CardDescription>Còn {{ status.recovery_codes_left }} mã khôi phục.</CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        <FormField id="mfa-current" label="Current code from your app (or a recovery code to turn it off)">
+        <FormField id="mfa-current" label="Mã hiện tại trong ứng dụng (hoặc mã khôi phục, nếu muốn tắt)">
           <Input id="mfa-current" v-model="code" autocomplete="one-time-code" maxlength="20" />
         </FormField>
-        <Button variant="outline" :disabled="busy || !code" @click="regenerate">Get new recovery codes</Button>
+        <Button variant="outline" :disabled="busy || !code" @click="regenerate">Tạo mã khôi phục mới</Button>
         <form class="space-y-3 border-t pt-4" @submit.prevent="disable">
-          <FormField id="mfa-password" label="Password (to turn it off)">
+          <FormField id="mfa-password" label="Mật khẩu (để tắt)">
             <Input id="mfa-password" v-model="password" type="password" autocomplete="current-password" />
           </FormField>
-          <Button type="submit" variant="destructive" :disabled="busy || !code || !password">Turn off</Button>
+          <Button type="submit" variant="destructive" :disabled="busy || !code || !password">Tắt</Button>
         </form>
       </CardContent>
     </Card>
 
     <Card v-if="codes.length">
       <CardHeader>
-        <CardTitle as="h2" class="text-base">Recovery codes</CardTitle>
-        <CardDescription>Each code works once if you lose your phone. They are shown only now: store them somewhere safe.</CardDescription>
+        <CardTitle as="h2" class="text-base">Mã khôi phục</CardTitle>
+        <CardDescription>Mỗi mã dùng được một lần khi bạn mất điện thoại. Mã chỉ hiện lúc này, bạn hãy lưu ở nơi an toàn.</CardDescription>
       </CardHeader>
       <CardContent>
         <ul class="grid grid-cols-2 gap-2 font-mono text-sm">

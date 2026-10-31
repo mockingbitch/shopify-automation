@@ -109,17 +109,17 @@ func (s *Service) PutOverride(ctx context.Context, p authctx.Principal, in Overr
 	}
 	var errs []apperr.FieldError
 	if in.Region != nil && !slices.Contains(regions, *in.Region) {
-		errs = append(errs, apperr.FieldError{Field: "region", Code: "invalid", Message: "Unknown market."})
+		errs = append(errs, apperr.FieldError{Field: "region", Code: "invalid", Message: "Thị trường không hợp lệ."})
 	}
 	if in.Mode != nil && !slices.Contains([]string{string(capability.ModeAPI), string(capability.ModeBrowser), string(capability.ModeManual),
 		string(capability.ModeUnsupported)}, *in.Mode) {
-		errs = append(errs, apperr.FieldError{Field: "mode", Code: "invalid", Message: "Unknown mode."})
+		errs = append(errs, apperr.FieldError{Field: "mode", Code: "invalid", Message: "Chế độ không hợp lệ."})
 	}
 	if in.Mode == nil && in.Enabled == nil {
-		errs = append(errs, apperr.FieldError{Field: "enabled", Code: "required", Message: "Set enabled or mode."})
+		errs = append(errs, apperr.FieldError{Field: "enabled", Code: "required", Message: "Hãy chọn bật/tắt hoặc chế độ."})
 	}
 	if l := len([]rune(in.Reason)); l < 3 || l > 300 {
-		errs = append(errs, apperr.FieldError{Field: "reason", Code: "invalid", Message: "Explain the override (3 to 300 characters)."})
+		errs = append(errs, apperr.FieldError{Field: "reason", Code: "invalid", Message: "Hãy ghi lý do thay đổi (3 đến 300 ký tự)."})
 	}
 	if len(errs) > 0 {
 		return Override{}, apperr.Invalid(errs...)
@@ -130,7 +130,7 @@ func (s *Service) PutOverride(ctx context.Context, p authctx.Principal, in Overr
 			Region: in.Region, Mode: in.Mode, Enabled: in.Enabled, Reason: in.Reason})
 		if err != nil {
 			if db.IsForeignKeyViolation(err) {
-				return apperr.Invalid(apperr.FieldError{Field: "capability_key", Code: "unknown", Message: "Unknown capability or Shopee app."})
+				return apperr.Invalid(apperr.FieldError{Field: "capability_key", Code: "unknown", Message: "Không tìm thấy chức năng hoặc ứng dụng Shopee này."})
 			}
 			return err
 		}
@@ -152,7 +152,7 @@ func (s *Service) DeleteOverride(ctx context.Context, p authctx.Principal, id uu
 			return err
 		}
 		if n == 0 {
-			return apperr.NotFound("Override not found.")
+			return apperr.NotFound("Không tìm thấy thiết lập riêng này.")
 		}
 		return s.Audit.Record(ctx, tx, audit.Entry{ActorUserID: &p.UserID, Action: "capability.override_removed", TargetType: "capability_override", TargetID: &id})
 	})

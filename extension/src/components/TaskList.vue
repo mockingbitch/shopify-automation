@@ -14,7 +14,7 @@ const groups = computed(() => {
   const m = new Map<string, { key: string; name: string; region: string; shopeeShopId: string; tasks: TaskSummary[] }>();
   for (const t of props.tasks.items) {
     const key = t.shop?.id ?? 'unknown';
-    if (!m.has(key)) m.set(key, { key, name: t.shop?.name ?? 'Unknown shop', region: t.shop?.region ?? '', shopeeShopId: String(t.shop?.shopee_shop_id ?? ''), tasks: [] });
+    if (!m.has(key)) m.set(key, { key, name: t.shop?.name ?? 'Shop chưa rõ tên', region: t.shop?.region ?? '', shopeeShopId: String(t.shop?.shopee_shop_id ?? ''), tasks: [] });
     m.get(key)!.tasks.push(t);
   }
   return [...m.values()];
@@ -24,11 +24,11 @@ const groups = computed(() => {
 <template>
   <section class="flex flex-col gap-2" data-testid="task-list">
     <div class="flex items-center justify-between">
-      <h2 class="text-sm font-semibold">Tasks to run</h2>
-      <button class="btn btn-ghost text-xs" :disabled="busy" @click="$emit('refresh')">Refresh</button>
+      <h2 class="text-sm font-semibold">Việc cần chạy</h2>
+      <button class="btn btn-ghost text-xs" :disabled="busy" @click="$emit('refresh')">Làm mới</button>
     </div>
-    <p v-if="tasks.error" class="text-xs text-destructive">Could not load tasks: {{ tasks.error }}</p>
-    <p v-if="groups.length === 0" class="card p-3 text-sm text-muted-foreground" data-testid="no-tasks">Nothing to run right now.</p>
+    <p v-if="tasks.error" class="text-xs text-destructive">Không tải được danh sách việc: {{ tasks.error }}</p>
+    <p v-if="groups.length === 0" class="card p-3 text-sm text-muted-foreground" data-testid="no-tasks">Hiện chưa có việc nào cần chạy.</p>
     <div v-for="g in groups" :key="g.key" class="card overflow-hidden" data-testid="shop-group">
       <div class="border-b border-border bg-secondary px-3 py-1.5 text-xs">
         <strong class="text-sm">{{ g.name }}</strong>
@@ -45,17 +45,17 @@ const groups = computed(() => {
               v-if="t.status === 'QUEUED'"
               class="btn btn-primary shrink-0"
               :disabled="busy || running"
-              :aria-label="`Run ${t.title}`"
+              :aria-label="`Chạy ${t.title}`"
               @click="$emit('run', t.id)"
             >
-              Run
+              Chạy
             </button>
-            <span v-else class="shrink-0 text-xs font-medium text-muted-foreground">{{ t.status === 'WAITING_USER' ? 'Waiting' : 'Running' }}</span>
+            <span v-else class="shrink-0 text-xs font-medium text-muted-foreground">{{ t.status === 'WAITING_USER' ? 'Chờ bạn xử lý' : 'Đang chạy' }}</span>
           </div>
           <TaskPreview v-if="t.preview !== undefined && t.preview !== null" :preview="t.preview" />
         </li>
       </ul>
     </div>
-    <p class="text-xs text-muted-foreground">Open the shop's Seller Centre in this window before clicking Run. The task runs in that tab.</p>
+    <p class="text-xs text-muted-foreground">Hãy mở Kênh Người Bán của shop trong cửa sổ này trước khi bấm Chạy. Việc sẽ chạy ngay trong tab đó.</p>
   </section>
 </template>

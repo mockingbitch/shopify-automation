@@ -84,8 +84,8 @@ test.beforeEach(() => {
 });
 
 async function pair(popup: Page) {
-  await popup.getByLabel('Pairing code').fill(PAIR_CODE.toLowerCase().replace('-', ''));
-  await popup.getByRole('button', { name: 'Connect' }).click();
+  await popup.getByLabel('Mã ghép nối').fill(PAIR_CODE.toLowerCase().replace('-', ''));
+  await popup.getByRole('button', { name: 'Kết nối' }).click();
   await expect(popup.getByTestId('org-name')).toHaveText('Acme Fashion');
   await expect(popup.getByTestId('user-email')).toHaveText('seller@example.test');
 }
@@ -93,7 +93,7 @@ async function pair(popup: Page) {
 /** Clicks Run in the popup while the seller's tab is the active tab (as with a real toolbar popup). */
 async function clickRun(popup: Page, seller: Page) {
   await seller.bringToFront();
-  await popup.getByRole('button', { name: 'Run Change shop banner' }).click();
+  await popup.getByRole('button', { name: 'Chạy Change shop banner' }).click();
 }
 
 const lastResult = () => api.results.at(-1)?.body;
@@ -101,9 +101,9 @@ const lastResult = () => api.results.at(-1)?.body;
 test('pairs, lists tasks grouped by shop and unpairs', async ({ popup }) => {
   addTask('task-1');
   // Wrong code first.
-  await popup.getByLabel('Pairing code').fill('ZZZZZ-ZZZZZ');
-  await popup.getByRole('button', { name: 'Connect' }).click();
-  await expect(popup.getByTestId('error')).toContainText('wrong, expired or already used');
+  await popup.getByLabel('Mã ghép nối').fill('ZZZZZ-ZZZZZ');
+  await popup.getByRole('button', { name: 'Kết nối' }).click();
+  await expect(popup.getByTestId('error')).toContainText('sai, đã hết hạn hoặc đã được dùng');
   await pair(popup);
   const group = popup.getByTestId('shop-group');
   await expect(group).toHaveCount(1);
@@ -112,7 +112,7 @@ test('pairs, lists tasks grouped by shop and unpairs', async ({ popup }) => {
   await expect(group.getByTestId('task')).toContainText('Change shop banner');
   await expect(group.getByTestId('task')).toContainText('shop.banner.upload');
   await expect(group.getByTestId('task-preview')).toContainText('New summer banner');
-  await popup.getByRole('button', { name: 'Unpair' }).click();
+  await popup.getByRole('button', { name: 'Hủy ghép nối' }).click();
   await expect(popup.getByTestId('pairing')).toBeVisible();
   expect(api.tokens.size).toBe(0);
 });
@@ -120,7 +120,7 @@ test('pairs, lists tasks grouped by shop and unpairs', async ({ popup }) => {
 test('a revoked token returns to the pairing screen', async ({ popup }) => {
   await pair(popup);
   api.tokens.clear();
-  await popup.getByRole('button', { name: 'Refresh' }).click();
+  await popup.getByRole('button', { name: 'Làm mới' }).click();
   await expect(popup.getByTestId('pairing')).toBeVisible();
 });
 
@@ -154,7 +154,7 @@ test('shop ID mismatch stops before any write', async ({ popup, seller }) => {
   await clickRun(popup, seller);
   await expect(popup.getByTestId('run-panel')).toHaveAttribute('data-phase', 'failed', { timeout: 30_000 });
   await expect(popup.getByTestId('run-error-code')).toHaveText('shop_mismatch');
-  await expect(popup.getByTestId('run-message')).toContainText('logged in to shop 999999');
+  await expect(popup.getByTestId('run-message')).toContainText('đang đăng nhập shop 999999');
   const r = lastResult()!;
   expect(r).toMatchObject({ status: 'FAILED', error_code: 'shop_mismatch' });
   expect((r.steps as { outcome: string }[]).map((s) => s.outcome).slice(0, 3)).toEqual(['ok', 'failed', 'skipped']);
@@ -170,20 +170,20 @@ test('pauses on a verification page and resumes after the seller continues', asy
   await pair(popup);
   await clickRun(popup, seller);
   await expect(popup.getByTestId('run-panel')).toHaveAttribute('data-phase', 'paused', { timeout: 30_000 });
-  await expect(popup.getByTestId('run-message')).toContainText('finish it in the tab');
+  await expect(popup.getByTestId('run-message')).toContainText('Hãy hoàn tất trong tab, rồi bấm Tiếp tục');
   expect(seller.url()).toContain('/account/verify');
   expect(api.heartbeats.map((h) => h.state)).toContain('WAITING_USER');
   // The runner did not touch the verification page.
   await expect(seller.getByLabel('Code')).toHaveValue('');
 
   // Continue too early: still paused.
-  await popup.getByRole('button', { name: 'Continue' }).click();
+  await popup.getByRole('button', { name: 'Tiếp tục' }).click();
   await expect(popup.getByTestId('run-panel')).toHaveAttribute('data-phase', 'paused');
 
   // The seller finishes verification themselves, then continues.
   await seller.getByRole('button', { name: "I'm done" }).click();
   await seller.waitForURL(`${SELLER_ORIGIN}/portal/home`);
-  await popup.getByRole('button', { name: 'Continue' }).click();
+  await popup.getByRole('button', { name: 'Tiếp tục' }).click();
   await expect(popup.getByTestId('run-panel')).toHaveAttribute('data-phase', 'succeeded', { timeout: 30_000 });
   expect(lastResult()).toMatchObject({ status: 'SUCCEEDED' });
   const states = api.heartbeats.map((h) => h.state);
@@ -214,9 +214,9 @@ test('lease_lost stops silently and says the task was taken over', async ({ popu
   api.leaseStolen = true; // another device claimed it after our lease expired
   await seller.getByRole('button', { name: "I'm done" }).click();
   await seller.waitForURL(`${SELLER_ORIGIN}/portal/home`);
-  await popup.getByRole('button', { name: 'Continue' }).click();
+  await popup.getByRole('button', { name: 'Tiếp tục' }).click();
   await expect(popup.getByTestId('run-panel')).toHaveAttribute('data-phase', 'lease_lost', { timeout: 30_000 });
-  await expect(popup.getByTestId('run-message')).toHaveText('This task was taken over.');
+  await expect(popup.getByTestId('run-message')).toHaveText('Việc này đã được một trình duyệt khác nhận chạy. Tiện ích đã dừng và không thao tác thêm.');
   expect(api.results).toEqual([]);
   expect(site.hits).not.toContain('/portal/decoration');
 });

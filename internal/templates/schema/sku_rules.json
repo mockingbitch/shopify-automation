@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.shopee-automation.local/templates/sku_rules.json",
-  "title": "SKU rules",
-  "description": "How item_sku is generated when an import row has none. A unique item_sku is required for duplicate protection.",
+  "title": "Quy tắc SKU",
+  "description": "Cách tạo SKU khi dòng nhập không có SKU. Mỗi sản phẩm cần SKU riêng để tránh đăng trùng.",
   "type": "object",
   "additionalProperties": false,
   "x-applies-to": "products",
@@ -10,7 +10,7 @@
     "prefix": {
       "type": "string",
       "pattern": "^[A-Za-z0-9]{0,20}$",
-      "title": "Prefix"
+      "title": "Tiền tố"
     },
     "separator": {
       "type": "string",
@@ -19,21 +19,21 @@
         "-",
         "_"
       ],
-      "title": "Separator"
+      "title": "Ký tự phân cách"
     },
     "sequence_digits": {
       "type": "integer",
       "minimum": 3,
       "maximum": 8,
-      "title": "Sequence digits"
+      "title": "Số chữ số của số thứ tự"
     },
     "uppercase": {
       "type": "boolean",
-      "title": "Uppercase"
+      "title": "Viết hoa"
     },
     "generate_when_missing": {
       "type": "boolean",
-      "title": "Generate when missing"
+      "title": "Tự tạo khi thiếu"
     }
   }
 }

@@ -320,7 +320,7 @@ func (s *Service) ListForDevice(ctx context.Context, dev Device) ([]TaskView, er
 	return out, wrapInternal(err)
 }
 
-var msgStepDone = "The workflow step was finished another way."
+var msgStepDone = "Bước này của quy trình đã được hoàn tất theo cách khác."
 
 // ClaimResult is what the extension needs to run a task.
 type ClaimResult struct {
@@ -361,12 +361,12 @@ type ClaimTask struct {
 	Capability   string    `json:"capability"`
 }
 
-var errUnavailable = apperr.Conflict("task_unavailable", "This task is not available any more.")
+var errUnavailable = apperr.Conflict("task_unavailable", "Việc này không còn khả dụng.")
 
 // Claim leases a task to a device. Kill switches are checked every time.
 func (s *Service) Claim(ctx context.Context, dev Device, id uuid.UUID) (ClaimResult, error) {
 	if s.Signer == nil {
-		return ClaimResult{}, apperr.Unavailable("recipes_unavailable", "Recipe signing is not configured on this server.")
+		return ClaimResult{}, apperr.Unavailable("recipes_unavailable", "Máy chủ này chưa được cấu hình ký kịch bản thao tác.")
 	}
 	now := s.now()
 	var out ClaimResult
@@ -374,7 +374,7 @@ func (s *Service) Claim(ctx context.Context, dev Device, id uuid.UUID) (ClaimRes
 	err := s.tx(ctx, dev.OrgID, dev.UserID, func(q *browserdb.Queries, tx pgx.Tx) error {
 		t, err := q.LockTask(ctx, browserdb.LockTaskParams{OrgID: dev.OrgID, ID: id})
 		if err != nil {
-			return apperr.NotFound("Task not found.")
+			return apperr.NotFound("Không tìm thấy việc.")
 		}
 		st, err := q.StepState(ctx, browserdb.StepStateParams{OrgID: dev.OrgID, StepID: t.StepID})
 		if err != nil {
@@ -394,18 +394,18 @@ func (s *Service) Claim(ctx context.Context, dev Device, id uuid.UUID) (ClaimRes
 			return err
 		}
 		if shop.Status != "ACTIVE" {
-			return apperr.Conflict("shop_not_active", "The shop is not connected. Reconnect it in the dashboard first.")
+			return apperr.Conflict("shop_not_active", "Shop chưa được kết nối. Hãy kết nối lại shop trên trang quản trị trước.")
 		}
 		cs, err := q.CapabilityState(ctx, browserdb.CapabilityStateParams{Market: t.Market, Key: t.CapabilityKey})
 		if err != nil {
 			return err
 		}
 		if cs.Enabled == nil || !*cs.Enabled {
-			return apperr.Conflict("capability_disabled", "This operation is turned off on the platform right now.")
+			return apperr.Conflict("capability_disabled", "Thao tác này hiện đang bị tắt trên nền tảng.")
 		}
 		recipe, err := q.EnabledRecipe(ctx, browserdb.EnabledRecipeParams{CapabilityKey: t.CapabilityKey, Market: t.Market})
 		if db.IsNoRows(err) {
-			return apperr.Conflict("recipe_disabled", "The browser steps for this operation are turned off right now. Do it by hand and mark the task as done.")
+			return apperr.Conflict("recipe_disabled", "Các bước tự động trên trình duyệt cho thao tác này hiện đang tắt. Hãy làm thủ công rồi đánh dấu việc là đã xong.")
 		}
 		if err != nil {
 			return err
@@ -451,12 +451,12 @@ type HeartbeatInput struct {
 	Message    *string   `json:"message"`
 }
 
-var errLeaseLost = apperr.Conflict("lease_lost", "Another browser took over this task, or it was cancelled.")
+var errLeaseLost = apperr.Conflict("lease_lost", "Một trình duyệt khác đã nhận việc này, hoặc việc đã bị hủy.")
 
 // Heartbeat extends the lease.
 func (s *Service) Heartbeat(ctx context.Context, dev Device, id uuid.UUID, in HeartbeatInput) error {
 	if in.State != TaskRunning && in.State != TaskWaitingUser {
-		return apperr.Invalid(apperr.FieldError{Field: "state", Code: "invalid", Message: "Must be RUNNING or WAITING_USER."})
+		return apperr.Invalid(apperr.FieldError{Field: "state", Code: "invalid", Message: "Phải là RUNNING hoặc WAITING_USER."})
 	}
 	var msg *string
 	if in.Message != nil {
@@ -482,7 +482,7 @@ type ReleaseInput struct {
 // Release returns a held task to the queue. It does not count as a run of
 // the recipe.
 func (s *Service) Release(ctx context.Context, dev Device, id uuid.UUID, in ReleaseInput) error {
-	msg := "Stopped in the browser; ready to run again."
+	msg := "Đã dừng trên trình duyệt; sẵn sàng chạy lại."
 	err := s.tx(ctx, dev.OrgID, dev.UserID, func(q *browserdb.Queries, tx pgx.Tx) error {
 		n, err := q.ReleaseTask(ctx, browserdb.ReleaseTaskParams{StatusMessage: &msg, OrgID: dev.OrgID, ID: id, LeaseToken: &in.LeaseToken})
 		if err != nil {
@@ -500,11 +500,11 @@ func (s *Service) Release(ctx context.Context, dev Device, id uuid.UUID, in Rele
 // AddScreenshot stores a screenshot of the Seller Centre tab.
 func (s *Service) AddScreenshot(ctx context.Context, dev Device, id, lease uuid.UUID, data []byte) (uuid.UUID, error) {
 	if len(data) > maxScreenshotSize {
-		return uuid.Nil, &apperr.Error{Kind: apperr.KindPayloadTooLarge, Code: "payload_too_large", Message: "Screenshots are limited to 5 MB."}
+		return uuid.Nil, &apperr.Error{Kind: apperr.KindPayloadTooLarge, Code: "payload_too_large", Message: "Ảnh chụp màn hình tối đa 5 MB."}
 	}
 	img, err := media.Sanitize(data)
 	if err != nil {
-		return uuid.Nil, apperr.Invalid(apperr.FieldError{Field: "file", Code: "invalid_image", Message: "Send a PNG or JPEG screenshot."})
+		return uuid.Nil, apperr.Invalid(apperr.FieldError{Field: "file", Code: "invalid_image", Message: "Hãy gửi ảnh chụp màn hình định dạng PNG hoặc JPEG."})
 	}
 	sid := db.NewID()
 	ext := ".png"
@@ -515,7 +515,7 @@ func (s *Service) AddScreenshot(ctx context.Context, dev Device, id, lease uuid.
 	err = s.tx(ctx, dev.OrgID, dev.UserID, func(q *browserdb.Queries, _ pgx.Tx) error {
 		t, err := q.LockTask(ctx, browserdb.LockTaskParams{OrgID: dev.OrgID, ID: id})
 		if err != nil {
-			return apperr.NotFound("Task not found.")
+			return apperr.NotFound("Không tìm thấy việc.")
 		}
 		if t.LeaseToken == nil || *t.LeaseToken != lease {
 			return errLeaseLost
@@ -525,7 +525,7 @@ func (s *Service) AddScreenshot(ctx context.Context, dev Device, id, lease uuid.
 			return err
 		}
 		if n >= maxScreenshots {
-			return apperr.Conflict("too_many_screenshots", "This task already has 10 screenshots.")
+			return apperr.Conflict("too_many_screenshots", "Việc này đã có đủ 10 ảnh chụp màn hình.")
 		}
 		if err := s.Store.Put(ctx, key, img.Data, img.ContentType); err != nil {
 			return err
@@ -560,7 +560,7 @@ type ResultInput struct {
 // succeeded and the step has no other manual task, the step completes.
 func (s *Service) Result(ctx context.Context, dev Device, id uuid.UUID, in ResultInput) error {
 	if in.Status != TaskSucceeded && in.Status != TaskFailed {
-		return apperr.Invalid(apperr.FieldError{Field: "status", Code: "invalid", Message: "Must be SUCCEEDED or FAILED."})
+		return apperr.Invalid(apperr.FieldError{Field: "status", Code: "invalid", Message: "Phải là SUCCEEDED hoặc FAILED."})
 	}
 	if len(in.Steps) > maxLogEntries {
 		in.Steps = in.Steps[:maxLogEntries]
@@ -596,7 +596,7 @@ func (s *Service) Result(ctx context.Context, dev Device, id uuid.UUID, in Resul
 	err := s.tx(ctx, dev.OrgID, dev.UserID, func(q *browserdb.Queries, tx pgx.Tx) error {
 		t, err := q.LockTask(ctx, browserdb.LockTaskParams{OrgID: dev.OrgID, ID: id})
 		if err != nil {
-			return apperr.NotFound("Task not found.")
+			return apperr.NotFound("Không tìm thấy việc.")
 		}
 		n, err := q.FinishTask(ctx, browserdb.FinishTaskParams{Status: in.Status, LastError: lastErr, StepLog: logJSON, StatusMessage: msg,
 			FinishedAt: &now, OrgID: dev.OrgID, ID: id, LeaseToken: &in.LeaseToken})
@@ -681,7 +681,7 @@ func (s *Service) ListForRun(ctx context.Context, p authctx.Principal, t authctx
 	err := s.tx(ctx, t.OrgID, p.UserID, func(q *browserdb.Queries, _ pgx.Tx) error {
 		if ok, err := q.RunExists(ctx, browserdb.RunExistsParams{OrgID: t.OrgID, ID: runID}); err != nil || !ok {
 			if err == nil {
-				err = apperr.NotFound("Run not found.")
+				err = apperr.NotFound("Không tìm thấy lượt chạy.")
 			}
 			return err
 		}
@@ -721,14 +721,14 @@ func (s *Service) Requeue(ctx context.Context, p authctx.Principal, t authctx.Te
 	err := s.tx(ctx, t.OrgID, p.UserID, func(q *browserdb.Queries, tx pgx.Tx) error {
 		task, err := q.LockTask(ctx, browserdb.LockTaskParams{OrgID: t.OrgID, ID: id})
 		if err != nil {
-			return apperr.NotFound("Task not found.")
+			return apperr.NotFound("Không tìm thấy việc.")
 		}
 		st, err := q.StepState(ctx, browserdb.StepStateParams{OrgID: t.OrgID, StepID: task.StepID})
 		if err != nil {
 			return err
 		}
 		if task.Status != TaskFailed || st.Status != "WAITING_USER" {
-			return apperr.Conflict("not_retryable", "Only a failed task of a waiting step can run again.")
+			return apperr.Conflict("not_retryable", "Chỉ có thể chạy lại việc bị lỗi của một bước đang chờ.")
 		}
 		if err := q.SetTaskStatus(ctx, browserdb.SetTaskStatusParams{Status: TaskQueued, OrgID: t.OrgID, ID: id}); err != nil {
 			return err
@@ -745,7 +745,7 @@ func (s *Service) ScreenshotURL(ctx context.Context, p authctx.Principal, t auth
 	err := s.tx(ctx, t.OrgID, p.UserID, func(q *browserdb.Queries, tx pgx.Tx) error {
 		sh, err := q.GetScreenshot(ctx, browserdb.GetScreenshotParams{OrgID: t.OrgID, TaskID: taskID, ID: shotID})
 		if err != nil {
-			return apperr.NotFound("Screenshot not found.")
+			return apperr.NotFound("Không tìm thấy ảnh chụp màn hình.")
 		}
 		key = sh.StorageKey
 		return s.Audit.Record(ctx, tx, audit.Entry{OrgID: &t.OrgID, ActorUserID: &p.UserID, Action: "browser_task.screenshot_viewed",

@@ -162,7 +162,7 @@ func SameOrigin(a Adapter, allowedOrigin string) func(http.Handler) http.Handler
 				}
 			}
 			if origin != "" && origin != allowedOrigin {
-				a.WriteError(w, r, apperr.Forbidden("csrf_failed", "Cross-origin request rejected."))
+				a.WriteError(w, r, apperr.Forbidden("csrf_failed", "Yêu cầu từ nguồn khác đã bị chặn. Hãy tải lại trang và thử lại."))
 				return
 			}
 			next.ServeHTTP(w, r)

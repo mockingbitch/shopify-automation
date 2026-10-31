@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'auth' })
-useHead({ title: 'Accept invitation' })
+useHead({ title: 'Chấp nhận lời mời' })
 
 const route = useRoute()
 const session = useSessionStore()
@@ -26,12 +26,12 @@ async function accept() {
 <template>
   <Card>
     <CardHeader>
-      <CardTitle as="h1">Join organization</CardTitle>
-      <CardDescription>You are signed in as {{ session.user?.email }}.</CardDescription>
+      <CardTitle as="h1">Tham gia tổ chức</CardTitle>
+      <CardDescription>Bạn đang đăng nhập bằng {{ session.user?.email }}.</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
       <FormError :message="error" />
-      <Button class="w-full" :disabled="busy" @click="accept">Accept invitation</Button>
+      <Button class="w-full" :disabled="busy" @click="accept">Chấp nhận lời mời</Button>
     </CardContent>
   </Card>
 </template>

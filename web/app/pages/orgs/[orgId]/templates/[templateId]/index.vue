@@ -26,7 +26,7 @@ const notice = ref('')
 const report = ref<Report>()
 const busy = ref(false)
 
-useHead({ title: () => detail.value?.template.name ?? 'Template' })
+useHead({ title: () => detail.value?.template.name ?? 'Mẫu shop' })
 
 const version = computed(() => detail.value?.versions.find((v) => v.id === versionId.value))
 const isDraft = computed(() => version.value?.status === 'DRAFT')
@@ -34,9 +34,9 @@ const editable = computed(() => isDraft.value && can('templates.write'))
 const activeSchema = computed(() => schemas.value.find((s) => s.key === activeKey.value))
 const dirty = computed(() => JSON.stringify(prune(edits.value[activeKey.value] ?? {})) !== JSON.stringify(sections.value[activeKey.value]?.content ?? {}))
 const groups = computed(() => [
-  { title: 'Applied to the shop', items: schemas.value.filter((s) => s.applies_to === 'shop') },
-  { title: 'Defaults', items: schemas.value.filter((s) => s.applies_to === 'defaults') },
-  { title: 'Used for products', items: schemas.value.filter((s) => s.applies_to === 'products') },
+  { title: 'Áp dụng cho shop', items: schemas.value.filter((s) => s.applies_to === 'shop') },
+  { title: 'Giá trị mặc định', items: schemas.value.filter((s) => s.applies_to === 'defaults') },
+  { title: 'Dùng cho sản phẩm', items: schemas.value.filter((s) => s.applies_to === 'products') },
 ])
 const path = computed(() => ({ orgID: orgId.value, templateID: templateId.value }))
 
@@ -86,7 +86,7 @@ async function act(fn: () => Promise<void>) {
   } catch (e) {
     const err = toApiError(e)
     errors.value = err.fields
-    error.value = err.status === 412 ? 'Someone else changed this section. Reload the page to see their version.' : err.message
+    error.value = err.status === 412 ? 'Người khác vừa thay đổi mục này. Hãy tải lại trang để xem bản của họ.' : err.message
   } finally {
     busy.value = false
   }
@@ -102,7 +102,7 @@ const save = () => act(async () => {
   })).data
   sections.value[key] = { content: res.content as JsonObject, etag: res.etag }
   edits.value[key] = structuredClone(res.content as JsonObject)
-  notice.value = 'Section saved.'
+  notice.value = 'Đã lưu mục.'
 })
 
 const validate = () => act(async () => {
@@ -118,7 +118,7 @@ const publish = () => act(async () => {
   }))
   await loadDetail()
   await loadVersion(versionId.value)
-  notice.value = `Version ${version.value?.version_no} is published and can no longer be changed.`
+  notice.value = `Phiên bản ${version.value?.version_no} đã được phát hành và không thể thay đổi nữa.`
 })
 
 const newDraft = () => act(async () => {
@@ -127,7 +127,7 @@ const newDraft = () => act(async () => {
   })).data
   await loadDetail()
   await selectVersion(res.id)
-  notice.value = `Draft version ${res.version_no} created.`
+  notice.value = `Đã tạo bản nháp phiên bản ${res.version_no}.`
 })
 
 function discard() {
@@ -141,54 +141,55 @@ function sectionFilled(key: string) {
   return Object.keys(sections.value[key]?.content ?? {}).length > 0
 }
 
-const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const fmt = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' })
+const versionStatusLabels: Record<string, string> = { DRAFT: 'Bản nháp', PUBLISHED: 'Đã phát hành', ARCHIVED: 'Đã lưu trữ' }
 </script>
 
 <template>
   <div class="mx-auto max-w-6xl space-y-6">
-    <NuxtLink :to="`/orgs/${orgId}/templates`" class="text-sm text-muted-foreground hover:underline">← All templates</NuxtLink>
+    <NuxtLink :to="`/orgs/${orgId}/templates`" class="text-sm text-muted-foreground hover:underline">← Tất cả mẫu shop</NuxtLink>
     <FormError :message="error" />
 
     <template v-if="detail && version">
       <PageHeader :title="detail.template.name" :description="detail.template.description || undefined">
         <template #actions>
-          <Button as-child variant="outline"><NuxtLink :to="`/orgs/${orgId}/templates/${templateId}/preview?version=${versionId}`">Preview on shops</NuxtLink></Button>
-          <Button v-if="!detail.template.draft_version_id && can('templates.write')" variant="outline" :disabled="busy" @click="newDraft">New draft from this version</Button>
-          <Button v-if="isDraft" variant="outline" :disabled="busy" @click="validate">Validate</Button>
-          <ConfirmDialog v-if="isDraft && can('templates.publish')" title="Publish this version?"
-                         description="A published version can no longer be edited. The current published version is archived."
-                         confirm-label="Publish" @confirm="publish">
-            <template #trigger><Button :disabled="busy">Publish</Button></template>
+          <Button as-child variant="outline"><NuxtLink :to="`/orgs/${orgId}/templates/${templateId}/preview?version=${versionId}`">Xem trước trên shop</NuxtLink></Button>
+          <Button v-if="!detail.template.draft_version_id && can('templates.write')" variant="outline" :disabled="busy" @click="newDraft">Tạo bản nháp từ phiên bản này</Button>
+          <Button v-if="isDraft" variant="outline" :disabled="busy" @click="validate">Kiểm tra</Button>
+          <ConfirmDialog v-if="isDraft && can('templates.publish')" title="Phát hành phiên bản này?"
+                         description="Phiên bản đã phát hành sẽ không thể sửa nữa. Phiên bản đang phát hành hiện tại sẽ được lưu trữ."
+                         confirm-label="Phát hành" @confirm="publish">
+            <template #trigger><Button :disabled="busy">Phát hành</Button></template>
           </ConfirmDialog>
         </template>
       </PageHeader>
 
       <div class="flex flex-wrap items-center gap-3 text-sm">
-        <Label for="version-select">Version</Label>
+        <Label for="version-select">Phiên bản</Label>
         <select id="version-select" class="h-9 rounded-md border bg-background px-3" :value="versionId" @change="selectVersion(($event.target as HTMLSelectElement).value)">
           <option v-for="v in detail.versions" :key="v.id" :value="v.id">
-            v{{ v.version_no }} · {{ v.status.toLowerCase() }}{{ v.published_at ? ` · ${fmt.format(new Date(v.published_at))}` : '' }}
+            v{{ v.version_no }} · {{ (versionStatusLabels[v.status] ?? v.status).toLowerCase() }}{{ v.published_at ? ` · ${fmt.format(new Date(v.published_at))}` : '' }}
           </option>
         </select>
-        <Badge :variant="isDraft ? 'secondary' : 'default'">{{ version.status }}</Badge>
-        <span v-if="!isDraft" class="text-muted-foreground">Read-only. Create a new draft to make changes.</span>
+        <Badge :variant="isDraft ? 'secondary' : 'default'">{{ versionStatusLabels[version.status] ?? version.status }}</Badge>
+        <span v-if="!isDraft" class="text-muted-foreground">Chỉ xem. Hãy tạo bản nháp mới để thay đổi.</span>
       </div>
 
       <div aria-live="polite">
         <Alert v-if="notice"><AlertDescription>{{ notice }}</AlertDescription></Alert>
       </div>
       <Alert v-if="report" :variant="report.valid ? 'default' : 'destructive'">
-        <AlertTitle>{{ report.valid ? 'Ready to publish' : `${report.errors.length} problem(s) to fix` }}</AlertTitle>
+        <AlertTitle>{{ report.valid ? 'Sẵn sàng phát hành' : `Có ${report.errors.length} lỗi cần sửa` }}</AlertTitle>
         <AlertDescription>
           <ul class="list-disc pl-5">
             <li v-for="e in report.errors" :key="e.field + e.code">{{ e.field.replace('sections.', '') }}: {{ e.message }}</li>
-            <li v-for="w in report.warnings" :key="w.field + w.code" class="text-muted-foreground">Warning: {{ w.message }}</li>
+            <li v-for="w in report.warnings" :key="w.field + w.code" class="text-muted-foreground">Cảnh báo: {{ w.message }}</li>
           </ul>
         </AlertDescription>
       </Alert>
 
       <div class="grid gap-6 md:grid-cols-[14rem_1fr]">
-        <nav aria-label="Sections" class="space-y-4">
+        <nav aria-label="Các mục" class="space-y-4">
           <div v-for="g in groups" :key="g.title">
             <p class="mb-1 text-xs font-medium uppercase text-muted-foreground">{{ g.title }}</p>
             <ul class="space-y-0.5">
@@ -198,8 +199,8 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
                                  activeKey === s.key ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-muted']"
                         @click="activeKey = s.key">
                   {{ s.schema.title }}
-                  <span v-if="sectionHasErrors(s.key)" class="text-destructive" aria-label="has errors">●</span>
-                  <span v-else-if="sectionFilled(s.key)" :class="activeKey === s.key ? '' : 'text-muted-foreground'" aria-label="filled">✓</span>
+                  <span v-if="sectionHasErrors(s.key)" class="text-destructive" aria-label="có lỗi">●</span>
+                  <span v-else-if="sectionFilled(s.key)" :class="activeKey === s.key ? '' : 'text-muted-foreground'" aria-label="đã điền">✓</span>
                 </button>
               </li>
             </ul>
@@ -216,8 +217,8 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
                         :id-prefix="activeKey" :errors="errors" :readonly="!editable" />
             <p v-if="errors[`sections.${activeKey}`]" class="text-xs text-destructive">{{ errors[`sections.${activeKey}`] }}</p>
             <div v-if="editable" class="flex gap-2">
-              <Button :disabled="busy || !dirty" @click="save">Save section</Button>
-              <Button variant="ghost" :disabled="busy || !dirty" @click="discard">Discard</Button>
+              <Button :disabled="busy || !dirty" @click="save">Lưu mục</Button>
+              <Button variant="ghost" :disabled="busy || !dirty" @click="discard">Bỏ thay đổi</Button>
             </div>
           </CardContent>
         </Card>

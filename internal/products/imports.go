@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -38,7 +39,7 @@ const (
 	BatchFailed    = "FAILED"
 )
 
-var errBatchNotFound = apperr.NotFound("Import not found.")
+var errBatchNotFound = apperr.NotFound("Không tìm thấy lô nhập.")
 
 // Batch is the API view of an import.
 type Batch struct {
@@ -104,20 +105,20 @@ func (s *Service) Upload(ctx context.Context, p authctx.Principal, t authctx.Ten
 	ext := strings.ToLower(filepath.Ext(in.Filename))
 	kind := map[string]string{".csv": "CSV", ".xlsx": "XLSX"}[ext]
 	if kind == "" {
-		return Batch{}, apperr.Invalid(apperr.FieldError{Field: "file", Code: "unsupported", Message: "Upload a .csv or .xlsx file."})
+		return Batch{}, apperr.Invalid(apperr.FieldError{Field: "file", Code: "unsupported", Message: "Hãy tải lên tệp .csv hoặc .xlsx."})
 	}
 	if len(in.Data) == 0 {
-		return Batch{}, apperr.Invalid(apperr.FieldError{Field: "file", Code: "empty", Message: "The file is empty."})
+		return Batch{}, apperr.Invalid(apperr.FieldError{Field: "file", Code: "empty", Message: "Tệp không có nội dung."})
 	}
 	if err := s.scanFile(ctx, "file", in.Data); err != nil {
 		return Batch{}, err
 	}
 	if (in.TemplateID == nil) != (in.TemplateVersionID == nil) {
-		return Batch{}, apperr.Invalid(apperr.FieldError{Field: "template_version_id", Code: "required", Message: "Give both template_id and template_version_id."})
+		return Batch{}, apperr.Invalid(apperr.FieldError{Field: "template_version_id", Code: "required", Message: "Hãy chọn cả mẫu shop và phiên bản (template_id và template_version_id)."})
 	}
 	if in.TemplateID != nil && s.Templates != nil {
 		if _, err := s.Templates.VersionSections(ctx, t, *in.TemplateID, *in.TemplateVersionID); err != nil {
-			return Batch{}, apperr.Invalid(apperr.FieldError{Field: "template_version_id", Code: "not_found", Message: "Template version not found."})
+			return Batch{}, apperr.Invalid(apperr.FieldError{Field: "template_version_id", Code: "not_found", Message: "Không tìm thấy phiên bản mẫu shop."})
 		}
 	}
 	id := db.NewID()
@@ -127,7 +128,7 @@ func (s *Service) Upload(ctx context.Context, p authctx.Principal, t authctx.Ten
 		ct = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 	}
 	if err := s.Store.Put(ctx, key, in.Data, ct); err != nil {
-		return Batch{}, apperr.Unavailable("storage_unavailable", "The file could not be stored. Try again.")
+		return Batch{}, apperr.Unavailable("storage_unavailable", "Không lưu được tệp. Hãy thử lại.")
 	}
 	sum := sha256.Sum256(in.Data)
 	name := filepath.Base(in.Filename)
@@ -169,7 +170,7 @@ func (s *Service) HandleImport(ctx context.Context, payload []byte) error {
 	if err != nil && queue.FinalAttempt(ctx) {
 		// Do not leave the batch looking busy forever; Retry starts it again.
 		pr := authctx.Principal{UserID: p.UserID}
-		msg := "The import stopped because of a temporary problem. Retry the import."
+		msg := "Lô nhập bị dừng do sự cố tạm thời. Hãy thử lại lô nhập."
 		if ferr := s.failBatch(context.WithoutCancel(ctx), pr, p, msg); ferr != nil {
 			s.Log.Error("import: mark failed", "batch_id", p.BatchID, "error", ferr)
 		}
@@ -199,7 +200,7 @@ func (s *Service) runImport(ctx context.Context, p ImportPayload) error {
 	if batch.TemplateID != nil && batch.TemplateVersionID != nil && s.Templates != nil {
 		secs, err := s.Templates.VersionSections(ctx, t, *batch.TemplateID, *batch.TemplateVersionID)
 		if err != nil {
-			return s.failBatch(ctx, pr, p, "The template version of this import no longer exists.")
+			return s.failBatch(ctx, pr, p, "Phiên bản mẫu shop của lô nhập này không còn tồn tại.")
 		}
 		d = DefaultsFromSections(secs)
 	}
@@ -210,7 +211,7 @@ func (s *Service) runImport(ctx context.Context, p ImportPayload) error {
 		}
 		rows, perr := ParseFile(batch.Source, data)
 		if perr != nil {
-			return s.failBatch(ctx, pr, p, perr.Error())
+			return s.failBatch(ctx, pr, p, sentence(perr.Error()))
 		}
 		if err := s.insertRows(ctx, pr, p, rows); err != nil {
 			return err
@@ -439,7 +440,7 @@ func buildReport(rows []productsdb.ProductImportRow) ([]byte, error) {
 	var b bytes.Buffer
 	b.WriteString("\xEF\xBB\xBF") // BOM so spreadsheet apps read UTF-8
 	w := csv.NewWriter(&b)
-	_ = w.Write([]string{"row", "sku", "name", "status", "product_id", "errors"})
+	_ = w.Write([]string{"Dòng", "SKU", "Tên", "Trạng thái", "ID sản phẩm", "Lỗi"})
 	for _, r := range rows {
 		v := toRow(r)
 		var msgs []string
@@ -490,7 +491,7 @@ func (s *Service) ListRows(ctx context.Context, p authctx.Principal, t authctx.T
 			ok = ok || st == *status
 		}
 		if !ok {
-			return nil, nil, apperr.Invalid(apperr.FieldError{Field: "status", Code: "invalid", Message: "Unknown status."})
+			return nil, nil, apperr.Invalid(apperr.FieldError{Field: "status", Code: "invalid", Message: "Trạng thái không hợp lệ."})
 		}
 	}
 	out := []Row{}
@@ -522,10 +523,10 @@ type FixInput struct {
 func (s *Service) FixRow(ctx context.Context, p authctx.Principal, t authctx.Tenant, batchID, rowID uuid.UUID, in FixInput) (Row, error) {
 	for k, v := range in.Values {
 		if !knownColumn[k] {
-			return Row{}, apperr.Invalid(apperr.FieldError{Field: "values." + k, Code: "unknown_column", Message: "Unknown column."})
+			return Row{}, apperr.Invalid(apperr.FieldError{Field: "values." + k, Code: "unknown_column", Message: "Cột không hợp lệ."})
 		}
 		if len(v) > maxCellLen {
-			return Row{}, apperr.Invalid(apperr.FieldError{Field: "values." + k, Code: "too_long", Message: "Value is too long."})
+			return Row{}, apperr.Invalid(apperr.FieldError{Field: "values." + k, Code: "too_long", Message: "Giá trị quá dài."})
 		}
 	}
 	var batch productsdb.ProductImportBatch
@@ -535,14 +536,14 @@ func (s *Service) FixRow(ctx context.Context, p authctx.Principal, t authctx.Ten
 			return wrap(err, errBatchNotFound)
 		}
 		if batch.Status == BatchParsing || batch.Status == BatchImporting || batch.Status == BatchUploaded {
-			return apperr.Conflict("import_running", "The import is still running. Try again when it has finished.")
+			return apperr.Conflict("import_running", "Lô nhập vẫn đang chạy. Hãy thử lại khi lô nhập hoàn tất.")
 		}
 		r, err := q.LockRow(ctx, productsdb.LockRowParams{OrgID: t.OrgID, BatchID: batchID, ID: rowID})
 		if err != nil {
-			return wrap(err, apperr.NotFound("Row not found."))
+			return wrap(err, apperr.NotFound("Không tìm thấy dòng."))
 		}
 		if r.Status == "IMPORTED" {
-			return apperr.Conflict("row_imported", "This row was already imported. Edit the product instead.")
+			return apperr.Conflict("row_imported", "Dòng này đã được nhập. Hãy sửa trực tiếp sản phẩm.")
 		}
 		var raw RawRow
 		_ = json.Unmarshal(r.Raw, &raw)
@@ -589,7 +590,7 @@ func (s *Service) defaultsFor(ctx context.Context, t authctx.Tenant, b productsd
 	}
 	secs, err := s.Templates.VersionSections(ctx, t, *b.TemplateID, *b.TemplateVersionID)
 	if err != nil {
-		return Defaults{}, apperr.Conflict("template_missing", "The template version of this import no longer exists.")
+		return Defaults{}, apperr.Conflict("template_missing", "Phiên bản mẫu shop của lô nhập này không còn tồn tại.")
 	}
 	return DefaultsFromSections(secs), nil
 }
@@ -604,7 +605,7 @@ func (s *Service) Retry(ctx context.Context, p authctx.Principal, t authctx.Tena
 			return wrap(err, errBatchNotFound)
 		}
 		if b.Status != BatchCompleted && b.Status != BatchFailed {
-			return apperr.Conflict("import_running", "Only a finished import can be retried.")
+			return apperr.Conflict("import_running", "Chỉ có thể thử lại lô nhập đã kết thúc.")
 		}
 		all, err := q.AllRows(ctx, productsdb.AllRowsParams{OrgID: t.OrgID, BatchID: id})
 		if err != nil {
@@ -645,7 +646,7 @@ func (s *Service) ReportURL(ctx context.Context, p authctx.Principal, t authctx.
 		return "", time.Time{}, err
 	}
 	if b.ReportStorageKey == nil {
-		return "", time.Time{}, apperr.Conflict("report_not_ready", "The report is created when the import finishes.")
+		return "", time.Time{}, apperr.Conflict("report_not_ready", "Báo cáo sẽ có khi lô nhập hoàn tất.")
 	}
 	ttl := 10 * time.Minute
 	u, err := s.Store.PresignGet(ctx, *b.ReportStorageKey, ttl, fmt.Sprintf("import-%s-report.csv", id.String()[:8]))
@@ -663,4 +664,18 @@ func (s *Service) batchRow(ctx context.Context, p authctx.Principal, t authctx.T
 		return wrap(err, errBatchNotFound)
 	})
 	return b, wrap(err, nil)
+}
+
+// sentence turns an error string ("tệp không có dòng tiêu đề") into a
+// user-facing sentence ("Tệp không có dòng tiêu đề.").
+func sentence(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	r[0] = unicode.ToUpper(r[0])
+	if last := r[len(r)-1]; last != '.' && last != '!' && last != '?' {
+		r = append(r, '.')
+	}
+	return string(r)
 }

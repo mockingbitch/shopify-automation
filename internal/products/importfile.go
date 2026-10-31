@@ -51,14 +51,14 @@ type RawRow map[string]string
 // ParseFile reads a CSV or XLSX file into rows (header row excluded).
 func ParseFile(kind string, data []byte) ([]RawRow, error) {
 	if len(data) > MaxImportBytes {
-		return nil, errors.New("the file is larger than 50 MB")
+		return nil, errors.New("tệp lớn hơn 50 MB")
 	}
 	var next func() ([]string, error)
 	switch kind {
 	case "CSV":
 		data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF}) // UTF-8 BOM
 		if !utf8.Valid(data) {
-			return nil, errors.New("the CSV file must be UTF-8 encoded")
+			return nil, errors.New("tệp CSV phải dùng mã hóa UTF-8")
 		}
 		r := csv.NewReader(bytes.NewReader(data))
 		r.FieldsPerRecord = -1
@@ -67,16 +67,16 @@ func ParseFile(kind string, data []byte) ([]RawRow, error) {
 	case "XLSX":
 		f, err := excelize.OpenReader(bytes.NewReader(data), excelize.Options{UnzipSizeLimit: xlsxUnzipLimit, UnzipXMLSizeLimit: xlsxXMLLimit})
 		if err != nil {
-			return nil, errors.New("the Excel file cannot be read")
+			return nil, errors.New("không đọc được tệp Excel")
 		}
 		defer func() { _ = f.Close() }()
 		sheets := f.GetSheetList()
 		if len(sheets) == 0 {
-			return nil, errors.New("the Excel file has no sheet")
+			return nil, errors.New("tệp Excel không có trang tính nào")
 		}
 		rows, err := f.Rows(sheets[0]) // streaming iterator
 		if err != nil {
-			return nil, errors.New("the first sheet cannot be read")
+			return nil, errors.New("không đọc được trang tính đầu tiên")
 		}
 		defer func() { _ = rows.Close() }()
 		next = func() ([]string, error) {
@@ -89,15 +89,15 @@ func ParseFile(kind string, data []byte) ([]RawRow, error) {
 			return rows.Columns()
 		}
 	default:
-		return nil, errors.New("only CSV and XLSX files are supported")
+		return nil, errors.New("chỉ hỗ trợ tệp CSV và XLSX")
 	}
 
 	header, err := next()
 	if err != nil {
-		return nil, errors.New("the file has no header row")
+		return nil, errors.New("tệp không có dòng tiêu đề")
 	}
 	if len(header) > maxImportCols {
-		return nil, fmt.Errorf("the file has more than %d columns", maxImportCols)
+		return nil, fmt.Errorf("tệp có hơn %d cột", maxImportCols)
 	}
 	cols := make([]string, len(header))
 	hasSKU, hasName := false, false
@@ -111,7 +111,7 @@ func ParseFile(kind string, data []byte) ([]RawRow, error) {
 		hasName = hasName || c == "name"
 	}
 	if !hasSKU && !hasName {
-		return nil, errors.New("the header row must contain at least the columns sku and name (see the sample file)")
+		return nil, errors.New("dòng tiêu đề phải có ít nhất cột sku và name (xem tệp mẫu)")
 	}
 	var out []RawRow
 	for {
@@ -120,7 +120,7 @@ func ParseFile(kind string, data []byte) ([]RawRow, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("row %d cannot be read", len(out)+2)
+			return nil, fmt.Errorf("không đọc được dòng %d", len(out)+2)
 		}
 		row := RawRow{}
 		empty := true
@@ -141,12 +141,12 @@ func ParseFile(kind string, data []byte) ([]RawRow, error) {
 			continue
 		}
 		if len(out) >= MaxImportRows {
-			return nil, fmt.Errorf("the file has more than %d rows", MaxImportRows)
+			return nil, fmt.Errorf("tệp có hơn %d dòng", MaxImportRows)
 		}
 		out = append(out, row)
 	}
 	if len(out) == 0 {
-		return nil, errors.New("the file has no data rows")
+		return nil, errors.New("tệp không có dòng dữ liệu nào")
 	}
 	return out, nil
 }

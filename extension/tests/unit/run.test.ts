@@ -5,6 +5,7 @@ import { execute } from '@/lib/dom/actions';
 import type { Command } from '@/lib/runner/protocol';
 import { TaskRun, type RunState, type TabDriver } from '@/lib/runner/run';
 import { ORIGIN, bannerRecipe, testKeys } from './helpers';
+import { STOPPED_MESSAGE, TAKEN_OVER_MESSAGE, failureMessage } from '@/lib/runner/user-messages';
 
 type Page = (doc: Document, nav: (path: string) => void) => void;
 
@@ -143,6 +144,7 @@ describe('TaskRun against a fake DOM', () => {
     const { run } = makeRun(claimFor(json), site, api);
     const final = await run.run();
     expect(final).toMatchObject({ phase: 'failed', errorCode: 'shop_mismatch' });
+    expect(final.message).toContain('Tab này đang đăng nhập shop 999999, nhưng việc này dành cho shop 123456');
     const res = api.calls.results[0]!;
     expect(res).toMatchObject({ status: 'FAILED', error_code: 'shop_mismatch' });
     expect(res.steps.slice(0, 3).map((s) => s.outcome)).toEqual(['ok', 'failed', 'skipped']);
@@ -157,6 +159,7 @@ describe('TaskRun against a fake DOM', () => {
     const done = run.run();
     await waitFor(() => states.at(-1)?.phase === 'paused');
     expect(states.at(-1)?.pauseReason).toBe('verification');
+    expect(states.at(-1)?.message).toBe('Kênh Người Bán đang yêu cầu đăng nhập hoặc xác minh. Hãy hoàn tất trong tab, rồi bấm Tiếp tục.');
     expect(api.calls.heartbeats).toContain('WAITING_USER');
     // Continue while still on the verification page: stays paused.
     run.continue();
@@ -177,7 +180,9 @@ describe('TaskRun against a fake DOM', () => {
     const { run } = makeRun(claimFor(tampered, '123456', sig), site, api);
     const final = await run.run();
     expect(final).toMatchObject({ phase: 'failed', errorCode: 'signature_invalid' });
-    expect(api.calls.results[0]).toMatchObject({ status: 'FAILED', error_code: 'signature_invalid' });
+    expect(api.calls.results[0]).toMatchObject({ status: 'FAILED', error_code: 'signature_invalid', message: 'recipe signature does not verify' });
+    expect(final.message).toBe(failureMessage('signature_invalid', ''));
+    expect(final.message).toContain('Kịch bản thao tác không qua được bước kiểm tra an toàn');
     expect(site.hits).toEqual([]);
     expect(api.calls.screenshots).toEqual([]);
   });
@@ -209,7 +214,7 @@ describe('TaskRun against a fake DOM', () => {
     site.finishVerification();
     run.continue();
     const final = await done;
-    expect(final).toMatchObject({ phase: 'lease_lost', message: 'This task was taken over.' });
+    expect(final).toMatchObject({ phase: 'lease_lost', message: TAKEN_OVER_MESSAGE });
     expect(api.calls.results).toEqual([]);
     expect(site.hits).not.toContain('/portal/decoration');
   });
@@ -221,7 +226,7 @@ describe('TaskRun against a fake DOM', () => {
     const done = run.run();
     await waitFor(() => states.at(-1)?.phase === 'paused');
     run.stop();
-    expect(await done).toMatchObject({ phase: 'stopped', errorCode: 'stopped_by_user' });
+    expect(await done).toMatchObject({ phase: 'stopped', errorCode: 'stopped_by_user', message: STOPPED_MESSAGE });
     expect(api.calls.results).toHaveLength(0);
     expect(api.calls.releases).toBe(1);
   });

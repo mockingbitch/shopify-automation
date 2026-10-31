@@ -16,8 +16,8 @@ export function canManageMember(actor: Role, member: Role): boolean {
 }
 
 export const roleLabels: Record<Role, string> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  operator: 'Operator',
-  viewer: 'Viewer',
+  owner: 'Chủ sở hữu',
+  admin: 'Quản trị viên',
+  operator: 'Nhân viên vận hành',
+  viewer: 'Người xem',
 }

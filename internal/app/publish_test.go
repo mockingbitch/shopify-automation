@@ -108,7 +108,7 @@ func TestProductPublish(t *testing.T) {
 	if len(changes) != 2 || len(blocked) != 4 {
 		t.Fatalf("diff: %d changes, %d blocked: %+v", len(changes), len(blocked), v.Data.PendingApproval.Diff)
 	}
-	wantBlocked := map[string]string{pNoAttr: "Mandatory attributes", pBadTier: "not one of Shopee's variations", pUSD: "uses VND", pNoImage: "no images"}
+	wantBlocked := map[string]string{pNoAttr: "Thiếu thuộc tính bắt buộc", pBadTier: "không thuộc các nhóm phân loại Shopee", pUSD: "dùng VND", pNoImage: "chưa có hình ảnh"}
 	for id, msg := range wantBlocked {
 		if c, ok := blocked["products."+id]; !ok || !strings.Contains(c.Note, msg) {
 			t.Errorf("blocked %s: %+v", id, c)

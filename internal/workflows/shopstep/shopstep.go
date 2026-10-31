@@ -61,12 +61,12 @@ func FromErr(err error) workflow.Result {
 
 // FromShopee maps a normalized Shopee error.
 func FromShopee(e *shopee.Error) workflow.Result {
-	err := fmt.Errorf("shopee %s: %s (request %s)", e.Code, e.Message, e.RequestID)
+	err := fmt.Errorf("lỗi từ Shopee %s: %s (mã yêu cầu %s)", e.Code, e.Message, e.RequestID)
 	switch e.Kind {
 	case shopee.KindTransient, shopee.KindRateLimited, shopee.KindAuth:
 		return workflow.Retryable(err)
 	case shopee.KindAuthorizationLost:
-		return workflow.NeedsUser("reconnect_required", "Shopee no longer accepts this shop's authorization. Reconnect the shop, then resume.")
+		return workflow.NeedsUser("reconnect_required", "Shopee không còn chấp nhận ủy quyền của shop này. Hãy kết nối lại shop rồi bấm Tiếp tục.")
 	case shopee.KindAmbiguous:
 		return workflow.Ambiguous(err)
 	default:
@@ -89,7 +89,7 @@ func ValidateConnection(s *shops.Service) workflow.StepHandler {
 			return FromErr(err)
 		}
 		if info.Status != "" && info.Status != "NORMAL" {
-			return workflow.NeedsUser("shop_not_normal", "Shopee reports the shop as "+info.Status+". Resolve it in Seller Centre, then resume.")
+			return workflow.NeedsUser("shop_not_normal", "Shopee báo shop đang ở trạng thái "+info.Status+". Hãy xử lý trong Kênh Người Bán rồi bấm Tiếp tục.")
 		}
 		return workflow.Succeeded(map[string]any{"shopee_shop_id": fmt.Sprint(acc.ShopID), "region": info.Region, "status": info.Status})
 	}

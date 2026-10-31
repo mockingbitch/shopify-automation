@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.shopee-automation.local/templates/default_descriptions.json",
-  "title": "Default descriptions",
-  "description": "Text added to product descriptions. {name} is replaced by the product name.",
+  "title": "Mô tả mặc định",
+  "description": "Nội dung thêm vào mô tả sản phẩm. {name} sẽ được thay bằng tên sản phẩm.",
   "type": "object",
   "additionalProperties": false,
   "x-applies-to": "products",
@@ -10,19 +10,19 @@
     "header": {
       "type": "string",
       "maxLength": 2000,
-      "title": "Header",
+      "title": "Phần đầu",
       "x-multiline": true
     },
     "body_template": {
       "type": "string",
       "maxLength": 5000,
-      "title": "Body when the row has no description",
+      "title": "Nội dung khi dòng không có mô tả",
       "x-multiline": true
     },
     "footer": {
       "type": "string",
       "maxLength": 2000,
-      "title": "Footer",
+      "title": "Phần cuối",
       "x-multiline": true
     }
   }

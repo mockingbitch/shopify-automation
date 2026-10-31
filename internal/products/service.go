@@ -53,11 +53,11 @@ func (s *Service) scanFile(ctx context.Context, field string, data []byte) error
 	err := s.Scanner.Scan(ctx, data)
 	if errors.Is(err, scan.ErrInfected) {
 		s.Log.WarnContext(ctx, "upload rejected by the malware scanner", slog.String("error", err.Error()))
-		return apperr.Invalid(apperr.FieldError{Field: field, Code: "malware", Message: "The file was rejected by the malware scanner."})
+		return apperr.Invalid(apperr.FieldError{Field: field, Code: "malware", Message: "Tệp bị từ chối vì trình quét mã độc phát hiện nguy cơ."})
 	}
 	if err != nil {
 		s.Log.ErrorContext(ctx, "malware scanner unavailable", slog.String("error", err.Error()))
-		return apperr.Unavailable("scanner_unavailable", "Files cannot be checked right now. Try again in a few minutes.")
+		return apperr.Unavailable("scanner_unavailable", "Hiện chưa thể kiểm tra tệp. Hãy thử lại sau vài phút.")
 	}
 	return nil
 }
@@ -66,7 +66,7 @@ func (s *Service) tx(ctx context.Context, p authctx.Principal, orgID uuid.UUID, 
 	return s.DB.Tx(ctx, db.Scope{OrgID: orgID, UserID: p.UserID}, func(tx pgx.Tx) error { return fn(productsdb.New(tx), tx) })
 }
 
-var errNotFound = apperr.NotFound("Product not found.")
+var errNotFound = apperr.NotFound("Không tìm thấy sản phẩm.")
 
 // Money is a decimal amount with its currency.
 type Money struct {
@@ -248,7 +248,7 @@ func (s *Service) List(ctx context.Context, p authctx.Principal, t authctx.Tenan
 		at, terr := time.Parse(time.RFC3339Nano, ts)
 		id, ierr := uuid.Parse(idPart)
 		if err != nil || !ok || terr != nil || ierr != nil {
-			return nil, nil, apperr.Invalid(apperr.FieldError{Field: "cursor", Code: "invalid", Message: "Invalid cursor."})
+			return nil, nil, apperr.Invalid(apperr.FieldError{Field: "cursor", Code: "invalid", Message: "Con trỏ phân trang không hợp lệ. Hãy tải lại danh sách."})
 		}
 		before, beforeID = &at, &id
 	}
@@ -331,7 +331,7 @@ func (s *Service) save(ctx context.Context, q *productsdb.Queries, orgID uuid.UU
 	}
 	if err != nil {
 		if db.UniqueViolation(err) == "products_sku_uk" {
-			return row, apperr.Invalid(apperr.FieldError{Field: "sku", Code: "taken", Message: "Another product already uses this SKU."})
+			return row, apperr.Invalid(apperr.FieldError{Field: "sku", Code: "taken", Message: "SKU này đã được dùng cho một sản phẩm khác."})
 		}
 		return row, err
 	}
@@ -346,7 +346,7 @@ func (s *Service) save(ctx context.Context, q *productsdb.Queries, orgID uuid.UU
 		if err := q.InsertVariation(ctx, productsdb.InsertVariationParams{ID: db.NewID(), OrgID: orgID, ProductID: row.ID, TierIndex: ti,
 			Sku: v.SKU, Price: v.Price, Stock: int32(v.Stock)}); err != nil { // #nosec G115
 			if db.UniqueViolation(err) != "" {
-				return row, apperr.Invalid(apperr.FieldError{Field: "variations", Code: "duplicate", Message: "Variations must be unique."})
+				return row, apperr.Invalid(apperr.FieldError{Field: "variations", Code: "duplicate", Message: "Các phân loại hàng không được trùng nhau."})
 			}
 			return row, err
 		}
@@ -378,7 +378,7 @@ func (s *Service) Create(ctx context.Context, p authctx.Principal, t authctx.Ten
 // Replace overwrites a product (If-Match required). Images are kept.
 func (s *Service) Replace(ctx context.Context, p authctx.Principal, t authctx.Tenant, id uuid.UUID, in Input, ifMatch string) (Product, error) {
 	if ifMatch == "" {
-		return Product{}, apperr.PreconditionFailed("If-Match header is required.")
+		return Product{}, apperr.PreconditionFailed("Thiếu header If-Match.")
 	}
 	if errs := Validate(&in); len(errs) > 0 {
 		return Product{}, apperr.Invalid(errs...)
@@ -389,7 +389,7 @@ func (s *Service) Replace(ctx context.Context, p authctx.Principal, t authctx.Te
 			return wrap(err, errNotFound)
 		}
 		if toProduct(cur).ETag() != ifMatch {
-			return apperr.PreconditionFailed("The product was changed by someone else. Reload and try again.")
+			return apperr.PreconditionFailed("Sản phẩm vừa được người khác thay đổi. Hãy tải lại và thử lại.")
 		}
 		if _, err := s.save(ctx, q, t.OrgID, &p.UserID, &cur, in, cur.Source, nil); err != nil {
 			return err
@@ -424,11 +424,11 @@ func (s *Service) storeImage(ctx context.Context, q *productsdb.Queries, orgID, 
 		return productsdb.ProductImage{}, err
 	}
 	if n >= maxImages {
-		return productsdb.ProductImage{}, apperr.Invalid(apperr.FieldError{Field: "file", Code: "too_many", Message: "A product can have at most 20 images."})
+		return productsdb.ProductImage{}, apperr.Invalid(apperr.FieldError{Field: "file", Code: "too_many", Message: "Mỗi sản phẩm có tối đa 20 hình ảnh."})
 	}
 	img, err := media.Sanitize(raw)
 	if err != nil {
-		return productsdb.ProductImage{}, apperr.Invalid(apperr.FieldError{Field: "file", Code: "invalid_image", Message: err.Error()})
+		return productsdb.ProductImage{}, apperr.Invalid(apperr.FieldError{Field: "file", Code: "invalid_image", Message: sentence(err.Error())})
 	}
 	id := db.NewID()
 	ext := "jpg"
@@ -477,7 +477,7 @@ func (s *Service) DeleteImage(ctx context.Context, p authctx.Principal, t authct
 			return err
 		}
 		if n == 0 {
-			return apperr.NotFound("Image not found.")
+			return apperr.NotFound("Không tìm thấy hình ảnh.")
 		}
 		return s.Audit.Record(ctx, tx, audit.Entry{OrgID: &t.OrgID, ActorUserID: &p.UserID, Action: "product.image_removed",
 			TargetType: "product", TargetID: &id, Metadata: map[string]any{"image_id": imageID.String()}})

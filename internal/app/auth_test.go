@@ -45,7 +45,7 @@ func TestRegisterDoesNotRevealExistingEmail(t *testing.T) {
 		t.Fatalf("body: %s", r.Body)
 	}
 	m, _ := e.mail.Last("bob@example.com")
-	if m.Subject != "You already have an account" {
+	if m.Subject != "Bạn đã có tài khoản" {
 		t.Fatalf("expected notice email, got %q", m.Subject)
 	}
 }
@@ -115,7 +115,7 @@ func TestPasswordResetRevokesSessions(t *testing.T) {
 	anon := e.client()
 	anon.must(202, "POST", "/auth/password/forgot", map[string]string{"email": "frank@example.com"})
 	anon.must(202, "POST", "/auth/password/forgot", map[string]string{"email": "ghost@example.com"}) // no leak
-	tok := e.tokenFromMail("frank@example.com", "Reset")
+	tok := e.tokenFromMail("frank@example.com", "Đặt lại")
 	anon.must(422, "POST", "/auth/password/reset", map[string]string{"token": tok, "new_password": "short"})
 	anon.must(204, "POST", "/auth/password/reset", map[string]string{"token": tok, "new_password": "a brand new passphrase"})
 	anon.must(410, "POST", "/auth/password/reset", map[string]string{"token": tok, "new_password": "another new passphrase"})
@@ -165,7 +165,7 @@ func TestResendVerification(t *testing.T) {
 	e.client().must(401, "POST", "/auth/verify-email/resend", nil)
 
 	c.must(202, "POST", "/auth/verify-email/resend", nil)
-	tok := e.tokenFromMail("late@a.example", "Verify")
+	tok := e.tokenFromMail("late@a.example", "Xác minh")
 	c.must(204, "POST", "/auth/verify-email", map[string]string{"token": tok})
 	var me struct {
 		Data struct {

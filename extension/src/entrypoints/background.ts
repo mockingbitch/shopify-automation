@@ -17,7 +17,7 @@ export default defineBackground({
       if (m?.channel !== MSG_CHANNEL || sender.id !== browser.runtime.id || !sender.url?.startsWith(browser.runtime.getURL('/popup.html'))) return false;
       handle(m.request!)
         .then(sendResponse)
-        .catch((e: unknown) => sendResponse({ ok: false, error: { code: 'internal', message: String((e as Error)?.message ?? e) } }));
+        .catch((e: unknown) => sendResponse({ ok: false, error: { code: 'internal', message: `Tiện ích gặp lỗi (${String((e as Error)?.message ?? e)}). Hãy đóng rồi mở lại cửa sổ Tiện ích.` } }));
       return true;
     });
   },

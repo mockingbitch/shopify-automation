@@ -5,24 +5,31 @@ const route = useRoute()
 const session = useSessionStore()
 const open = ref(false)
 
-const orgId = computed(() => (typeof route.params.orgId === 'string' ? route.params.orgId : ''))
+// Pages outside an organization (help, account) keep the menu of the
+// organization used last, so users can always find their way back.
+const lastOrg = useState<string>('last-org', () => '')
+const orgId = computed(() => {
+  if (typeof route.params.orgId === 'string') return route.params.orgId
+  return lastOrg.value || session.memberships[0]?.organization.id || ''
+})
+watch(() => route.params.orgId, (id) => { if (typeof id === 'string') lastOrg.value = id }, { immediate: true })
 const current = computed(() => (orgId.value ? session.membership(orgId.value) : undefined))
 
 const nav = computed(() => {
   if (!orgId.value) return []
   const base = `/orgs/${orgId.value}`
   return [
-    { label: 'Overview', to: base },
-    { label: 'Organizations', to: '/orgs' },
-    { label: 'Shops', to: `${base}/shops` },
-    { label: 'Shop Templates', to: `${base}/templates` },
-    { label: 'Products', to: `${base}/products` },
-    { label: 'Product Imports', to: `${base}/imports` },
-    { label: 'Automation Workflows', to: `${base}/workflows` },
-    { label: 'Execution Logs', to: `${base}/logs` },
-    { label: 'Browser Extension', to: `${base}/extension` },
-    { label: 'Members', to: `${base}/members` },
-    { label: 'Settings', to: `${base}/settings` },
+    { label: 'Tổng quan', to: base },
+    { label: 'Tổ chức', to: '/orgs' },
+    { label: 'Shop', to: `${base}/shops` },
+    { label: 'Mẫu shop', to: `${base}/templates` },
+    { label: 'Sản phẩm', to: `${base}/products` },
+    { label: 'Nhập sản phẩm', to: `${base}/imports` },
+    { label: 'Quy trình tự động', to: `${base}/workflows` },
+    { label: 'Nhật ký thực thi', to: `${base}/logs` },
+    { label: 'Tiện ích trình duyệt', to: `${base}/extension` },
+    { label: 'Thành viên', to: `${base}/members` },
+    { label: 'Cài đặt', to: `${base}/settings` },
   ]
 })
 
@@ -48,7 +55,7 @@ async function resendVerification() {
   resend.busy = true
   try {
     unwrap(await api.POST('/auth/verify-email/resend'))
-    resend.message = 'A new link is on its way.'
+    resend.message = 'Đã gửi liên kết mới. Bạn hãy kiểm tra hộp thư.'
   } catch (e) {
     resend.message = toApiError(e).message
   } finally {
@@ -60,7 +67,7 @@ async function resendVerification() {
 <template>
   <div class="min-h-screen bg-muted/30 md:flex">
     <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-background focus:px-3 focus:py-2">
-      Skip to content
+      Chuyển đến nội dung chính
     </a>
 
     <header class="flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">
@@ -68,7 +75,7 @@ async function resendVerification() {
       <Button variant="ghost" size="icon" :aria-expanded="open" aria-controls="sidebar" @click="open = !open">
         <X v-if="open" class="size-5" aria-hidden="true" />
         <Menu v-else class="size-5" aria-hidden="true" />
-        <span class="sr-only">{{ open ? 'Close menu' : 'Open menu' }}</span>
+        <span class="sr-only">{{ open ? 'Đóng menu' : 'Mở menu' }}</span>
       </Button>
     </header>
 
@@ -80,10 +87,10 @@ async function resendVerification() {
         <p class="hidden text-sm font-semibold tracking-tight text-primary md:block">Shopee Shop Automation</p>
 
         <div v-if="session.memberships.length && orgId" class="space-y-1">
-          <Label for="org-switcher" class="text-xs text-muted-foreground">Organization</Label>
+          <Label for="org-switcher" class="text-xs text-muted-foreground">Tổ chức</Label>
           <Select :model-value="orgId" @update:model-value="switchOrg">
             <SelectTrigger id="org-switcher" class="w-full">
-              <SelectValue placeholder="Choose organization" />
+              <SelectValue placeholder="Chọn tổ chức" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem v-for="m in session.memberships" :key="m.organization.id" :value="m.organization.id">
@@ -93,7 +100,7 @@ async function resendVerification() {
           </Select>
         </div>
 
-        <nav v-if="nav.length" aria-label="Main" class="flex-1">
+        <nav v-if="nav.length" aria-label="Điều hướng chính" class="flex-1">
           <ul class="space-y-0.5">
             <li v-for="item in nav" :key="item.to">
               <NuxtLink
@@ -114,20 +121,21 @@ async function resendVerification() {
         <div class="border-t pt-4 text-sm">
           <p class="truncate font-medium">{{ session.user?.display_name }}</p>
           <p class="truncate text-xs text-muted-foreground">{{ session.user?.email }}</p>
-          <p v-if="current" class="mt-1 text-xs text-muted-foreground">Role: {{ roleLabels[current.role] }}</p>
-          <NuxtLink to="/account" class="mt-2 block text-xs text-primary hover:underline">
-            Account security{{ session.user?.mfa_enabled ? '' : ' (two-step verification off)' }}
+          <p v-if="current" class="mt-1 text-xs text-muted-foreground">Vai trò: {{ roleLabels[current.role] }}</p>
+          <NuxtLink to="/help" class="mt-2 block text-xs text-primary hover:underline">Hướng dẫn sử dụng</NuxtLink>
+          <NuxtLink to="/account" class="mt-1 block text-xs text-primary hover:underline">
+            Bảo mật tài khoản{{ session.user?.mfa_enabled ? '' : ' (chưa bật xác minh hai bước)' }}
           </NuxtLink>
           <NuxtLink v-if="session.user?.is_platform_admin" to="/admin/shopee-apps" class="mt-2 block text-xs text-primary hover:underline">
-            Platform admin: Shopee apps
+            Quản trị nền tảng: Ứng dụng Shopee
           </NuxtLink>
           <NuxtLink v-if="session.user?.is_platform_admin" to="/admin/browser-recipes" class="mt-1 block text-xs text-primary hover:underline">
-            Platform admin: Browser recipes
+            Quản trị nền tảng: Kịch bản thao tác
           </NuxtLink>
           <NuxtLink v-if="session.user?.is_platform_admin" to="/admin/capabilities" class="mt-1 block text-xs text-primary hover:underline">
-            Platform admin: Capabilities
+            Quản trị nền tảng: Chức năng
           </NuxtLink>
-          <Button variant="outline" size="sm" class="mt-3 w-full" @click="logout">Sign out</Button>
+          <Button variant="outline" size="sm" class="mt-3 w-full" @click="logout">Đăng xuất</Button>
         </div>
       </div>
     </aside>
@@ -141,9 +149,9 @@ async function resendVerification() {
         role="status"
         class="mb-6 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
       >
-        Please verify your email address. Check your inbox for the link we sent.
+        Bạn hãy xác minh địa chỉ email. Mở hộp thư và bấm vào liên kết chúng tôi đã gửi.
         <Button variant="link" size="sm" class="h-auto p-0 pl-1 text-amber-900 underline" :disabled="resend.busy" @click="resendVerification">
-          Send a new link
+          Gửi lại liên kết
         </Button>
         <span v-if="resend.message" class="block">{{ resend.message }}</span>
       </div>

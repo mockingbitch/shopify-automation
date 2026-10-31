@@ -19,13 +19,13 @@ function submit() {
 <template>
   <form class="card flex flex-col gap-3 p-4" data-testid="pairing" @submit.prevent="submit">
     <div>
-      <h2 class="font-semibold">Connect this browser</h2>
+      <h2 class="font-semibold">Kết nối trình duyệt này</h2>
       <p class="text-sm text-muted-foreground">
-        In the dashboard open <em>Settings → Browser extension → Connect</em> and type the code shown there.
+        Trên trang quản lý, mở <em>Tiện ích trình duyệt → Tạo mã ghép nối</em>, rồi nhập mã hiện ra vào đây.
       </p>
     </div>
     <label class="flex flex-col gap-1 text-sm font-medium">
-      Pairing code
+      Mã ghép nối
       <input
         v-model="code"
         class="input font-mono uppercase tracking-widest"
@@ -38,11 +38,11 @@ function submit() {
         @blur="touched = true"
       />
     </label>
-    <p v-if="touched && code && !normalized" class="-mt-2 text-xs text-destructive">The code has 10 letters or digits, like ABCDE-12345.</p>
+    <p v-if="touched && code && !normalized" class="-mt-2 text-xs text-destructive">Mã gồm 10 chữ cái hoặc chữ số, ví dụ ABCDE-12345.</p>
     <label class="flex flex-col gap-1 text-sm font-medium">
-      Device name
+      Tên trình duyệt
       <input v-model="deviceName" class="input" name="device_name" maxlength="100" />
     </label>
-    <button type="submit" class="btn btn-primary" :disabled="busy || !normalized">Connect</button>
+    <button type="submit" class="btn btn-primary" :disabled="busy || !normalized">Kết nối</button>
   </form>
 </template>

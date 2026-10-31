@@ -67,7 +67,7 @@ func (s *Service) readAccess(ctx context.Context, orgID, connID uuid.UUID) (Acce
 		return Access{}, time.Time{}, wrap(err, nil)
 	}
 	if !app.Enabled {
-		return Access{}, time.Time{}, apperr.FailedDependency("shopee_app_disabled", "The Shopee app for this shop is disabled.")
+		return Access{}, time.Time{}, apperr.FailedDependency("shopee_app_disabled", "Ứng dụng Shopee của shop này đang bị tắt.")
 	}
 	capp, err := s.clientApp(app)
 	if err != nil {
@@ -183,7 +183,7 @@ func (s *Service) markReconnectRequired(ctx context.Context, q *shopsdb.Queries,
 		return err
 	}
 	meta["reason"] = code
-	if err := s.notifyReconnect(ctx, q, conn, "Shopee no longer accepts this shop's authorization. Reconnect it to keep automation running."); err != nil {
+	if err := s.notifyReconnect(ctx, q, conn, "Shopee không còn chấp nhận ủy quyền của shop này. Hãy kết nối lại shop để quy trình tự động tiếp tục chạy."); err != nil {
 		return err
 	}
 	return s.Audit.Record(ctx, tx, audit.Entry{OrgID: &conn.OrgID, ActorType: audit.ActorSystem, Action: "shop.reconnect_required",
@@ -245,7 +245,7 @@ func (s *Service) notifyReconnect(ctx context.Context, q *shopsdb.Queries, conn 
 	if conn.ShopName != nil && *conn.ShopName != "" {
 		name = *conn.ShopName
 	}
-	return q.NotifyMembers(ctx, shopsdb.NotifyMembersParams{Kind: "shop_reconnect_required", Title: name + ": reconnect required",
+	return q.NotifyMembers(ctx, shopsdb.NotifyMembersParams{Kind: "shop_reconnect_required", Title: name + ": cần kết nối lại",
 		Body: body, Link: "/orgs/" + conn.OrgID.String() + "/shops/" + conn.ID.String(), DedupeKey: "reconnect:" + conn.ID.String(),
 		CreatedAt: s.now(), OrgID: conn.OrgID, Roles: rbac.RolesWith(rbac.ShopsConnect), UserIds: []uuid.UUID{}})
 }

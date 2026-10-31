@@ -132,14 +132,14 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) error {
 	}
 
 	if exists {
-		s.send(ctx, mailer.Message{To: in.Email, Subject: "You already have an account",
-			Text: "Someone tried to create an account with this email address, which is already registered.\n\n" +
-				"If this was you, sign in or reset your password at " + s.link("/forgot-password", nil) + "\n\n" +
-				"If it was not you, you can ignore this email."})
+		s.send(ctx, mailer.Message{To: in.Email, Subject: "Bạn đã có tài khoản",
+			Text: "Xin chào,\n\nCó người vừa thử tạo tài khoản bằng địa chỉ email này, nhưng email này đã được đăng ký rồi.\n\n" +
+				"Nếu đó là bạn, hãy đăng nhập hoặc đặt lại mật khẩu tại: " + s.link("/forgot-password", nil) + "\n\n" +
+				"Nếu không phải bạn, bạn có thể bỏ qua email này."})
 		return nil
 	}
-	s.send(ctx, mailer.Message{To: in.Email, Subject: "Verify your email address",
-		Text: "Confirm your email address by opening this link within 48 hours:\n\n" +
+	s.send(ctx, mailer.Message{To: in.Email, Subject: "Xác minh địa chỉ email của bạn",
+		Text: "Xin chào,\n\nHãy mở đường dẫn dưới đây trong vòng 48 giờ để xác minh địa chỉ email của bạn:\n\n" +
 			s.link("/verify-email", url.Values{"token": {verifyToken}})})
 	return nil
 }
@@ -169,8 +169,8 @@ func (s *Service) ResendVerification(ctx context.Context, p authctx.Principal) e
 		return apperr.Internal(err)
 	}
 	if token != "" {
-		s.send(ctx, mailer.Message{To: to, Subject: "Verify your email address",
-			Text: "Confirm your email address by opening this link within 48 hours:\n\n" +
+		s.send(ctx, mailer.Message{To: to, Subject: "Xác minh địa chỉ email của bạn",
+			Text: "Xin chào,\n\nHãy mở đường dẫn dưới đây trong vòng 48 giờ để xác minh địa chỉ email của bạn:\n\n" +
 				s.link("/verify-email", url.Values{"token": {token}})})
 	}
 	return nil
@@ -187,7 +187,7 @@ type Session struct {
 	User         User
 }
 
-var errBadCredentials = apperr.Unauthenticated("Email or password is incorrect.")
+var errBadCredentials = apperr.Unauthenticated("Email hoặc mật khẩu không đúng.")
 
 // Login verifies credentials and creates a session. previousSessionID, if
 // set, is revoked (session rotation on login).
@@ -302,7 +302,7 @@ func principalFor(u identitydb.User, sessionID uuid.UUID, csrf []byte, mfa bool)
 // for unknown, expired or revoked sessions.
 func (s *Service) Authenticate(ctx context.Context, token string) (authctx.Principal, error) {
 	if token == "" || len(token) > 128 {
-		return authctx.Principal{}, apperr.Unauthenticated("Sign in to continue.")
+		return authctx.Principal{}, apperr.Unauthenticated("Hãy đăng nhập để tiếp tục.")
 	}
 	now := s.Clock.Now()
 	var p authctx.Principal
@@ -323,7 +323,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (authctx.Princ
 		return nil
 	})
 	if db.IsNoRows(err) {
-		return authctx.Principal{}, apperr.Unauthenticated("Your session has expired. Sign in again.")
+		return authctx.Principal{}, apperr.Unauthenticated("Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.")
 	}
 	if err != nil {
 		return authctx.Principal{}, apperr.Internal(err)
@@ -346,7 +346,7 @@ func (s *Service) Logout(ctx context.Context, p authctx.Principal) error {
 	return nil
 }
 
-var errInvalidToken = apperr.Gone("token_invalid", "This link is invalid or has expired.")
+var errInvalidToken = apperr.Gone("token_invalid", "Đường dẫn này không hợp lệ hoặc đã hết hạn.")
 
 // VerifyEmail consumes an email verification token.
 func (s *Service) VerifyEmail(ctx context.Context, token string) error {
@@ -403,10 +403,10 @@ func (s *Service) ForgotPassword(ctx context.Context, email string) error {
 		return apperr.Internal(err)
 	}
 	if token != "" {
-		s.send(ctx, mailer.Message{To: email, Subject: "Reset your password",
-			Text: "Open this link within 1 hour to choose a new password:\n\n" +
+		s.send(ctx, mailer.Message{To: email, Subject: "Đặt lại mật khẩu",
+			Text: "Xin chào,\n\nHãy mở đường dẫn dưới đây trong vòng 1 giờ để đặt mật khẩu mới:\n\n" +
 				s.link("/reset-password", url.Values{"token": {token}}) +
-				"\n\nIf you did not ask for this, you can ignore this email."})
+				"\n\nNếu bạn không yêu cầu đặt lại mật khẩu, bạn có thể bỏ qua email này. Mật khẩu hiện tại vẫn giữ nguyên."})
 	}
 	return nil
 }
@@ -466,7 +466,7 @@ func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		return err
 	})
 	if db.IsNoRows(err) {
-		return User{}, apperr.NotFound("User not found.")
+		return User{}, apperr.NotFound("Không tìm thấy người dùng.")
 	}
 	if err != nil {
 		return User{}, apperr.Internal(err)
@@ -548,7 +548,7 @@ func (s *Service) checkBreached(ctx context.Context, password string) error {
 	}
 	if bad {
 		return apperr.Invalid(apperr.FieldError{Field: "password", Code: "breached",
-			Message: "This password appeared in a data breach. Choose a different one."})
+			Message: "Mật khẩu này đã từng bị lộ trong một vụ rò rỉ dữ liệu. Hãy chọn mật khẩu khác."})
 	}
 	return nil
 }

@@ -78,89 +78,89 @@ const inputClass = 'w-full rounded-md border bg-background px-3 py-2 text-sm'
   <form class="space-y-6" novalidate @submit.prevent="submit">
     <fieldset :disabled="readonly" class="space-y-6">
       <section class="grid gap-4 rounded-lg border bg-background p-4 sm:grid-cols-2" aria-labelledby="pf-basic">
-        <h2 id="pf-basic" class="text-base font-semibold sm:col-span-2">Basic information</h2>
-        <FormField id="pf-sku" label="SKU" :error="err('sku')" hint="Unique in your organization. Used to find the item on Shopee.">
+        <h2 id="pf-basic" class="text-base font-semibold sm:col-span-2">Thông tin cơ bản</h2>
+        <FormField id="pf-sku" label="SKU" :error="err('sku')" hint="Không được trùng trong tổ chức của bạn. Dùng để nhận ra sản phẩm trên Shopee.">
           <Input id="pf-sku" v-model="f.sku" required maxlength="100" />
         </FormField>
-        <FormField id="pf-name" label="Name" :error="err('name')"><Input id="pf-name" v-model="f.name" required maxlength="255" /></FormField>
+        <FormField id="pf-name" label="Tên sản phẩm" :error="err('name')"><Input id="pf-name" v-model="f.name" required maxlength="255" /></FormField>
         <div class="sm:col-span-2">
-          <FormField id="pf-desc" label="Description" :error="err('description')">
+          <FormField id="pf-desc" label="Mô tả sản phẩm" :error="err('description')">
             <textarea id="pf-desc" v-model="f.description" rows="5" maxlength="10000" :class="inputClass" />
           </FormField>
         </div>
         <div class="sm:col-span-2">
           <CatalogPicker v-if="!readonly" :category-id="f.category" @category="pickCategory" @attribute="pickAttribute" @brand="(b) => (f.brand = b)" />
         </div>
-        <FormField id="pf-cat" label="Shopee category ID" :error="err('shopee_category_id')" hint="A leaf category of the shop's market.">
+        <FormField id="pf-cat" label="ID ngành hàng Shopee" :error="err('shopee_category_id')" hint="Ngành hàng cấp cuối cùng, theo thị trường của shop.">
           <Input id="pf-cat" v-model="f.category" inputmode="numeric" />
         </FormField>
-        <FormField id="pf-catl" label="Category label (optional)" :error="err('category_label')"><Input id="pf-catl" v-model="f.categoryLabel" /></FormField>
-        <FormField id="pf-brand" label="Brand" :error="err('brand_name')" hint="Leave empty for No Brand."><Input id="pf-brand" v-model="f.brand" /></FormField>
-        <FormField id="pf-cond" label="Condition" :error="err('condition')">
+        <FormField id="pf-catl" label="Tên ngành hàng (không bắt buộc)" :error="err('category_label')"><Input id="pf-catl" v-model="f.categoryLabel" /></FormField>
+        <FormField id="pf-brand" label="Thương hiệu" :error="err('brand_name')" hint="Để trống nếu sản phẩm không có thương hiệu (No Brand)."><Input id="pf-brand" v-model="f.brand" /></FormField>
+        <FormField id="pf-cond" label="Tình trạng" :error="err('condition')">
           <select id="pf-cond" v-model="f.condition" class="h-9 w-full rounded-md border bg-background px-3 text-sm">
-            <option value="">Not set</option><option value="NEW">New</option><option value="USED">Used</option>
+            <option value="">Chưa chọn</option><option value="NEW">Mới</option><option value="USED">Đã sử dụng</option>
           </select>
         </FormField>
       </section>
 
       <section class="grid gap-4 rounded-lg border bg-background p-4 sm:grid-cols-3" aria-labelledby="pf-sale">
-        <h2 id="pf-sale" class="text-base font-semibold sm:col-span-3">Price, stock and shipping</h2>
-        <FormField id="pf-price" label="Price" :error="err('price')"><Input id="pf-price" v-model="f.price" inputmode="decimal" required /></FormField>
-        <FormField id="pf-cur" label="Currency" :error="err('currency')" hint="Must match the shop's market.">
+        <h2 id="pf-sale" class="text-base font-semibold sm:col-span-3">Giá, tồn kho và vận chuyển</h2>
+        <FormField id="pf-price" label="Giá" :error="err('price')"><Input id="pf-price" v-model="f.price" inputmode="decimal" required /></FormField>
+        <FormField id="pf-cur" label="Tiền tệ" :error="err('currency')" hint="Phải khớp với thị trường của shop.">
           <select id="pf-cur" v-model="f.currency" class="h-9 w-full rounded-md border bg-background px-3 text-sm">
             <option v-for="c in currencies" :key="c" :value="c">{{ c }}</option>
           </select>
         </FormField>
-        <FormField id="pf-stock" label="Stock" :error="err('stock')"><Input id="pf-stock" v-model.number="f.stock" type="number" min="0" /></FormField>
-        <FormField id="pf-weight" label="Weight (kg)" :error="err('weight_kg')"><Input id="pf-weight" v-model="f.weight" inputmode="decimal" /></FormField>
-        <FormField id="pf-days" label="Days to ship (optional)" :error="err('days_to_ship')"><Input id="pf-days" v-model.number="f.days" type="number" min="1" /></FormField>
+        <FormField id="pf-stock" label="Tồn kho" :error="err('stock')"><Input id="pf-stock" v-model.number="f.stock" type="number" min="0" /></FormField>
+        <FormField id="pf-weight" label="Cân nặng (kg)" :error="err('weight_kg')"><Input id="pf-weight" v-model="f.weight" inputmode="decimal" /></FormField>
+        <FormField id="pf-days" label="Số ngày chuẩn bị hàng (không bắt buộc)" :error="err('days_to_ship')"><Input id="pf-days" v-model.number="f.days" type="number" min="1" /></FormField>
         <div />
-        <FormField id="pf-len" label="Package length (cm)" :error="err('package_cm')"><Input id="pf-len" v-model.number="f.length" type="number" min="1" /></FormField>
-        <FormField id="pf-wid" label="Package width (cm)"><Input id="pf-wid" v-model.number="f.width" type="number" min="1" /></FormField>
-        <FormField id="pf-hei" label="Package height (cm)"><Input id="pf-hei" v-model.number="f.height" type="number" min="1" /></FormField>
+        <FormField id="pf-len" label="Chiều dài gói hàng (cm)" :error="err('package_cm')"><Input id="pf-len" v-model.number="f.length" type="number" min="1" /></FormField>
+        <FormField id="pf-wid" label="Chiều rộng gói hàng (cm)"><Input id="pf-wid" v-model.number="f.width" type="number" min="1" /></FormField>
+        <FormField id="pf-hei" label="Chiều cao gói hàng (cm)"><Input id="pf-hei" v-model.number="f.height" type="number" min="1" /></FormField>
       </section>
 
       <section class="space-y-3 rounded-lg border bg-background p-4" aria-labelledby="pf-attr">
         <div class="flex items-center justify-between">
-          <h2 id="pf-attr" class="text-base font-semibold">Shopee attributes</h2>
-          <Button type="button" variant="outline" size="sm" @click="attributes.push({ id: '', value: '', name: '', unit: '' })">Add attribute</Button>
+          <h2 id="pf-attr" class="text-base font-semibold">Thuộc tính Shopee</h2>
+          <Button type="button" variant="outline" size="sm" @click="attributes.push({ id: '', value: '', name: '', unit: '' })">Thêm thuộc tính</Button>
         </div>
-        <p class="text-sm text-muted-foreground">Mandatory attributes depend on the category; publishing lists any that are missing.</p>
+        <p class="text-sm text-muted-foreground">Thuộc tính bắt buộc tùy theo ngành hàng. Khi đăng sản phẩm, hệ thống sẽ báo các thuộc tính còn thiếu.</p>
         <p v-if="attributeError" class="text-xs text-destructive">{{ attributeError }}</p>
         <div v-for="(a, k) in attributes" :key="k" class="grid gap-2 sm:grid-cols-[1fr_1fr_2fr_1fr_auto] sm:items-end">
-          <FormField :id="`pf-a${k}`" label="Attribute ID"><Input :id="`pf-a${k}`" v-model="a.id" inputmode="numeric" /></FormField>
-          <FormField :id="`pf-av${k}`" label="Value ID" hint="0 for a custom value"><Input :id="`pf-av${k}`" v-model="a.value" inputmode="numeric" /></FormField>
-          <FormField :id="`pf-an${k}`" label="Custom value"><Input :id="`pf-an${k}`" v-model="a.name" /></FormField>
-          <FormField :id="`pf-au${k}`" label="Unit"><Input :id="`pf-au${k}`" v-model="a.unit" /></FormField>
-          <Button type="button" variant="outline" size="sm" :aria-label="`Remove attribute ${k + 1}`" @click="attributes.splice(k, 1)">Remove</Button>
+          <FormField :id="`pf-a${k}`" label="ID thuộc tính"><Input :id="`pf-a${k}`" v-model="a.id" inputmode="numeric" /></FormField>
+          <FormField :id="`pf-av${k}`" label="ID giá trị" hint="Nhập 0 nếu bạn tự điền giá trị"><Input :id="`pf-av${k}`" v-model="a.value" inputmode="numeric" /></FormField>
+          <FormField :id="`pf-an${k}`" label="Giá trị tự điền"><Input :id="`pf-an${k}`" v-model="a.name" /></FormField>
+          <FormField :id="`pf-au${k}`" label="Đơn vị"><Input :id="`pf-au${k}`" v-model="a.unit" /></FormField>
+          <Button type="button" variant="outline" size="sm" :aria-label="`Xóa thuộc tính ${k + 1}`" @click="attributes.splice(k, 1)">Xóa</Button>
         </div>
       </section>
 
       <section class="space-y-3 rounded-lg border bg-background p-4" aria-labelledby="pf-var">
         <div class="flex items-center justify-between">
-          <h2 id="pf-var" class="text-base font-semibold">Variations</h2>
-          <Button v-if="tiers.length < 2" type="button" variant="outline" size="sm" @click="tiers.push({ name: '', options: '' })">Add tier</Button>
+          <h2 id="pf-var" class="text-base font-semibold">Phân loại hàng</h2>
+          <Button v-if="tiers.length < 2" type="button" variant="outline" size="sm" @click="tiers.push({ name: '', options: '' })">Thêm nhóm phân loại</Button>
         </div>
         <p class="text-sm text-muted-foreground">
-          Shopee only accepts its standard variations for the category (for example Color or Size) with its option names.
+          Shopee chỉ chấp nhận tên phân loại chuẩn của ngành hàng (ví dụ "Màu sắc" hoặc "Kích cỡ") và tên lựa chọn đúng theo danh sách của Shopee.
         </p>
         <p v-if="variationError" class="text-xs text-destructive">{{ variationError }}</p>
         <div v-for="(t, k) in tiers" :key="k" class="grid gap-2 sm:grid-cols-[1fr_3fr_auto] sm:items-end">
-          <FormField :id="`pf-t${k}`" :label="`Tier ${k + 1} name`"><Input :id="`pf-t${k}`" v-model="t.name" maxlength="50" /></FormField>
-          <FormField :id="`pf-to${k}`" label="Options (comma separated)"><Input :id="`pf-to${k}`" v-model="t.options" /></FormField>
-          <Button type="button" variant="outline" size="sm" :aria-label="`Remove tier ${k + 1}`" @click="tiers.splice(k, 1)">Remove</Button>
+          <FormField :id="`pf-t${k}`" :label="`Tên nhóm phân loại ${k + 1}`"><Input :id="`pf-t${k}`" v-model="t.name" maxlength="50" /></FormField>
+          <FormField :id="`pf-to${k}`" label="Các lựa chọn (cách nhau bằng dấu phẩy)"><Input :id="`pf-to${k}`" v-model="t.options" /></FormField>
+          <Button type="button" variant="outline" size="sm" :aria-label="`Xóa nhóm phân loại ${k + 1}`" @click="tiers.splice(k, 1)">Xóa</Button>
         </div>
         <div v-if="combos.length" class="overflow-x-auto rounded-md border">
           <Table>
             <TableHeader>
-              <TableRow><TableHead>Variation</TableHead><TableHead>SKU</TableHead><TableHead>Price</TableHead><TableHead>Stock</TableHead></TableRow>
+              <TableRow><TableHead>Phân loại hàng</TableHead><TableHead>SKU</TableHead><TableHead>Giá</TableHead><TableHead>Tồn kho</TableHead></TableRow>
             </TableHeader>
             <TableBody>
               <TableRow v-for="c in combos" :key="c.index.join('.')">
                 <TableCell>{{ c.label }}</TableCell>
-                <TableCell><Input v-model="row(c.index).sku" :aria-label="`SKU of ${c.label}`" /></TableCell>
-                <TableCell><Input v-model="row(c.index).price" inputmode="decimal" :aria-label="`Price of ${c.label}`" /></TableCell>
-                <TableCell><Input v-model.number="row(c.index).stock" type="number" min="0" :aria-label="`Stock of ${c.label}`" /></TableCell>
+                <TableCell><Input v-model="row(c.index).sku" :aria-label="`SKU của ${c.label}`" /></TableCell>
+                <TableCell><Input v-model="row(c.index).price" inputmode="decimal" :aria-label="`Giá của ${c.label}`" /></TableCell>
+                <TableCell><Input v-model.number="row(c.index).stock" type="number" min="0" :aria-label="`Tồn kho của ${c.label}`" /></TableCell>
               </TableRow>
             </TableBody>
           </Table>

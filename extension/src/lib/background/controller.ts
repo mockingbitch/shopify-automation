@@ -34,7 +34,7 @@ let notice: string | undefined;
 async function clearAuth(): Promise<void> {
   await local.remove('auth');
   await session.set({ tasks: { items: [], fetchedAt: null } satisfies TasksView });
-  notice = 'This browser is no longer connected. Pair it again from the dashboard.';
+  notice = 'Trình duyệt này không còn được kết nối. Hãy ghép nối lại bằng mã mới từ trang quản lý.';
   await updateBadge([]);
 }
 
@@ -49,6 +49,9 @@ async function updateBadge(items: TaskSummary[], run?: RunState | null): Promise
   const paused = run?.phase === 'paused';
   await browser.action.setBadgeBackgroundColor({ color: paused ? '#b45309' : '#c2410c' });
   await browser.action.setBadgeText({ text: paused ? '!' : queued > 0 ? String(queued) : '' });
+  const base = browser.runtime.getManifest().name;
+  const hint = paused ? 'Chờ bạn xử lý trong tab Kênh Người Bán' : queued > 0 ? `${queued.toLocaleString('vi-VN')} việc đang chờ chạy` : '';
+  await browser.action.setTitle({ title: hint ? `${base}: ${hint}` : base });
 }
 
 async function getTasks(): Promise<TasksView> {
@@ -76,7 +79,7 @@ export async function refreshTasks(): Promise<TasksView> {
     return view;
   } catch (e) {
     const prev = await getTasks();
-    const view: TasksView = { ...prev, error: e instanceof ApiError ? e.message : String(e) };
+    const view: TasksView = { ...prev, error: e instanceof ApiError ? e.message : `Có lỗi không mong muốn (${String(e)}).` };
     if (await getAuth()) await session.set({ tasks: view });
     return view;
   }
@@ -105,19 +108,20 @@ function err(code: string, message: string): Reply<never> {
 }
 
 const CLAIM_MESSAGES: Record<string, string> = {
-  task_unavailable: 'This task is no longer available (another browser may have taken it).',
-  recipe_disabled: 'This automation is switched off right now. Try again later or do it manually.',
-  capability_disabled: 'This automation is switched off right now. Try again later or do it manually.',
+  task_unavailable: 'Việc này không còn để chạy (có thể một trình duyệt khác đã nhận). Bấm Làm mới để xem danh sách mới.',
+  recipe_disabled: 'Chức năng tự động này đang tạm tắt. Hãy thử lại sau hoặc làm thủ công.',
+  capability_disabled: 'Chức năng tự động này đang tạm tắt. Hãy thử lại sau hoặc làm thủ công.',
+  network_error: 'Không kết nối được máy chủ. Hãy kiểm tra mạng, rồi thử lại.',
 };
 
 async function startRun(taskId: string): Promise<Reply> {
-  if (activeRun) return err('busy', 'Another task is running. Stop it or wait for it to finish.');
+  if (activeRun) return err('busy', 'Đang có một việc khác chạy. Hãy bấm Dừng hoặc chờ việc đó xong.');
   const tasks = await getTasks();
   const summary = tasks.items.find((t) => t.id === taskId);
   // The tab the seller has open in the focused window: the run never opens a new tab.
   const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab?.id || (tab.url ?? '').startsWith(browser.runtime.getURL(''))) {
-    return err('no_tab', 'Open your Seller Centre tab, then click Run again.');
+    return err('no_tab', 'Hãy mở tab Kênh Người Bán của shop, rồi bấm Chạy lại.');
   }
   let claim;
   try {
@@ -125,7 +129,7 @@ async function startRun(taskId: string): Promise<Reply> {
   } catch (e) {
     await refreshTasks();
     if (e instanceof ApiError) return err(e.code, CLAIM_MESSAGES[e.code] ?? e.message);
-    return err('claim_failed', String(e));
+    return err('claim_failed', `Không nhận được việc này (${String(e)}). Hãy thử lại.`);
   }
   const lease = claim.lease_token;
   const run = new TaskRun(taskId, summary?.title ?? taskId, claim, {
@@ -140,7 +144,7 @@ async function startRun(taskId: string): Promise<Reply> {
     },
     fetchFile: async (f) => {
       const res = await fetch(f.url, { credentials: 'omit', cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`); // technical: goes to the API log
       return res.arrayBuffer();
     },
     onState: (s) => void setRun(s),
@@ -165,8 +169,8 @@ export async function handle(req: Request): Promise<Reply> {
       return { ok: true, data: await status() };
     case 'pair': {
       const code = normalizePairingCode(req.code);
-      if (!code) return err('invalid_code_format', 'The code has 10 letters or digits, like ABCDE-12345.');
-      const name = req.deviceName.trim().slice(0, 100) || 'Browser';
+      if (!code) return err('invalid_code_format', 'Mã gồm 10 chữ cái hoặc chữ số, ví dụ ABCDE-12345.');
+      const name = req.deviceName.trim().slice(0, 100) || 'Trình duyệt';
       try {
         const r = await api.pair(code, name, browser.runtime.getManifest().version);
         await local.set({ auth: { token: r.token, expiresAt: r.expires_at, device: r.device, org: r.org, user: r.user, rotatedAt: Date.now() } satisfies StoredAuth });
@@ -174,13 +178,13 @@ export async function handle(req: Request): Promise<Reply> {
         await refreshTasks();
         return { ok: true, data: await status() };
       } catch (e) {
-        if (e instanceof ApiError && e.code === 'invalid_code') return err('invalid_code', 'This code is wrong, expired or already used. Create a new one in the dashboard.');
-        if (e instanceof ApiError) return err(e.code, e.message);
-        return err('pair_failed', String(e));
+        if (e instanceof ApiError && e.code === 'invalid_code') return err('invalid_code', 'Mã này sai, đã hết hạn hoặc đã được dùng. Hãy tạo mã mới trên trang quản lý.');
+        if (e instanceof ApiError) return err(e.code, e.code === 'network_error' ? CLAIM_MESSAGES.network_error! : e.message);
+        return err('pair_failed', `Không ghép nối được (${String(e)}). Hãy thử lại.`);
       }
     }
     case 'unpair': {
-      if (activeRun) return err('busy', 'Stop the running task first.');
+      if (activeRun) return err('busy', 'Hãy dừng việc đang chạy trước.');
       try {
         await api.unpair();
       } catch {
@@ -216,7 +220,7 @@ export async function recoverAfterRestart(): Promise<void> {
       ...run,
       phase: 'failed',
       errorCode: 'interrupted',
-      message: 'The run was interrupted (the browser stopped the extension). The task goes back to the queue within 10 minutes.',
+      message: 'Lượt chạy bị gián đoạn vì trình duyệt đã tạm dừng Tiện ích. Việc sẽ trở lại danh sách chờ trong vòng 10 phút.',
     });
   }
 }

@@ -26,7 +26,7 @@ func ids(r *http.Request, names ...string) ([]uuid.UUID, error) {
 				return nil, errTemplateNotFound
 			}
 			if n == "shopID" {
-				return nil, apperr.NotFound("Shop not found.")
+				return nil, apperr.NotFound("Không tìm thấy shop.")
 			}
 			return nil, errVersionNotFound
 		}

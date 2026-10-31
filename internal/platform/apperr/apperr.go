@@ -105,12 +105,12 @@ func UpstreamFailed(code, msg string) *Error { return newErr(KindUpstream, code,
 
 // Invalid returns a validation error carrying field errors.
 func Invalid(fields ...FieldError) *Error {
-	e := newErr(KindInvalid, "validation_failed", "Some fields are invalid.")
+	e := newErr(KindInvalid, "validation_failed", "Một số trường chưa hợp lệ. Hãy kiểm tra lại.")
 	e.Fields = fields
 	return e
 }
 
 // Internal wraps an unexpected error. The cause is logged, never returned.
 func Internal(err error) *Error {
-	return &Error{Kind: KindInternal, Code: "internal", Message: "An unexpected error occurred.", Err: err}
+	return &Error{Kind: KindInternal, Code: "internal", Message: "Đã xảy ra lỗi không mong muốn. Hãy thử lại sau.", Err: err}
 }

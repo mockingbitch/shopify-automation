@@ -19,13 +19,13 @@ const tone = computed(() => {
   }
 });
 const label: Record<RunState['phase'], string> = {
-  preparing: 'Preparing',
-  running: 'Running',
-  paused: 'Waiting for you',
-  succeeded: 'Done',
-  failed: 'Failed',
-  lease_lost: 'Taken over',
-  stopped: 'Stopped',
+  preparing: 'Đang chuẩn bị',
+  running: 'Đang chạy',
+  paused: 'Chờ bạn xử lý',
+  succeeded: 'Hoàn tất',
+  failed: 'Thất bại',
+  lease_lost: 'Trình duyệt khác đã nhận',
+  stopped: 'Đã dừng',
 };
 </script>
 
@@ -41,9 +41,9 @@ const label: Record<RunState['phase'], string> = {
     <p class="text-sm" data-testid="run-message">{{ run.message }}</p>
     <p v-if="run.errorCode && run.phase === 'failed'" class="font-mono text-xs text-muted-foreground" data-testid="run-error-code">{{ run.errorCode }}</p>
     <div class="flex gap-2">
-      <button v-if="run.phase === 'paused'" class="btn btn-primary" :disabled="busy" @click="$emit('continue')">Continue</button>
-      <button v-if="active" class="btn btn-secondary" :disabled="busy" @click="$emit('stop')">Stop</button>
-      <button v-else class="btn btn-ghost" :disabled="busy" @click="$emit('dismiss')">Dismiss</button>
+      <button v-if="run.phase === 'paused'" class="btn btn-primary" :disabled="busy" @click="$emit('continue')">Tiếp tục</button>
+      <button v-if="active" class="btn btn-secondary" :disabled="busy" @click="$emit('stop')">Dừng</button>
+      <button v-else class="btn btn-ghost" :disabled="busy" @click="$emit('dismiss')">Đóng</button>
     </div>
   </section>
 </template>

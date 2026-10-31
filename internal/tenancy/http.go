@@ -41,7 +41,7 @@ func (h Handler) ResolveTenant(next http.Handler) http.Handler {
 		}
 		if t.MFARequired && (t.Role == rbac.Owner || t.Role == rbac.Admin) && !p.MFAEnabled {
 			a.WriteError(w, r, apperr.Forbidden("mfa_required",
-				"This organization requires two-step verification for owners and admins. Turn it on in your account settings."))
+				"Tổ chức này yêu cầu Chủ sở hữu và Quản trị viên bật xác minh hai bước. Hãy bật trong phần cài đặt tài khoản."))
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(authctx.WithTenant(r.Context(), t)))
@@ -54,7 +54,7 @@ func Require(log *slog.Logger, perm rbac.Permission) func(http.Handler) http.Han
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !authctx.MustTenant(r.Context()).Can(perm) {
 				httpx.Adapter{Log: log}.WriteError(w, r,
-					apperr.Forbidden("forbidden", "You do not have permission to do this."))
+					apperr.Forbidden("forbidden", "Bạn không có quyền thực hiện thao tác này."))
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -190,7 +190,7 @@ func (h Handler) RemoveMember(w http.ResponseWriter, r *http.Request) error {
 	}
 	t := authctx.MustTenant(r.Context())
 	if id != t.MemberID && !t.Can(rbac.MembersManage) {
-		return apperr.Forbidden("forbidden", "You do not have permission to do this.")
+		return apperr.Forbidden("forbidden", "Bạn không có quyền thực hiện thao tác này.")
 	}
 	if err := h.Svc.RemoveMember(r.Context(), authctx.MustPrincipal(r.Context()), t, id); err != nil {
 		return err
@@ -222,7 +222,7 @@ func (h Handler) ListInvitations(w http.ResponseWriter, r *http.Request) error {
 
 // RevokeInvitation handles DELETE /orgs/{orgID}/invitations/{invitationID}.
 func (h Handler) RevokeInvitation(w http.ResponseWriter, r *http.Request) error {
-	id, err := pathID(r, "invitationID", apperr.NotFound("Invitation not found."))
+	id, err := pathID(r, "invitationID", apperr.NotFound("Không tìm thấy lời mời."))
 	if err != nil {
 		return err
 	}

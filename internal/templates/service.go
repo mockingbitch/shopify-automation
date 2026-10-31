@@ -56,9 +56,9 @@ func (s *Service) tx(ctx context.Context, p authctx.Principal, t authctx.Tenant,
 }
 
 var (
-	errTemplateNotFound = apperr.NotFound("Template not found.")
-	errVersionNotFound  = apperr.NotFound("Template version not found.")
-	errNotDraft         = apperr.Conflict("version_not_draft", "Published versions cannot be changed. Create a new draft.")
+	errTemplateNotFound = apperr.NotFound("Không tìm thấy mẫu shop.")
+	errVersionNotFound  = apperr.NotFound("Không tìm thấy phiên bản của mẫu shop.")
+	errNotDraft         = apperr.Conflict("version_not_draft", "Không thể sửa phiên bản đã phát hành. Hãy tạo bản nháp mới.")
 )
 
 // Template is the API view of a template.
@@ -166,7 +166,7 @@ func (s *Service) checkMeta(name, description string) (string, string, error) {
 	name, description = strings.TrimSpace(name), strings.TrimSpace(description)
 	v.Length("name", name, 1, 100)
 	if len([]rune(description)) > 1000 {
-		v.Add("description", "too_long", "Must be at most 1000 characters.")
+		v.Add("description", "too_long", "Tối đa 1000 ký tự.")
 	}
 	return name, description, v.Err()
 }
@@ -215,7 +215,7 @@ func (s *Service) insertTemplate(ctx context.Context, q *templatesdb.Queries, p 
 		Description: desc, ClonedFromVersionID: clonedFrom, CreatedBy: &p.UserID})
 	if err != nil {
 		if db.UniqueViolation(err) == "shop_templates_name_uk" {
-			return Created{}, apperr.Invalid(apperr.FieldError{Field: "name", Code: "taken", Message: "A template with this name already exists."})
+			return Created{}, apperr.Invalid(apperr.FieldError{Field: "name", Code: "taken", Message: "Đã có mẫu shop với tên này."})
 		}
 		return Created{}, err
 	}
@@ -232,7 +232,7 @@ func (s *Service) insertDraft(ctx context.Context, q *templatesdb.Queries, p aut
 		BasedOnID: basedOn, CreatedBy: &p.UserID})
 	if err != nil {
 		if db.UniqueViolation(err) == "shop_template_versions_one_draft" {
-			return v, apperr.Conflict("draft_exists", "This template already has a draft. Edit or publish it first.")
+			return v, apperr.Conflict("draft_exists", "Mẫu shop này đã có bản nháp. Hãy sửa hoặc phát hành bản nháp đó trước.")
 		}
 		return v, err
 	}
@@ -310,7 +310,7 @@ func (s *Service) Update(ctx context.Context, p authctx.Principal, t authctx.Ten
 		}
 		if _, err := q.UpdateTemplate(ctx, templatesdb.UpdateTemplateParams{Name: name, Description: desc, OrgID: t.OrgID, ID: id}); err != nil {
 			if db.UniqueViolation(err) == "shop_templates_name_uk" {
-				return apperr.Invalid(apperr.FieldError{Field: "name", Code: "taken", Message: "A template with this name already exists."})
+				return apperr.Invalid(apperr.FieldError{Field: "name", Code: "taken", Message: "Đã có mẫu shop với tên này."})
 			}
 			return err
 		}
@@ -333,7 +333,7 @@ func (s *Service) Delete(ctx context.Context, p authctx.Principal, t authctx.Ten
 			return apperr.Internal(err)
 		}
 		if n > 0 {
-			return apperr.Conflict("template_in_use", "Workflows using this template are still running. Wait for them or cancel them first.")
+			return apperr.Conflict("template_in_use", "Vẫn còn quy trình đang chạy với mẫu shop này. Hãy chờ chúng xong hoặc hủy trước.")
 		}
 	}
 	return wrap(s.tx(ctx, p, t, func(q *templatesdb.Queries, tx pgx.Tx) error {
@@ -464,7 +464,7 @@ func (s *Service) NewDraft(ctx context.Context, p authctx.Principal, t authctx.T
 		}
 		src, err := q.GetVersion(ctx, templatesdb.GetVersionParams{OrgID: t.OrgID, TemplateID: tpl.ID, ID: in.FromVersionID})
 		if err != nil {
-			return wrap(err, apperr.Invalid(apperr.FieldError{Field: "from_version_id", Code: "not_found", Message: "Version not found in this template."}))
+			return wrap(err, apperr.Invalid(apperr.FieldError{Field: "from_version_id", Code: "not_found", Message: "Không tìm thấy phiên bản này trong mẫu shop."}))
 		}
 		secs, _, err := s.loadSections(ctx, q, t, src.ID)
 		if err != nil {
@@ -489,13 +489,13 @@ func (s *Service) NewDraft(ctx context.Context, p authctx.Principal, t authctx.T
 func (s *Service) PutSection(ctx context.Context, p authctx.Principal, t authctx.Tenant, id, vid uuid.UUID, key string,
 	content json.RawMessage, ifMatch string) (Section, error) {
 	if _, ok := s.Registry.Section(key); !ok {
-		return Section{}, apperr.NotFound("Unknown section.")
+		return Section{}, apperr.NotFound("Mục không tồn tại.")
 	}
 	if fields := s.Registry.ValidateSection(key, content); fields != nil {
 		return Section{}, apperr.Invalid(fields...)
 	}
 	if ifMatch == "" {
-		return Section{}, apperr.PreconditionFailed("If-Match header is required.")
+		return Section{}, apperr.PreconditionFailed("Thiếu header If-Match.")
 	}
 	var out Section
 	err := s.tx(ctx, p, t, func(q *templatesdb.Queries, tx pgx.Tx) error {
@@ -514,7 +514,7 @@ func (s *Service) PutSection(ctx context.Context, p authctx.Principal, t authctx
 			return err
 		}
 		if sectionETag(cur.UpdatedAt) != ifMatch {
-			return apperr.PreconditionFailed("This section was changed by someone else. Reload and try again.")
+			return apperr.PreconditionFailed("Mục này vừa được người khác thay đổi. Hãy tải lại trang và thử lại.")
 		}
 		row, err := q.UpdateSection(ctx, templatesdb.UpdateSectionParams{Content: content, UpdatedBy: &p.UserID,
 			OrgID: t.OrgID, VersionID: vid, SectionKey: key})
@@ -561,7 +561,7 @@ func (s *Service) Publish(ctx context.Context, p authctx.Principal, t authctx.Te
 			return wrap(err, errVersionNotFound)
 		}
 		if v.Status != StatusDraft {
-			return apperr.Conflict("version_not_draft", "Only a draft can be published.")
+			return apperr.Conflict("version_not_draft", "Chỉ có thể phát hành bản nháp.")
 		}
 		secs, _, err := s.loadSections(ctx, q, t, vid)
 		if err != nil {
@@ -645,7 +645,7 @@ func (s *Service) checkTemplateAndShop(ctx context.Context, q *templatesdb.Queri
 		return err
 	}
 	if !ok {
-		return apperr.NotFound("Shop not found.")
+		return apperr.NotFound("Không tìm thấy shop.")
 	}
 	return nil
 }
@@ -659,11 +659,11 @@ func (s *Service) PutOverrides(ctx context.Context, p authctx.Principal, t authc
 	}
 	for k, v := range in.Overrides {
 		if _, ok := s.Registry.Section(k); !ok {
-			return Overrides{}, apperr.Invalid(apperr.FieldError{Field: "overrides." + k, Code: "unknown_section", Message: "Unknown section."})
+			return Overrides{}, apperr.Invalid(apperr.FieldError{Field: "overrides." + k, Code: "unknown_section", Message: "Mục không tồn tại."})
 		}
 		var obj map[string]any
 		if json.Unmarshal(v, &obj) != nil || obj == nil {
-			return Overrides{}, apperr.Invalid(apperr.FieldError{Field: "overrides." + k, Code: "invalid", Message: "Must be an object."})
+			return Overrides{}, apperr.Invalid(apperr.FieldError{Field: "overrides." + k, Code: "invalid", Message: "Phải là một đối tượng JSON."})
 		}
 	}
 	var out Overrides
@@ -740,12 +740,12 @@ type ShopPreview struct {
 // fields Shopee was not read for are reported with current_known=false.
 func (s *Service) Preview(ctx context.Context, p authctx.Principal, t authctx.Tenant, id, vid uuid.UUID, in PreviewInput) ([]ShopPreview, error) {
 	if len(in.ShopIDs) == 0 || len(in.ShopIDs) > maxPreviewShops {
-		return nil, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "invalid", Message: "Choose between 1 and 50 shops."})
+		return nil, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "invalid", Message: "Chọn từ 1 đến 50 shop."})
 	}
 	seen := map[uuid.UUID]bool{}
 	for _, sid := range in.ShopIDs {
 		if seen[sid] {
-			return nil, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "duplicate", Message: "Each shop may appear once."})
+			return nil, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "duplicate", Message: "Mỗi shop chỉ được chọn một lần."})
 		}
 		seen[sid] = true
 	}
@@ -780,7 +780,7 @@ func (s *Service) Preview(ctx context.Context, p authctx.Principal, t authctx.Te
 		detail, err := s.Shops.Get(ctx, t, sid)
 		if err != nil {
 			if apperr.IsKind(err, apperr.KindNotFound) {
-				return nil, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "not_found", Message: "Shop " + sid.String() + " was not found."})
+				return nil, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "not_found", Message: "Không tìm thấy shop " + sid.String() + "."})
 			}
 			return nil, err
 		}
@@ -794,7 +794,7 @@ func (s *Service) previewShop(base, over Sections, d shops.Detail) ShopPreview {
 		Errors: []Issue{}, Warnings: []Issue{}, Changes: []Change{}, Blocked: []Change{}}
 	target, err := Merge(base, over)
 	if err != nil {
-		pv.Errors = append(pv.Errors, Issue{Field: "overrides", Code: "invalid", Message: "Stored overrides cannot be read."})
+		pv.Errors = append(pv.Errors, Issue{Field: "overrides", Code: "invalid", Message: "Không đọc được giá trị riêng cho shop đã lưu."})
 		return pv
 	}
 	rep := s.Registry.Validate(target)
@@ -817,13 +817,13 @@ func (s *Service) previewShop(base, over Sections, d shops.Detail) ShopPreview {
 			cur.Values["branding.logo_url"], cur.Known["branding.logo_url"] = *d.Profile.LogoURL, true
 		}
 	} else {
-		pv.Warnings = append(pv.Warnings, Issue{Field: "shop", Code: "not_synced", Message: "The shop has not been synced, so current values are unknown."})
+		pv.Warnings = append(pv.Warnings, Issue{Field: "shop", Code: "not_synced", Message: "Shop chưa được đồng bộ nên chưa biết giá trị hiện tại."})
 	}
 	var g general
 	_ = json.Unmarshal(target["general"], &g)
 	if g.Region != "" && cur.Region != "" && g.Region != cur.Region {
 		pv.Warnings = append(pv.Warnings, Issue{Field: "sections.general.region", Code: "region_mismatch",
-			Message: "The template targets " + g.Region + " but this shop is in " + cur.Region + "."})
+			Message: "Mẫu shop dành cho thị trường " + g.Region + " nhưng shop này thuộc " + cur.Region + "."})
 	}
 
 	caps := map[string]capability.Resolved{}

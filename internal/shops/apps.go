@@ -83,7 +83,7 @@ type UpdateAppInput struct {
 
 func requireAdmin(p authctx.Principal) error {
 	if !p.IsPlatformAdmin {
-		return apperr.NotFound("Route not found.")
+		return apperr.NotFound("Không tìm thấy đường dẫn này.")
 	}
 	return nil
 }
@@ -93,7 +93,7 @@ func (s *Service) checkURL(field, raw string, v *validate.Errors) string {
 	u, err := url.Parse(raw)
 	ok := err == nil && u.Host != "" && u.User == nil && (u.Scheme == "https" || (s.AllowInsecureHosts && u.Scheme == "http"))
 	if !ok {
-		v.Add(field, "invalid_url", "Must be an absolute https URL.")
+		v.Add(field, "invalid_url", "Phải là URL đầy đủ bắt đầu bằng https://.")
 	}
 	return raw
 }
@@ -126,14 +126,14 @@ func (s *Service) CreateApp(ctx context.Context, p authctx.Principal, in CreateA
 	v.Length("name", strings.TrimSpace(in.Name), 1, 100)
 	hosts, okEnv := defaultHosts[in.Environment]
 	if !okEnv {
-		v.Add("environment", "invalid", "Must be sandbox or production.")
+		v.Add("environment", "invalid", "Chỉ được là sandbox hoặc production.")
 	}
 	partnerID, err := strconv.ParseInt(in.PartnerID, 10, 64)
 	if err != nil || partnerID <= 0 {
-		v.Add("partner_id", "invalid", "Must be a positive integer.")
+		v.Add("partner_id", "invalid", "Phải là số nguyên dương.")
 	}
 	if len(in.PartnerKey) < 16 || len(in.PartnerKey) > 256 {
-		v.Add("partner_key", "invalid", "Must be 16 to 256 characters.")
+		v.Add("partner_key", "invalid", "Cần từ 16 đến 256 ký tự.")
 	}
 	v.Length("app_type", strings.TrimSpace(in.AppType), 1, 64)
 	id := db.NewID()
@@ -166,7 +166,7 @@ func (s *Service) CreateApp(ctx context.Context, p authctx.Principal, in CreateA
 		})
 		if err != nil {
 			if db.UniqueViolation(err) != "" {
-				return apperr.Conflict("app_exists", "An app with this partner ID already exists in this environment.")
+				return apperr.Conflict("app_exists", "Đã có ứng dụng với partner ID này trong môi trường này.")
 			}
 			return err
 		}
@@ -187,7 +187,7 @@ func (s *Service) UpdateApp(ctx context.Context, p authctx.Principal, id uuid.UU
 	err := s.tx(ctx, db.Scope{UserID: p.UserID}, func(q *shopsdb.Queries, tx pgx.Tx) error {
 		cur, err := q.GetAppForUpdate(ctx, id)
 		if err != nil {
-			return wrap(err, apperr.NotFound("Shopee app not found."))
+			return wrap(err, apperr.NotFound("Không tìm thấy ứng dụng Shopee."))
 		}
 		var v validate.Errors
 		params := shopsdb.UpdateAppParams{ID: id, Name: cur.Name, ApiHost: cur.ApiHost, AuthHost: cur.AuthHost,
@@ -230,7 +230,7 @@ func (s *Service) UpdateApp(ctx context.Context, p authctx.Principal, id uuid.UU
 		}
 		if in.PartnerKey != nil {
 			if len(*in.PartnerKey) < 16 || len(*in.PartnerKey) > 256 {
-				v.Add("partner_key", "invalid", "Must be 16 to 256 characters.")
+				v.Add("partner_key", "invalid", "Cần từ 16 đến 256 ký tự.")
 			} else {
 				row, wk, err := s.Keys.NewRow(appsTable, id.String())
 				if err != nil {

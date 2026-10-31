@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.shopee-automation.local/templates/default_attributes.json",
-  "title": "Default attributes",
-  "description": "Attribute values applied to products (product/add_item attribute_list). Valid values come from product/get_attribute_tree per category.",
+  "title": "Thuộc tính mặc định",
+  "description": "Giá trị thuộc tính gán cho sản phẩm. Giá trị hợp lệ tùy theo từng ngành hàng trên Shopee.",
   "type": "object",
   "additionalProperties": false,
   "x-applies-to": "products",
@@ -10,7 +10,7 @@
     "attributes": {
       "type": "array",
       "maxItems": 500,
-      "title": "Attributes",
+      "title": "Thuộc tính",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -22,29 +22,29 @@
           "category_id": {
             "type": "integer",
             "minimum": 1,
-            "title": "Only for category",
-            "description": "Empty: every category that has this attribute."
+            "title": "Chỉ cho ngành hàng",
+            "description": "Để trống: áp dụng cho mọi ngành hàng có thuộc tính này."
           },
           "attribute_id": {
             "type": "integer",
             "minimum": 1,
-            "title": "Attribute ID"
+            "title": "ID thuộc tính"
           },
           "value_id": {
             "type": "integer",
             "minimum": 0,
-            "title": "Value ID",
-            "description": "0 for a custom value; then the value name is required."
+            "title": "ID giá trị",
+            "description": "Nhập 0 nếu là giá trị tự nhập; khi đó bắt buộc nhập tên giá trị."
           },
           "original_value_name": {
             "type": "string",
             "maxLength": 200,
-            "title": "Value name"
+            "title": "Tên giá trị"
           },
           "value_unit": {
             "type": "string",
             "maxLength": 20,
-            "title": "Unit"
+            "title": "Đơn vị"
           }
         },
         "if": {

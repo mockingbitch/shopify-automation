@@ -43,19 +43,19 @@ type ApplyResult struct {
 func (s *Setup) Apply(ctx context.Context, p authctx.Principal, t authctx.Tenant, templateID, versionID uuid.UUID,
 	in ApplyInput, idemKey string, rec audit.Recorder) (ApplyResult, error) {
 	if len(in.ShopIDs) == 0 || len(in.ShopIDs) > maxApplyShops {
-		return ApplyResult{}, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "invalid", Message: "Choose between 1 and 50 shops."})
+		return ApplyResult{}, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "invalid", Message: "Chọn từ 1 đến 50 shop."})
 	}
 	ids := append([]uuid.UUID(nil), in.ShopIDs...)
 	sort.Slice(ids, func(i, j int) bool { return bytes.Compare(ids[i][:], ids[j][:]) < 0 })
 	for i := 1; i < len(ids); i++ {
 		if ids[i] == ids[i-1] {
-			return ApplyResult{}, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "duplicate", Message: "Each shop may appear once."})
+			return ApplyResult{}, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "duplicate", Message: "Mỗi shop chỉ được chọn một lần."})
 		}
 	}
 	var key *string
 	if idemKey != "" {
 		if _, err := uuid.Parse(idemKey); err != nil {
-			return ApplyResult{}, apperr.BadRequest("bad_request", "Idempotency-Key must be a UUID.")
+			return ApplyResult{}, apperr.BadRequest("bad_request", "Idempotency-Key phải là UUID hợp lệ.")
 		}
 		key = &idemKey
 	}
@@ -87,14 +87,14 @@ func (s *Setup) Apply(ctx context.Context, p authctx.Principal, t authctx.Tenant
 		return ApplyResult{}, err
 	}
 	if status != templates.StatusPublished {
-		return ApplyResult{}, apperr.Conflict("version_not_published", "Only the published version of a template can be applied.")
+		return ApplyResult{}, apperr.Conflict("version_not_published", "Chỉ có thể áp dụng phiên bản đã phát hành của mẫu shop.")
 	}
 	var inactive []string
 	for _, id := range ids {
 		d, err := s.Shops.Get(ctx, t, id)
 		if err != nil {
 			if apperr.IsKind(err, apperr.KindNotFound) {
-				return ApplyResult{}, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "not_found", Message: "Shop " + id.String() + " was not found."})
+				return ApplyResult{}, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "not_found", Message: "Không tìm thấy shop " + id.String() + "."})
 			}
 			return ApplyResult{}, err
 		}
@@ -107,7 +107,7 @@ func (s *Setup) Apply(ctx context.Context, p authctx.Principal, t authctx.Tenant
 		}
 	}
 	if len(inactive) > 0 {
-		return ApplyResult{}, apperr.FailedDependency("shop_reconnect_required", "These shops are not connected: "+strings.Join(inactive, ", ")+".")
+		return ApplyResult{}, apperr.FailedDependency("shop_reconnect_required", "Các shop sau chưa được kết nối: "+strings.Join(inactive, ", ")+". Hãy kết nối lại rồi thử lại.")
 	}
 
 	var out ApplyResult
@@ -137,7 +137,7 @@ func (s *Setup) Apply(ctx context.Context, p authctx.Principal, t authctx.Tenant
 			IdempotencyKey: key, RequestHash: hash}, specs)
 		if err != nil {
 			if db.UniqueViolation(err) == "workflow_runs_one_active_setup" {
-				return apperr.Conflict("shop_busy", "A setup is already running for one of these shops. Wait for it or cancel it.")
+				return apperr.Conflict("shop_busy", "Một trong các shop này đang có quy trình thiết lập chạy. Hãy chờ xong hoặc hủy nó.")
 			}
 			return err
 		}
@@ -163,7 +163,7 @@ func replayFor(ctx context.Context, q *workflowdb.Queries, orgID uuid.UUID, key 
 		return nil, err
 	}
 	if !bytes.Equal(prev[0].RequestHash, hash) {
-		return nil, apperr.Conflict("idempotency_mismatch", "This Idempotency-Key was used for a different request.")
+		return nil, apperr.Conflict("idempotency_mismatch", "Idempotency-Key này đã được dùng cho một yêu cầu khác.")
 	}
 	out := &ApplyResult{Replay: true}
 	for _, r := range prev {
@@ -198,7 +198,7 @@ func (h Handler) Apply(w http.ResponseWriter, r *http.Request) error {
 	tid, err1 := uuid.Parse(chi.URLParam(r, "templateID"))
 	vid, err2 := uuid.Parse(chi.URLParam(r, "versionID"))
 	if err1 != nil || err2 != nil {
-		return apperr.NotFound("Template version not found.")
+		return apperr.NotFound("Không tìm thấy phiên bản của mẫu shop.")
 	}
 	var in ApplyInput
 	if err := httpx.Decode(w, r, &in); err != nil {

@@ -2,7 +2,7 @@
 import type { components } from '~/types/api'
 
 definePageMeta({ middleware: 'org' })
-useHead({ title: 'Browser Extension' })
+useHead({ title: 'Tiện ích trình duyệt' })
 
 type Device = components['schemas']['ExtensionDevice']
 
@@ -48,7 +48,7 @@ async function revoke(d: Device) {
   error.value = ''
   try {
     unwrap(await api.DELETE('/orgs/{orgID}/extension/devices/{deviceID}', { params: { path: { orgID: orgId.value, deviceID: d.id } } }))
-    notice.value = `“${d.name}” was unpaired.`
+    notice.value = `Đã hủy ghép nối “${d.name}”.`
     await load()
   } catch (e) {
     error.value = toApiError(e).message
@@ -56,58 +56,58 @@ async function revoke(d: Device) {
 }
 
 const canRevoke = (d: Device) => d.user_id === session.user?.id || can('members.manage')
-const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const fmt = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' })
 </script>
 
 <template>
   <div class="mx-auto max-w-4xl space-y-6">
-    <PageHeader title="Browser Extension"
-                description="Some shop settings have no Shopee Open API (banners, decoration, new addresses). The extension does them in your own Seller Centre tab while you watch." />
+    <PageHeader title="Tiện ích trình duyệt"
+                description="Một số cài đặt shop không có Shopee Open API (banner, trang trí shop, địa chỉ mới). Tiện ích sẽ làm thay bạn ngay trong tab Kênh Người Bán của bạn, bạn có thể theo dõi trực tiếp." />
     <div aria-live="polite"><Alert v-if="notice"><AlertDescription>{{ notice }}</AlertDescription></Alert></div>
     <FormError :message="error" />
 
     <Card>
       <CardHeader>
-        <CardTitle as="h2" class="text-base">How it works</CardTitle>
+        <CardTitle as="h2" class="text-base">Cách hoạt động</CardTitle>
       </CardHeader>
       <CardContent class="space-y-2 text-sm">
         <ol class="list-decimal space-y-1 pl-5">
-          <li>Install the extension in Chrome, Edge or another Chromium browser, then pair it with a code from this page.</li>
-          <li>When a workflow needs a change without an Open API, a task appears in the extension popup.</li>
-          <li>Open Seller Centre, logged in to the right shop, and press <strong>Run</strong>. The extension checks the shop ID first and stops if it is a different shop.</li>
-          <li>If Seller Centre asks for a login, verification code or CAPTCHA, the extension pauses. Finish it yourself, then press <strong>Continue</strong>.</li>
+          <li>Cài tiện ích vào Chrome, Edge hoặc trình duyệt Chromium khác, rồi ghép nối bằng mã lấy từ trang này.</li>
+          <li>Khi quy trình cần thay đổi một mục không có Open API, việc cần làm sẽ hiện trong cửa sổ của tiện ích.</li>
+          <li>Mở Kênh Người Bán, đăng nhập đúng shop, rồi bấm <strong>Chạy</strong>. Tiện ích kiểm tra ID shop trước và sẽ dừng nếu không đúng shop.</li>
+          <li>Nếu Kênh Người Bán yêu cầu đăng nhập, mã xác minh hoặc CAPTCHA, tiện ích sẽ tạm dừng. Bạn tự hoàn tất, rồi bấm <strong>Tiếp tục</strong>.</li>
         </ol>
         <p class="text-muted-foreground">
-          The extension never reads your Shopee password or cookies, and only acts on pages listed in its verified steps.
-          Operations without verified steps for your market stay manual tasks.
+          Tiện ích không bao giờ đọc mật khẩu hay cookie Shopee của bạn, và chỉ thao tác trên các trang có trong kịch bản thao tác đã kiểm chứng.
+          Thao tác chưa có kịch bản đã kiểm chứng cho thị trường của bạn sẽ là việc làm thủ công.
         </p>
       </CardContent>
     </Card>
 
     <section v-if="can('workflows.run')" class="space-y-3 rounded-lg border bg-background p-4" aria-labelledby="pair-heading">
-      <h2 id="pair-heading" class="text-base font-semibold">Pair a browser</h2>
+      <h2 id="pair-heading" class="text-base font-semibold">Ghép nối trình duyệt</h2>
       <div v-if="code && remaining > 0" class="space-y-1">
-        <p class="text-sm">Type this code in the extension popup:</p>
+        <p class="text-sm">Nhập mã này vào cửa sổ của tiện ích:</p>
         <p class="font-mono text-3xl tracking-widest" aria-live="polite">{{ code.code }}</p>
-        <p class="text-xs text-muted-foreground">Valid for {{ Math.floor(remaining / 60) }}:{{ String(remaining % 60).padStart(2, '0') }} and only once.</p>
+        <p class="text-xs text-muted-foreground">Còn hiệu lực {{ Math.floor(remaining / 60) }}:{{ String(remaining % 60).padStart(2, '0') }} và chỉ dùng được một lần.</p>
       </div>
-      <p v-else-if="code" class="text-sm text-muted-foreground">The code expired. Create a new one.</p>
+      <p v-else-if="code" class="text-sm text-muted-foreground">Mã đã hết hạn. Bạn hãy tạo mã mới.</p>
       <div class="flex gap-2">
-        <Button @click="createCode">{{ code ? 'New code' : 'Create pairing code' }}</Button>
-        <Button v-if="code" variant="outline" @click="load">I paired it</Button>
+        <Button @click="createCode">{{ code ? 'Tạo mã mới' : 'Tạo mã ghép nối' }}</Button>
+        <Button v-if="code" variant="outline" @click="load">Tôi đã ghép nối xong</Button>
       </div>
     </section>
 
     <section class="space-y-2" aria-labelledby="devices-heading">
-      <h2 id="devices-heading" class="text-lg font-semibold">Paired browsers</h2>
-      <p v-if="loading && !devices.length" role="status" class="text-sm text-muted-foreground">Loading…</p>
-      <EmptyState v-else-if="!devices.length" title="No browser paired" description="Pair a browser to let the extension do the tasks without an Open API." />
+      <h2 id="devices-heading" class="text-lg font-semibold">Trình duyệt đã ghép nối</h2>
+      <p v-if="loading && !devices.length" role="status" class="text-sm text-muted-foreground">Đang tải…</p>
+      <EmptyState v-else-if="!devices.length" title="Chưa ghép nối trình duyệt nào" description="Ghép nối một trình duyệt để tiện ích làm các việc không có Open API." />
       <div v-else class="overflow-x-auto rounded-lg border bg-background">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Browser</TableHead><TableHead>User</TableHead><TableHead>Version</TableHead><TableHead>Last used</TableHead>
-              <TableHead><span class="sr-only">Actions</span></TableHead>
+              <TableHead>Trình duyệt</TableHead><TableHead>Người dùng</TableHead><TableHead>Phiên bản</TableHead><TableHead>Dùng lần cuối</TableHead>
+              <TableHead><span class="sr-only">Thao tác</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -117,9 +117,9 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
               <TableCell>{{ d.extension_version || '—' }}</TableCell>
               <TableCell>{{ d.last_used_at ? fmt.format(new Date(d.last_used_at)) : '—' }}</TableCell>
               <TableCell class="text-right">
-                <ConfirmDialog v-if="canRevoke(d)" :title="`Unpair “${d.name}”?`" description="The extension in that browser stops working until it is paired again."
-                               confirm-label="Unpair" @confirm="revoke(d)">
-                  <template #trigger><Button variant="outline" size="sm">Unpair</Button></template>
+                <ConfirmDialog v-if="canRevoke(d)" :title="`Hủy ghép nối “${d.name}”?`" description="Tiện ích trên trình duyệt đó sẽ ngừng hoạt động cho đến khi được ghép nối lại."
+                               confirm-label="Hủy ghép nối" @confirm="revoke(d)">
+                  <template #trigger><Button variant="outline" size="sm">Hủy ghép nối</Button></template>
                 </ConfirmDialog>
               </TableCell>
             </TableRow>

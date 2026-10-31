@@ -32,11 +32,11 @@ func (v *Errors) Length(field, s string, min, max int) bool {
 	n := utf8.RuneCountInString(s)
 	switch {
 	case n < min && min == 1:
-		v.Add(field, "required", "This field is required.")
+		v.Add(field, "required", "Bạn chưa nhập trường này.")
 	case n < min:
-		v.Add(field, "too_short", "Must be at least "+itoa(min)+" characters.")
+		v.Add(field, "too_short", "Cần ít nhất "+itoa(min)+" ký tự.")
 	case n > max:
-		v.Add(field, "too_long", "Must be at most "+itoa(max)+" characters.")
+		v.Add(field, "too_long", "Tối đa "+itoa(max)+" ký tự.")
 	default:
 		return true
 	}
@@ -49,12 +49,12 @@ func NormalizeEmail(s string) string { return strings.ToLower(strings.TrimSpace(
 // Email checks that s is a bare address (no display name), at most 254 chars.
 func (v *Errors) Email(field, s string) bool {
 	if s == "" {
-		v.Add(field, "required", "This field is required.")
+		v.Add(field, "required", "Bạn chưa nhập trường này.")
 		return false
 	}
 	addr, err := mail.ParseAddress(s)
 	if err != nil || addr.Address != s || len(s) > 254 || !strings.Contains(s[strings.LastIndex(s, "@"):], ".") {
-		v.Add(field, "invalid_format", "Must be a valid email address.")
+		v.Add(field, "invalid_format", "Hãy nhập một địa chỉ email hợp lệ.")
 		return false
 	}
 	return true
@@ -71,11 +71,11 @@ var reservedSlugs = map[string]struct{}{
 // Slug checks an organization slug.
 func (v *Errors) Slug(field, s string) bool {
 	if !slugRe.MatchString(s) {
-		v.Add(field, "invalid_format", "Use 3-40 lowercase letters, digits or hyphens; start and end with a letter or digit.")
+		v.Add(field, "invalid_format", "Dùng 3–40 ký tự gồm chữ thường không dấu, chữ số hoặc dấu gạch ngang; bắt đầu và kết thúc bằng chữ hoặc số.")
 		return false
 	}
 	if _, ok := reservedSlugs[s]; ok {
-		v.Add(field, "reserved", "This name is reserved.")
+		v.Add(field, "reserved", "Tên này đã được hệ thống dành riêng. Hãy chọn tên khác.")
 		return false
 	}
 	return true
@@ -92,15 +92,15 @@ var commonPasswords = map[string]struct{}{
 func (v *Errors) Password(field, pw string) bool {
 	n := utf8.RuneCountInString(pw)
 	if n < 12 {
-		v.Add(field, "too_short", "Must be at least 12 characters.")
+		v.Add(field, "too_short", "Mật khẩu cần ít nhất 12 ký tự.")
 		return false
 	}
 	if n > 128 {
-		v.Add(field, "too_long", "Must be at most 128 characters.")
+		v.Add(field, "too_long", "Mật khẩu tối đa 128 ký tự.")
 		return false
 	}
 	if _, bad := commonPasswords[strings.ToLower(pw)]; bad {
-		v.Add(field, "too_common", "This password is too common.")
+		v.Add(field, "too_common", "Mật khẩu này quá phổ biến. Hãy chọn mật khẩu khó đoán hơn.")
 		return false
 	}
 	return true

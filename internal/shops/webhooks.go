@@ -31,7 +31,7 @@ const (
 // MaxWebhookBody bounds push bodies (authorization pushes are small).
 const MaxWebhookBody = 64 << 10
 
-var errBadSignature = apperr.Unauthenticated("Invalid push signature.")
+var errBadSignature = apperr.Unauthenticated("Chữ ký push không hợp lệ.")
 
 // pushBody is the subset of a push we read. Field names follow the
 // documented samples; code 2 samples use both "shop_id" and "shopid".
@@ -77,7 +77,7 @@ func (b pushBody) shopIDs() []int64 {
 func (s *Service) ReceiveWebhook(ctx context.Context, appID uuid.UUID, body []byte, authorization string) error {
 	app, err := s.loadApp(ctx, appID)
 	if err != nil {
-		return wrap(err, apperr.NotFound("Route not found."))
+		return wrap(err, apperr.NotFound("Không tìm thấy đường dẫn này."))
 	}
 	if app.PushCallbackUrl == nil {
 		return errBadSignature
@@ -92,7 +92,7 @@ func (s *Service) ReceiveWebhook(ctx context.Context, appID uuid.UUID, body []by
 	}
 	var pb pushBody
 	if err := json.Unmarshal(body, &pb); err != nil {
-		return apperr.BadRequest("bad_request", "Body is not valid JSON.")
+		return apperr.BadRequest("bad_request", "Dữ liệu gửi lên không phải JSON hợp lệ.")
 	}
 	if pb.PartnerID != 0 && pb.PartnerID != app.PartnerID {
 		return errBadSignature
@@ -233,7 +233,7 @@ func (s *Service) applyToConnection(ctx context.Context, c shopsdb.SystemFindCon
 			if err := s.recordAuthorization(ctx, q, c.OrgID, c.ID, event, "push", meta); err != nil {
 				return err
 			}
-			if err := s.notifyReconnect(ctx, q, conn, "The seller's authorization ended on Shopee. Reconnect the shop to keep automation running."); err != nil {
+			if err := s.notifyReconnect(ctx, q, conn, "Ủy quyền của shop trên Shopee đã kết thúc. Hãy kết nối lại shop để quy trình tự động tiếp tục chạy."); err != nil {
 				return err
 			}
 			return s.Audit.Record(ctx, tx, audit.Entry{OrgID: &c.OrgID, ActorType: audit.ActorShopee, Action: action,

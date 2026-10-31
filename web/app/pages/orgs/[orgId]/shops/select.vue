@@ -2,7 +2,7 @@
 import type { components } from '~/types/api'
 
 definePageMeta({ middleware: 'org' })
-useHead({ title: 'Choose shops' })
+useHead({ title: 'Chọn shop' })
 
 type Selection = components['schemas']['Selection']
 
@@ -46,21 +46,21 @@ async function submit() {
   }
 }
 
-const fmt = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' })
+const fmt = new Intl.DateTimeFormat('vi-VN', { timeStyle: 'short' })
 </script>
 
 <template>
   <div class="mx-auto max-w-2xl space-y-6">
-    <PageHeader title="Choose shops" description="Your Shopee main account authorized several shops. Choose which ones to connect to this organization." />
-    <p v-if="loading" role="status" class="text-sm text-muted-foreground">Loading…</p>
+    <PageHeader title="Chọn shop" description="Tài khoản chính Shopee của bạn đã ủy quyền cho nhiều shop. Hãy chọn những shop muốn kết nối với tổ chức này." />
+    <p v-if="loading" role="status" class="text-sm text-muted-foreground">Đang tải…</p>
     <FormError :message="error" />
-    <EmptyState v-if="!loading && !selection" title="Selection not available" description="It may have expired after 30 minutes or already been used. Start again from the Shops page.">
-      <Button as-child variant="outline"><NuxtLink :to="`/orgs/${orgId}/shops`">Back to shops</NuxtLink></Button>
+    <EmptyState v-if="!loading && !selection" title="Không còn lựa chọn này" description="Có thể lựa chọn đã hết hạn sau 30 phút hoặc đã được dùng. Hãy bắt đầu lại từ trang Shop.">
+      <Button as-child variant="outline"><NuxtLink :to="`/orgs/${orgId}/shops`">Quay lại danh sách shop</NuxtLink></Button>
     </EmptyState>
 
     <form v-if="selection" class="space-y-4" @submit.prevent="submit">
       <fieldset class="space-y-2 rounded-lg border bg-background p-4">
-        <legend class="px-1 text-sm font-medium">Shops ({{ selection.shops.length }})</legend>
+        <legend class="px-1 text-sm font-medium">Shop ({{ selection.shops.length }})</legend>
         <label v-for="s in selection.shops" :key="s.shopee_shop_id" class="flex items-center gap-3 rounded p-2 hover:bg-muted">
           <input v-model="chosen" type="checkbox" :value="s.shopee_shop_id" class="size-4">
           <span>
@@ -69,8 +69,8 @@ const fmt = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' })
           </span>
         </label>
       </fieldset>
-      <p class="text-xs text-muted-foreground">Available until {{ fmt.format(new Date(selection.expires_at)) }}. Shops you do not choose are not stored.</p>
-      <Button type="submit" :disabled="busy || !chosen.length">{{ busy ? 'Connecting…' : `Connect ${chosen.length || ''} shop${chosen.length === 1 ? '' : 's'}` }}</Button>
+      <p class="text-xs text-muted-foreground">Có hiệu lực đến {{ fmt.format(new Date(selection.expires_at)) }}. Shop bạn không chọn sẽ không được lưu.</p>
+      <Button type="submit" :disabled="busy || !chosen.length">{{ busy ? 'Đang kết nối…' : `Kết nối ${chosen.length || ''} shop` }}</Button>
     </form>
   </div>
 </template>

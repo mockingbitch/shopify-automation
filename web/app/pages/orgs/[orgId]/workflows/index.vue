@@ -3,7 +3,7 @@ import type { Shop } from '~/utils/shops'
 import { runStatusLabels, runVariant, type RunStatus, type RunSummary } from '~/utils/workflows'
 
 definePageMeta({ middleware: 'org' })
-useHead({ title: 'Automation Workflows' })
+useHead({ title: 'Quy trình tự động' })
 
 const api = useApi()
 const route = useRoute()
@@ -50,45 +50,45 @@ watch(batch, () => load())
 const shopName = (id: string) => shops.value[id]?.shop_name ?? (shops.value[id] ? `Shop ${shops.value[id]!.shopee_shop_id}` : 'Shop')
 const templateOf = (r: RunSummary) => {
   const i = r.input as { template_name?: string; version_no?: number; product_ids?: string[] }
-  if (r.definition === 'PRODUCT_PUBLISH') return `Publish ${i.product_ids?.length ?? 0} products`
+  if (r.definition === 'PRODUCT_PUBLISH') return `Đăng ${i.product_ids?.length ?? 0} sản phẩm`
   return i.template_name ? `${i.template_name} v${i.version_no}` : r.definition
 }
-const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const fmt = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' })
 </script>
 
 <template>
   <div class="mx-auto max-w-6xl space-y-6">
-    <PageHeader title="Automation Workflows" description="Shop setups and product publishing. Open a run to approve changes, finish manual tasks or retry." />
+    <PageHeader title="Quy trình tự động" description="Thiết lập shop và đăng sản phẩm. Mở một lượt chạy để duyệt thay đổi, hoàn tất việc làm thủ công hoặc thử lại." />
     <FormError :message="error" />
     <Alert v-if="pendingApprovals">
-      <AlertTitle>{{ pendingApprovals }} run(s) waiting for approval</AlertTitle>
+      <AlertTitle>{{ pendingApprovals }} lượt chạy đang chờ duyệt</AlertTitle>
       <AlertDescription>
-        <button type="button" class="underline" @click="status = 'WAITING_APPROVAL'">Show them</button>
+        <button type="button" class="underline" @click="status = 'WAITING_APPROVAL'">Xem các lượt chạy này</button>
       </AlertDescription>
     </Alert>
 
     <div class="flex flex-wrap items-center gap-3">
-      <Label for="run-status" class="sr-only">Status</Label>
+      <Label for="run-status" class="sr-only">Trạng thái</Label>
       <select id="run-status" v-model="status" class="h-9 rounded-md border bg-background px-3 text-sm">
-        <option value="">All statuses</option>
+        <option value="">Tất cả trạng thái</option>
         <option v-for="(label, key) in runStatusLabels" :key="key" :value="key">{{ label }}</option>
       </select>
       <span v-if="batch" class="text-sm text-muted-foreground">
-        Showing one batch · <NuxtLink :to="`/orgs/${orgId}/workflows`" class="underline">show all</NuxtLink>
+        Đang xem một nhóm lượt chạy · <NuxtLink :to="`/orgs/${orgId}/workflows`" class="underline">xem tất cả</NuxtLink>
       </span>
     </div>
 
-    <p v-if="loading && !runs.length" role="status" class="text-sm text-muted-foreground">Loading…</p>
-    <EmptyState v-else-if="!runs.length" title="No workflow runs" description="Apply a published template to shops from its preview page to start a shop setup." />
+    <p v-if="loading && !runs.length" role="status" class="text-sm text-muted-foreground">Đang tải…</p>
+    <EmptyState v-else-if="!runs.length" title="Chưa có lượt chạy nào" description="Để bắt đầu thiết lập shop, hãy mở trang xem trước của một mẫu shop đã phát hành và áp dụng cho các shop." />
     <div v-else class="overflow-x-auto rounded-lg border bg-background">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Shop</TableHead>
-            <TableHead>Template</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Started</TableHead>
-            <TableHead>Finished</TableHead>
+            <TableHead>Mẫu shop</TableHead>
+            <TableHead>Trạng thái</TableHead>
+            <TableHead>Bắt đầu</TableHead>
+            <TableHead>Kết thúc</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -104,6 +104,6 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
         </TableBody>
       </Table>
     </div>
-    <Button v-if="next" variant="outline" :disabled="loading" @click="load(true)">Load more</Button>
+    <Button v-if="next" variant="outline" :disabled="loading" @click="load(true)">Tải thêm</Button>
   </div>
 </template>

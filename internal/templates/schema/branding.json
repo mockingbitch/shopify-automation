@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.shopee-automation.local/templates/branding.json",
-  "title": "Branding",
-  "description": "Logo, banners and decoration.",
+  "title": "Thương hiệu shop",
+  "description": "Logo, banner và trang trí shop.",
   "type": "object",
   "additionalProperties": false,
   "x-applies-to": "shop",
@@ -12,15 +12,15 @@
       "format": "uri",
       "pattern": "^https://",
       "maxLength": 2048,
-      "title": "Logo image URL",
+      "title": "URL ảnh logo",
       "x-capability": "shop.avatar.upload",
-      "description": "Downloaded, uploaded with media_space/upload_image, then set with shop/update_profile (open item S-4)."
+      "description": "Ảnh được tải về, tải lên Shopee rồi đặt làm logo shop."
     },
     "banner_urls": {
       "type": "array",
       "maxItems": 10,
       "uniqueItems": true,
-      "title": "Banner image URLs",
+      "title": "URL ảnh banner",
       "x-capability": "shop.banner.upload",
       "items": {
         "type": "string",
@@ -28,14 +28,14 @@
         "pattern": "^https://",
         "maxLength": 2048
       },
-      "description": "No Open API; applied by the browser extension or as a manual task. maxItems: Internal limit; Shopee does not document one."
+      "description": "Shopee không có API cho banner; tiện ích trình duyệt sẽ làm hoặc bạn làm thủ công."
     },
     "decoration_notes": {
       "type": "string",
       "maxLength": 4000,
-      "title": "Decoration instructions",
+      "title": "Hướng dẫn trang trí shop",
       "x-capability": "shop.decoration.update",
-      "description": "Instructions for the decoration page; no Open API exists."
+      "description": "Hướng dẫn cho trang Trang trí shop; Shopee không có API cho phần này."
     }
   }
 }

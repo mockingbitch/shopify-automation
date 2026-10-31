@@ -20,9 +20,9 @@ import (
 )
 
 var (
-	errRunNotFound      = apperr.NotFound("Workflow run not found.")
-	errStepNotFound     = apperr.NotFound("Step not found.")
-	errApprovalNotFound = apperr.NotFound("Approval not found.")
+	errRunNotFound      = apperr.NotFound("Không tìm thấy lượt chạy.")
+	errStepNotFound     = apperr.NotFound("Không tìm thấy bước.")
+	errApprovalNotFound = apperr.NotFound("Không tìm thấy yêu cầu duyệt.")
 )
 
 // ApprovalPolicy decides whether the caller may decide an approval of run.
@@ -38,10 +38,10 @@ type DecisionInput struct {
 // Decide approves or rejects a pending approval.
 func (e *Engine) Decide(ctx context.Context, p authctx.Principal, t authctx.Tenant, approvalID uuid.UUID, in DecisionInput, policy ApprovalPolicy) (ApprovalView, error) {
 	if in.Decision != "APPROVE" && in.Decision != "REJECT" {
-		return ApprovalView{}, apperr.Invalid(apperr.FieldError{Field: "decision", Code: "invalid", Message: "Must be APPROVE or REJECT."})
+		return ApprovalView{}, apperr.Invalid(apperr.FieldError{Field: "decision", Code: "invalid", Message: "Chỉ nhận APPROVE hoặc REJECT."})
 	}
 	if in.Comment != nil && len([]rune(*in.Comment)) > 1000 {
-		return ApprovalView{}, apperr.Invalid(apperr.FieldError{Field: "comment", Code: "too_long", Message: "Must be at most 1000 characters."})
+		return ApprovalView{}, apperr.Invalid(apperr.FieldError{Field: "comment", Code: "too_long", Message: "Tối đa 1000 ký tự."})
 	}
 	var out ApprovalView
 	var kick bool
@@ -52,7 +52,7 @@ func (e *Engine) Decide(ctx context.Context, p authctx.Principal, t authctx.Tena
 			return wrap(err, errApprovalNotFound)
 		}
 		if a.Status != "PENDING" {
-			return apperr.Conflict("already_decided", "This approval was already decided.")
+			return apperr.Conflict("already_decided", "Yêu cầu duyệt này đã được xử lý.")
 		}
 		run, err := q.LockRun(ctx, workflowdb.LockRunParams{OrgID: t.OrgID, ID: a.RunID})
 		if err != nil {
@@ -94,7 +94,7 @@ func (e *Engine) Decide(ctx context.Context, p authctx.Principal, t authctx.Tena
 		}
 		next, err := Transition(step.Status, ev)
 		if err != nil {
-			return apperr.Conflict("invalid_state", "The step is not waiting for approval.")
+			return apperr.Conflict("invalid_state", "Bước này không ở trạng thái chờ duyệt.")
 		}
 		fin := &now
 		if next == StepPending {
@@ -109,7 +109,7 @@ func (e *Engine) Decide(ctx context.Context, p authctx.Principal, t authctx.Tena
 				return err
 			}
 		}
-		if err := e.event(ctx, q, t.OrgID, run.ID, &step.ID, "APPROVAL_DECIDED", "info", "Approval "+strings.ToLower(status)+".",
+		if err := e.event(ctx, q, t.OrgID, run.ID, &step.ID, "APPROVAL_DECIDED", "info", approvalDecidedText(status),
 			map[string]any{"approval_id": a.ID.String(), "decision": status, "selected": len(in.SelectedChangePaths), "by": p.UserID.String()}); err != nil {
 			return err
 		}
@@ -157,7 +157,7 @@ func (e *Engine) cancelRun(ctx context.Context, q *workflowdb.Queries, run workf
 	if err := q.ExpirePendingApprovals(ctx, workflowdb.ExpirePendingApprovalsParams{Now: now, OrgID: run.OrgID, RunID: run.ID}); err != nil {
 		return err
 	}
-	return e.event(ctx, q, run.OrgID, run.ID, nil, "CANCEL_REQUESTED", "warn", "Cancellation requested.", map[string]any{"reason": reason})
+	return e.event(ctx, q, run.OrgID, run.ID, nil, "CANCEL_REQUESTED", "warn", "Đã yêu cầu hủy.", map[string]any{"reason": reason})
 }
 
 // CancelInput optionally explains a cancellation.
@@ -169,7 +169,7 @@ type CancelInput struct {
 func (e *Engine) Cancel(ctx context.Context, p authctx.Principal, t authctx.Tenant, runID uuid.UUID, in CancelInput) (RunView, error) {
 	return e.userAction(ctx, p, t, runID, "workflow.cancelled", false, func(q *workflowdb.Queries, run workflowdb.WorkflowRun) error {
 		if IsTerminalRun(run.Status) || run.CancelRequestedAt != nil {
-			return apperr.Conflict("not_cancellable", "This run has already finished or is being cancelled.")
+			return apperr.Conflict("not_cancellable", "Lượt chạy này đã kết thúc hoặc đang được hủy.")
 		}
 		reason := "cancelled_by_user"
 		if in.Reason != nil && strings.TrimSpace(*in.Reason) != "" {
@@ -184,7 +184,7 @@ func (e *Engine) Cancel(ctx context.Context, p authctx.Principal, t authctx.Tena
 func (e *Engine) Retry(ctx context.Context, p authctx.Principal, t authctx.Tenant, runID uuid.UUID) (RunView, error) {
 	return e.userAction(ctx, p, t, runID, "workflow.retried", true, func(q *workflowdb.Queries, run workflowdb.WorkflowRun) error {
 		if run.Status != RunFailed && run.Status != RunPartiallyCompleted {
-			return apperr.Conflict("not_retryable", "Only failed or partially completed runs can be retried.")
+			return apperr.Conflict("not_retryable", "Chỉ có thể thử lại lượt chạy thất bại hoặc hoàn tất một phần.")
 		}
 		steps, err := q.ListSteps(ctx, workflowdb.ListStepsParams{OrgID: run.OrgID, RunID: run.ID})
 		if err != nil {
@@ -211,7 +211,7 @@ func (e *Engine) Retry(ctx context.Context, p authctx.Principal, t authctx.Tenan
 				}
 			}
 		}
-		return e.event(ctx, q, run.OrgID, run.ID, nil, "LOG", "info", "Retry requested.", nil)
+		return e.event(ctx, q, run.OrgID, run.ID, nil, "LOG", "info", "Đã yêu cầu thử lại.", nil)
 	})
 }
 
@@ -220,7 +220,7 @@ func (e *Engine) Retry(ctx context.Context, p authctx.Principal, t authctx.Tenan
 func (e *Engine) Resume(ctx context.Context, p authctx.Principal, t authctx.Tenant, runID uuid.UUID) (RunView, error) {
 	return e.userAction(ctx, p, t, runID, "workflow.resumed", true, func(q *workflowdb.Queries, run workflowdb.WorkflowRun) error {
 		if run.Status != RunWaitingUser {
-			return apperr.Conflict("not_waiting", "This run is not waiting for you.")
+			return apperr.Conflict("not_waiting", "Lượt chạy này không chờ bạn xử lý.")
 		}
 		steps, err := q.ListSteps(ctx, workflowdb.ListStepsParams{OrgID: run.OrgID, RunID: run.ID})
 		if err != nil {
@@ -241,9 +241,9 @@ func (e *Engine) Resume(ctx context.Context, p authctx.Principal, t authctx.Tena
 			resumed++
 		}
 		if resumed == 0 {
-			return apperr.Conflict("manual_tasks_open", "Mark the manual tasks as done to continue.")
+			return apperr.Conflict("manual_tasks_open", "Hãy đánh dấu hoàn thành các việc làm thủ công để tiếp tục.")
 		}
-		return e.event(ctx, q, run.OrgID, run.ID, nil, "USER_ACTION_COMPLETED", "info", "Run resumed.", nil)
+		return e.event(ctx, q, run.OrgID, run.ID, nil, "USER_ACTION_COMPLETED", "info", "Đã tiếp tục lượt chạy.", nil)
 	})
 }
 
@@ -259,11 +259,11 @@ func (e *Engine) CompleteManual(ctx context.Context, p authctx.Principal, t auth
 		if err != nil {
 			return err
 		}
-		return e.completeManualStep(ctx, q, run, s, p, in.Note, "Manual tasks marked as done.", nil)
+		return e.completeManualStep(ctx, q, run, s, p, in.Note, "Đã đánh dấu hoàn thành các việc làm thủ công.", nil)
 	})
 }
 
-var errTasksOpen = apperr.Conflict("tasks_open", "Some tasks of this step are not done by the browser extension.")
+var errTasksOpen = apperr.Conflict("tasks_open", "Tiện ích trình duyệt chưa làm xong một số việc của bước này.")
 
 // CompleteFromExtension completes a manual step when every one of its
 // tasks has a browser task and all of them succeeded. Otherwise it does
@@ -290,7 +290,7 @@ func (e *Engine) CompleteFromExtension(ctx context.Context, p authctx.Principal,
 				return errTasksOpen
 			}
 		}
-		return e.completeManualStep(ctx, q, run, s, p, nil, "All tasks were done by the browser extension.", map[string]any{"via": "browser_extension"})
+		return e.completeManualStep(ctx, q, run, s, p, nil, "Tiện ích trình duyệt đã làm xong tất cả các việc.", map[string]any{"via": "browser_extension"})
 	})
 	if ae, ok := apperr.As(err); ok && (ae.Code == errTasksOpen.Code || ae.Code == "no_manual_task") {
 		return nil
@@ -304,7 +304,7 @@ func (e *Engine) lockManualStep(ctx context.Context, q *workflowdb.Queries, orgI
 		return s, wrap(err, errStepNotFound)
 	}
 	if s.Status != StepWaitingUser || waitReason(s.Output) != "manual_tasks" {
-		return s, apperr.Conflict("no_manual_task", "This step has no open manual task.")
+		return s, apperr.Conflict("no_manual_task", "Bước này không có việc làm thủ công nào đang mở.")
 	}
 	return s, nil
 }
@@ -415,4 +415,15 @@ func wrap(err error, notFound *apperr.Error) error {
 		return notFound
 	}
 	return apperr.Internal(err)
+}
+
+// approvalDecidedText is the activity-log message for an approval decision.
+func approvalDecidedText(status string) string {
+	switch status {
+	case "APPROVED":
+		return "Đã duyệt thay đổi."
+	case "REJECTED":
+		return "Đã từ chối thay đổi."
+	}
+	return "Đã xử lý yêu cầu duyệt."
 }

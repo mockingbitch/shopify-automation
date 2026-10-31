@@ -9,5 +9,5 @@ definePageMeta({
 </script>
 
 <template>
-  <p class="sr-only">Redirecting…</p>
+  <p class="sr-only">Đang chuyển hướng…</p>
 </template>

@@ -133,7 +133,7 @@ func (s *Service) CreateOrg(ctx context.Context, p authctx.Principal, in CreateO
 			Metadata: map[string]any{"slug": in.Slug, "owner_member_id": m.ID.String()}})
 	})
 	if db.UniqueViolation(err) == "organizations_slug_uk" {
-		return Org{}, apperr.Invalid(apperr.FieldError{Field: "slug", Code: "taken", Message: "This name is already taken."})
+		return Org{}, apperr.Invalid(apperr.FieldError{Field: "slug", Code: "taken", Message: "Tên này đã có người dùng. Hãy chọn tên khác."})
 	}
 	if err != nil {
 		return Org{}, apperr.Internal(err)
@@ -160,7 +160,7 @@ func (s *Service) ListMemberships(ctx context.Context, userID uuid.UUID) ([]Memb
 	return out, nil
 }
 
-var errOrgNotFound = apperr.NotFound("Organization not found.")
+var errOrgNotFound = apperr.NotFound("Không tìm thấy tổ chức.")
 
 // ResolveTenant verifies that userID is a member of orgID. Non-members get a
 // not-found error so that organization IDs cannot be probed.
@@ -223,10 +223,10 @@ func (s *Service) UpdateOrg(ctx context.Context, p authctx.Principal, t authctx.
 	}
 	if in.Settings != nil && in.Settings.RequireMFA && !p.MFAEnabled {
 		return Org{}, apperr.Invalid(apperr.FieldError{Field: "settings.require_mfa", Code: "mfa_required",
-			Message: "Turn on two-step verification for your own account first."})
+			Message: "Hãy bật xác minh hai bước cho tài khoản của bạn trước."})
 	}
 	if ifMatch == "" {
-		return Org{}, apperr.PreconditionFailed("If-Match header is required.")
+		return Org{}, apperr.PreconditionFailed("Thiếu header If-Match. Hãy tải lại trang và thử lại.")
 	}
 	var settings []byte
 	if in.Settings != nil {
@@ -239,12 +239,12 @@ func (s *Service) UpdateOrg(ctx context.Context, p authctx.Principal, t authctx.
 			return err
 		}
 		if toOrg(cur).ETag() != ifMatch {
-			return apperr.PreconditionFailed("The organization was changed by someone else. Reload and try again.")
+			return apperr.PreconditionFailed("Tổ chức vừa được người khác thay đổi. Hãy tải lại trang và thử lại.")
 		}
 		out, err = q.UpdateOrganization(ctx, tenancydb.UpdateOrganizationParams{
 			ID: t.OrgID, Name: in.Name, Settings: settings, ExpectedUpdatedAt: cur.UpdatedAt})
 		if db.IsNoRows(err) {
-			return apperr.PreconditionFailed("The organization was changed by someone else. Reload and try again.")
+			return apperr.PreconditionFailed("Tổ chức vừa được người khác thay đổi. Hãy tải lại trang và thử lại.")
 		}
 		if err != nil {
 			return err
@@ -274,7 +274,7 @@ func (s *Service) DeleteOrg(ctx context.Context, p authctx.Principal, t authctx.
 		}
 		if !strings.EqualFold(o.Slug, strings.TrimSpace(confirmSlug)) {
 			return apperr.Invalid(apperr.FieldError{Field: "confirm_slug", Code: "mismatch",
-				Message: "Type the organization's slug to confirm."})
+				Message: "Hãy nhập đúng mã định danh (slug) của tổ chức để xác nhận."})
 		}
 		if _, err := q.SoftDeleteOrganization(ctx, t.OrgID); err != nil {
 			return err
@@ -285,7 +285,7 @@ func (s *Service) DeleteOrg(ctx context.Context, p authctx.Principal, t authctx.
 	return wrap(err, errOrgNotFound)
 }
 
-var errMemberNotFound = apperr.NotFound("Member not found.")
+var errMemberNotFound = apperr.NotFound("Không tìm thấy thành viên.")
 
 // ListMembers returns all members of the tenant.
 func (s *Service) ListMembers(ctx context.Context, t authctx.Tenant) ([]Member, error) {
@@ -309,11 +309,11 @@ func (s *Service) ListMembers(ctx context.Context, t authctx.Tenant) ([]Member, 
 // ChangeRole sets a member's role, enforcing the role hierarchy.
 func (s *Service) ChangeRole(ctx context.Context, p authctx.Principal, t authctx.Tenant, memberID uuid.UUID, role rbac.Role) (Member, error) {
 	if !role.Valid() {
-		return Member{}, apperr.Invalid(apperr.FieldError{Field: "role", Code: "invalid", Message: "Unknown role."})
+		return Member{}, apperr.Invalid(apperr.FieldError{Field: "role", Code: "invalid", Message: "Vai trò không hợp lệ."})
 	}
 	if role == rbac.Owner {
 		return Member{}, apperr.Invalid(apperr.FieldError{Field: "role", Code: "owner_requires_transfer",
-			Message: "Use ownership transfer to make someone the owner."})
+			Message: "Hãy dùng chức năng chuyển quyền sở hữu để đặt một người làm Chủ sở hữu."})
 	}
 	var out tenancydb.OrganizationMember
 	err := s.tx(ctx, db.Scope{OrgID: t.OrgID, UserID: p.UserID}, func(q *tenancydb.Queries, tx pgx.Tx) error {
@@ -323,10 +323,10 @@ func (s *Service) ChangeRole(ctx context.Context, p authctx.Principal, t authctx
 		}
 		cur := rbac.Role(m.RoleKey)
 		if m.ID == t.MemberID {
-			return apperr.Forbidden("cannot_change_own_role", "You cannot change your own role.")
+			return apperr.Forbidden("cannot_change_own_role", "Bạn không thể tự đổi vai trò của mình.")
 		}
 		if !rbac.CanManageMember(t.Role, cur) || !rbac.CanAssign(t.Role, role) {
-			return apperr.Forbidden("role_hierarchy", "You cannot give or change this role.")
+			return apperr.Forbidden("role_hierarchy", "Bạn không có quyền cấp hoặc đổi vai trò này.")
 		}
 		if cur == role {
 			out = m
@@ -358,11 +358,11 @@ func (s *Service) RemoveMember(ctx context.Context, p authctx.Principal, t authc
 		self := m.ID == t.MemberID
 		switch {
 		case cur == rbac.Owner:
-			return apperr.Conflict("owner_cannot_leave", "Transfer ownership before removing the owner.")
+			return apperr.Conflict("owner_cannot_leave", "Hãy chuyển quyền sở hữu trước khi gỡ Chủ sở hữu.")
 		case self:
 			// leaving is always allowed for non-owners
 		case !rbac.CanManageMember(t.Role, cur):
-			return apperr.Forbidden("role_hierarchy", "You cannot remove this member.")
+			return apperr.Forbidden("role_hierarchy", "Bạn không có quyền gỡ thành viên này.")
 		}
 		if _, err := q.DeleteMember(ctx, tenancydb.DeleteMemberParams{OrgID: t.OrgID, ID: memberID}); err != nil {
 			return err
@@ -381,10 +381,10 @@ func (s *Service) RemoveMember(ctx context.Context, p authctx.Principal, t authc
 // TransferOwnership makes another member the owner; the current owner becomes admin.
 func (s *Service) TransferOwnership(ctx context.Context, p authctx.Principal, t authctx.Tenant, newOwnerUserID uuid.UUID) error {
 	if t.Role != rbac.Owner {
-		return apperr.Forbidden("forbidden", "Only the owner can transfer ownership.")
+		return apperr.Forbidden("forbidden", "Chỉ Chủ sở hữu mới có thể chuyển quyền sở hữu.")
 	}
 	if newOwnerUserID == p.UserID {
-		return apperr.Invalid(apperr.FieldError{Field: "new_owner_user_id", Code: "self", Message: "You are already the owner."})
+		return apperr.Invalid(apperr.FieldError{Field: "new_owner_user_id", Code: "self", Message: "Bạn đã là Chủ sở hữu."})
 	}
 	err := s.tx(ctx, db.Scope{OrgID: t.OrgID, UserID: p.UserID}, func(q *tenancydb.Queries, tx pgx.Tx) error {
 		cur, err := q.GetMemberByUserForUpdate(ctx, tenancydb.GetMemberByUserForUpdateParams{OrgID: t.OrgID, UserID: p.UserID})
@@ -394,13 +394,13 @@ func (s *Service) TransferOwnership(ctx context.Context, p authctx.Principal, t 
 		next, err := q.GetMemberByUserForUpdate(ctx, tenancydb.GetMemberByUserForUpdateParams{OrgID: t.OrgID, UserID: newOwnerUserID})
 		if db.IsNoRows(err) {
 			return apperr.Invalid(apperr.FieldError{Field: "new_owner_user_id", Code: "not_member",
-				Message: "The new owner must already be a member."})
+				Message: "Chủ sở hữu mới phải là thành viên của tổ chức."})
 		}
 		if err != nil {
 			return err
 		}
 		if cur.RoleKey != string(rbac.Owner) {
-			return apperr.Forbidden("forbidden", "Only the owner can transfer ownership.")
+			return apperr.Forbidden("forbidden", "Chỉ Chủ sở hữu mới có thể chuyển quyền sở hữu.")
 		}
 		// Demote first: a partial unique index allows only one owner.
 		if _, err := q.UpdateMemberRole(ctx, tenancydb.UpdateMemberRoleParams{OrgID: t.OrgID, ID: cur.ID, RoleKey: string(rbac.Admin)}); err != nil {
@@ -428,13 +428,13 @@ func (s *Service) Invite(ctx context.Context, p authctx.Principal, t authctx.Ten
 	var v validate.Errors
 	v.Email("email", in.Email)
 	if !in.Role.Valid() || in.Role == rbac.Owner {
-		v.Add("role", "invalid", "Choose admin, operator or viewer.")
+		v.Add("role", "invalid", "Hãy chọn Quản trị viên, Nhân viên vận hành hoặc Người xem.")
 	}
 	if err := v.Err(); err != nil {
 		return Invitation{}, err
 	}
 	if !rbac.CanAssign(t.Role, in.Role) {
-		return Invitation{}, apperr.Forbidden("role_hierarchy", "You cannot invite someone with this role.")
+		return Invitation{}, apperr.Forbidden("role_hierarchy", "Bạn không có quyền mời người khác với vai trò này.")
 	}
 	token, hash := invitationToken(t.OrgID)
 	now := s.Clock.Now()
@@ -451,7 +451,7 @@ func (s *Service) Invite(ctx context.Context, p authctx.Principal, t authctx.Ten
 			return err
 		}
 		if member {
-			return apperr.Conflict("already_member", "This person is already a member.")
+			return apperr.Conflict("already_member", "Người này đã là thành viên.")
 		}
 		// An expired open invitation must not block a new one.
 		if err := q.ExpireStaleInvitation(ctx, tenancydb.ExpireStaleInvitationParams{OrgID: t.OrgID, Email: in.Email, Now: now}); err != nil {
@@ -468,7 +468,7 @@ func (s *Service) Invite(ctx context.Context, p authctx.Principal, t authctx.Ten
 			Metadata: map[string]any{"email": in.Email, "role": string(in.Role)}})
 	})
 	if db.UniqueViolation(err) == "organization_invitations_open_uk" {
-		return Invitation{}, apperr.Conflict("already_invited", "An invitation for this email is already pending.")
+		return Invitation{}, apperr.Conflict("already_invited", "Email này đã có một lời mời đang chờ chấp nhận.")
 	}
 	if err != nil {
 		return Invitation{}, wrap(err, errOrgNotFound)
@@ -476,9 +476,10 @@ func (s *Service) Invite(ctx context.Context, p authctx.Principal, t authctx.Ten
 	u := *s.BaseURL
 	u.Path = strings.TrimRight(u.Path, "/") + "/invitations/accept"
 	u.RawQuery = url.Values{"token": {token}}.Encode()
-	if err := s.Mailer.Send(ctx, mailer.Message{To: in.Email, Subject: "You are invited to " + orgName,
-		Text: p.DisplayName + " invited you to join " + orgName + " as " + string(in.Role) + ".\n\n" +
-			"Accept within 7 days: " + u.String()}); err != nil {
+	if err := s.Mailer.Send(ctx, mailer.Message{To: in.Email, Subject: "Bạn được mời tham gia " + orgName,
+		Text: "Xin chào,\n\n" + p.DisplayName + " đã mời bạn tham gia tổ chức " + orgName + " với vai trò " + roleLabel(in.Role) + ".\n\n" +
+			"Hãy mở đường dẫn dưới đây trong vòng 7 ngày để chấp nhận lời mời:\n\n" + u.String() +
+			"\n\nNếu bạn không biết người mời, bạn có thể bỏ qua email này."}); err != nil {
 		s.Log.ErrorContext(ctx, "send invitation email", slog.String("error", err.Error()))
 	}
 	return toInvitation(inv), nil
@@ -514,7 +515,7 @@ func (s *Service) RevokeInvitation(ctx context.Context, p authctx.Principal, t a
 			return err
 		}
 		if n == 0 {
-			return apperr.NotFound("Invitation not found.")
+			return apperr.NotFound("Không tìm thấy lời mời.")
 		}
 		return s.Audit.Record(ctx, tx, audit.Entry{OrgID: &t.OrgID, ActorUserID: &p.UserID,
 			Action: "invitation.revoked", TargetType: "invitation", TargetID: &id})
@@ -522,7 +523,7 @@ func (s *Service) RevokeInvitation(ctx context.Context, p authctx.Principal, t a
 	return wrap(err, nil)
 }
 
-var errInvitationInvalid = apperr.Gone("invitation_invalid", "This invitation is invalid or has expired.")
+var errInvitationInvalid = apperr.Gone("invitation_invalid", "Lời mời này không hợp lệ hoặc đã hết hạn.")
 
 // AcceptInvitation adds the caller to the inviting organization. The
 // caller's email must match the invited email.
@@ -545,7 +546,7 @@ func (s *Service) AcceptInvitation(ctx context.Context, p authctx.Principal, tok
 		}
 		if !strings.EqualFold(inv.Email, p.Email) {
 			return apperr.Forbidden("invitation_email_mismatch",
-				"This invitation was sent to a different email address. Sign in with that address to accept it.")
+				"Lời mời này được gửi tới một địa chỉ email khác. Hãy đăng nhập bằng địa chỉ đó để chấp nhận.")
 		}
 		if org, err = q.GetOrganization(ctx, orgID); err != nil {
 			return err
@@ -565,7 +566,7 @@ func (s *Service) AcceptInvitation(ctx context.Context, p authctx.Principal, tok
 			Metadata: map[string]any{"invitation_id": inv.ID.String(), "role": inv.RoleKey}})
 	})
 	if db.UniqueViolation(err) == "organization_members_org_user_uk" {
-		return Membership{}, apperr.Conflict("already_member", "You are already a member of this organization.")
+		return Membership{}, apperr.Conflict("already_member", "Bạn đã là thành viên của tổ chức này.")
 	}
 	if err != nil {
 		return Membership{}, wrap(err, errInvitationInvalid)
@@ -619,4 +620,19 @@ func parseInvitationToken(token string) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+// roleLabel is the Vietnamese name of a role, used in emails.
+func roleLabel(r rbac.Role) string {
+	switch r {
+	case rbac.Owner:
+		return "Chủ sở hữu"
+	case rbac.Admin:
+		return "Quản trị viên"
+	case rbac.Operator:
+		return "Nhân viên vận hành"
+	case rbac.Viewer:
+		return "Người xem"
+	}
+	return string(r)
 }

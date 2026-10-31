@@ -55,10 +55,10 @@ const pair = (code: string, deviceName: string) => act(() => send({ type: 'pair'
     <header class="flex items-center justify-between">
       <div class="flex items-center gap-2">
         <span class="inline-block size-2.5 rounded-full bg-primary" aria-hidden="true" />
-        <h1 class="text-base font-semibold">Shop Automation</h1>
+        <h1 class="text-base font-semibold">Tự động hóa shop</h1>
       </div>
       <button v-if="status?.auth" class="btn btn-ghost text-xs" :disabled="busy || !!status.run && ['preparing', 'running', 'paused'].includes(status.run.phase)" @click="unpair">
-        Unpair
+        Hủy ghép nối
       </button>
     </header>
 
@@ -71,17 +71,17 @@ const pair = (code: string, deviceName: string) => act(() => send({ type: 'pair'
       <PairingView v-if="!status.auth" :busy="busy" @pair="pair" />
       <template v-else>
         <section class="text-sm text-muted-foreground" data-testid="account">
-          Connected to <strong class="text-foreground" data-testid="org-name">{{ status.auth.org.name }}</strong>
-          as <span data-testid="user-email">{{ status.auth.user.email }}</span>
+          Đã kết nối với <strong class="text-foreground" data-testid="org-name">{{ status.auth.org.name }}</strong>
+          bằng tài khoản <span data-testid="user-email">{{ status.auth.user.email }}</span>
         </section>
         <RunPanel v-if="status.run" :run="status.run" :busy="busy" @stop="stop" @continue="cont" @dismiss="dismiss" />
         <TaskList :tasks="status.tasks" :run="status.run" :busy="busy" @run="run" @refresh="refresh" />
       </template>
     </template>
-    <p v-else class="text-sm text-muted-foreground">Loading…</p>
+    <p v-else class="text-sm text-muted-foreground">Đang tải…</p>
 
     <footer class="border-t border-border pt-2 text-xs text-muted-foreground">
-      Runs only in your open Seller Centre tab, one step at a time, while you watch. It never solves logins or CAPTCHAs.
+      Tiện ích chỉ chạy trong tab Kênh Người Bán bạn đang mở, từng bước một để bạn theo dõi. Tiện ích không bao giờ tự đăng nhập hay giải CAPTCHA.
     </footer>
   </main>
 </template>

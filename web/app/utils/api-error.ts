@@ -32,10 +32,10 @@ export function toApiError(e: unknown): ApiError {
   if (e instanceof ApiError) return e
   return new ApiError({
     type: 'about:blank',
-    title: 'Network error',
+    title: 'Lỗi kết nối',
     status: 0,
     code: 'network_error',
-    detail: 'Could not reach the server. Check your connection and try again.',
+    detail: 'Không kết nối được tới máy chủ. Bạn hãy kiểm tra kết nối mạng rồi thử lại.',
   })
 }
 
@@ -54,7 +54,7 @@ export function unwrap<T>(res: FetchResult<T>): T {
       title: p?.title ?? res.response.statusText,
       status: p?.status ?? res.response.status,
       code: p?.code ?? 'unknown_error',
-      detail: p?.detail ?? 'Something went wrong. Please try again.',
+      detail: p?.detail ?? 'Đã có lỗi xảy ra. Bạn hãy thử lại.',
       request_id: p?.request_id,
       errors: p?.errors,
     })

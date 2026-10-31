@@ -77,7 +77,7 @@ func (r *Registry) Diff(target Sections, cur Current, caps map[string]capability
 				}
 			}
 			if path == "branding.logo_url" {
-				c.Note = "The image is uploaded to Shopee, so the stored logo URL always differs."
+				c.Note = "Ảnh được tải lên Shopee nên URL logo đã lưu luôn khác với mẫu."
 			}
 			out = append(out, label(c, caps))
 		}
@@ -96,13 +96,13 @@ func (r *Registry) addressChanges(obj map[string]any, cur Current, caps map[stri
 	if len(addr) > 0 {
 		c := Change{Path: "return_address.address", Section: "return_address", Target: addr,
 			Capability: "shop.address.update", Sensitive: true,
-			Note: "Updates the shop's existing return address. If the shop has none, creating one has no Open API."}
+			Note: "Cập nhật địa chỉ trả hàng hiện có của shop. Nếu shop chưa có, Shopee không có API để tạo mới."}
 		if cur.Known[c.Path] {
 			c.CurrentKnown, c.Current = true, cur.Values[c.Path]
 			// Shopee's address list has no recipient name or phone, so only
 			// the fields it returns can be compared.
 			if currentMap, ok := c.Current.(map[string]any); ok && subsetEqual(addr, currentMap) {
-				c.Note = "Recipient name and phone cannot be read back from Shopee; other fields already match."
+				c.Note = "Không đọc lại được tên và số điện thoại người nhận từ Shopee; các trường khác đã khớp."
 			}
 		}
 		out = append(out, label(c, caps))

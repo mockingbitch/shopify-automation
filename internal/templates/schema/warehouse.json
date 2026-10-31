@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.shopee-automation.local/templates/warehouse.json",
-  "title": "Warehouse",
-  "description": "Warehouse settings. Shopee has no Open API to change warehouses; these are instructions for the browser extension or a manual task.",
+  "title": "Kho hàng",
+  "description": "Cài đặt kho hàng. Shopee không có API để thay đổi kho hàng; đây là hướng dẫn cho tiện ích trình duyệt hoặc việc làm thủ công.",
   "type": "object",
   "additionalProperties": false,
   "x-applies-to": "shop",
@@ -10,7 +10,7 @@
     "instructions": {
       "type": "string",
       "maxLength": 4000,
-      "title": "Instructions",
+      "title": "Hướng dẫn",
       "x-capability": "shop.warehouse.update",
       "x-multiline": true
     }

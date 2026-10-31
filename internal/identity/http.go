@@ -68,7 +68,7 @@ func (h Handler) limit(r *http.Request, key string, n int, window time.Duration)
 		return nil
 	}
 	if !ok {
-		e := apperr.RateLimited(fmt.Sprintf("Too many attempts. Try again in %d seconds.", int(retry.Seconds())+1))
+		e := apperr.RateLimited(fmt.Sprintf("Bạn đã thử quá nhiều lần. Hãy thử lại sau %d giây.", int(retry.Seconds())+1))
 		return e
 	}
 	return nil
@@ -416,13 +416,13 @@ func (h Handler) RequireSession(next http.Handler) http.Handler {
 		a := httpx.Adapter{Log: h.Log}
 		p, ok := authctx.PrincipalFrom(r.Context())
 		if !ok {
-			a.WriteError(w, r, apperr.Unauthenticated("Sign in to continue."))
+			a.WriteError(w, r, apperr.Unauthenticated("Hãy đăng nhập để tiếp tục."))
 			return
 		}
 		if !httpx.IsSafeMethod(r.Method) {
 			got := r.Header.Get(CSRFHeader)
 			if got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(p.CSRFToken)) != 1 {
-				a.WriteError(w, r, apperr.Forbidden("csrf_failed", "Missing or invalid CSRF token."))
+				a.WriteError(w, r, apperr.Forbidden("csrf_failed", "Phiên làm việc không hợp lệ (thiếu hoặc sai mã CSRF). Hãy tải lại trang và thử lại."))
 				return
 			}
 		}

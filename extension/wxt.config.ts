@@ -16,11 +16,11 @@ export default defineConfig({
     }
     const hosts = [cfg.apiOrigin, ...cfg.sellerOrigins, ...cfg.fileOrigins];
     return {
-      name: cfg.testBuild ? 'Shopee Shop Automation (TEST)' : 'Shopee Shop Automation',
-      description: 'Runs the Seller Centre steps your team queued, in your own tab, while you watch.',
+      name: cfg.testBuild ? 'Shopee Shop Automation (BẢN THỬ)' : 'Shopee Shop Automation',
+      description: 'Chạy giúp bạn các bước trên Kênh Người Bán mà nhóm của bạn đã xếp lịch, ngay trong tab của bạn để bạn theo dõi.',
       permissions: ['storage', 'alarms', 'activeTab', 'scripting'],
       host_permissions: [...new Set(hosts)].map(matchPattern),
-      action: { default_title: 'Shopee Shop Automation' },
+      action: { default_title: 'Shopee Shop Automation: việc cần chạy trên Kênh Người Bán' },
     };
   },
   vite: ({ mode }) => ({

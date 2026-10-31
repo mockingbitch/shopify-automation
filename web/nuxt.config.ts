@@ -11,17 +11,23 @@ export default defineNuxtConfig({
   devServer: { port: 3100 },
   modules: ['@pinia/nuxt', 'shadcn-nuxt'],
   css: ['~/assets/css/main.css'],
-  vite: { plugins: [tailwindcss()] },
+  vite: {
+    plugins: [tailwindcss()],
+    // The in-app guide (/help) is read from docs/huong-dan-su-dung.md.
+    server: { fs: { allow: ['..'] } },
+  },
   shadcn: { prefix: '', componentDir: './app/components/ui' },
   typescript: { strict: true, typeCheck: false },
   app: {
     head: {
-      htmlAttrs: { lang: 'en' },
+      htmlAttrs: { lang: 'vi' },
       title: 'Shopee Shop Automation',
       meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1' }],
     },
   },
   nitro: {
+    // Screenshots of the user guide, served at /huong-dan/*.
+    publicAssets: [{ dir: '../../docs/huong-dan', baseURL: '/huong-dan', maxAge: 3600 }],
     // Development only: forward API calls to the Go server. The browser keeps
     // the dashboard origin, so PUBLIC_BASE_URL must be http://localhost:3100.
     devProxy: {

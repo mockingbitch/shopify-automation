@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'auth' })
-useHead({ title: 'Sign in' })
+useHead({ title: 'Đăng nhập' })
 
 const route = useRoute()
 const session = useSessionStore()
@@ -40,7 +40,7 @@ async function submit() {
       challenge.value = ''
       form.code = ''
     }
-    error.value = err.code === 'validation_failed' ? 'The code is wrong or was already used.' : err.message
+    error.value = err.code === 'validation_failed' ? 'Mã không đúng hoặc đã được dùng. Bạn hãy nhập mã mới.' : err.message
   } finally {
     busy.value = false
   }
@@ -50,8 +50,8 @@ async function submit() {
 <template>
   <Card>
     <CardHeader>
-      <CardTitle as="h1">Sign in</CardTitle>
-      <CardDescription>{{ challenge ? 'Enter the 6-digit code from your authenticator app, or a recovery code.' : 'Use your work email and password.' }}</CardDescription>
+      <CardTitle as="h1">Đăng nhập</CardTitle>
+      <CardDescription>{{ challenge ? 'Nhập mã 6 chữ số trong ứng dụng xác thực, hoặc một mã khôi phục.' : 'Dùng email và mật khẩu của bạn.' }}</CardDescription>
     </CardHeader>
     <CardContent>
       <form class="space-y-4" novalidate @submit.prevent="submit">
@@ -60,19 +60,19 @@ async function submit() {
           <FormField id="email" label="Email">
             <Input id="email" v-model="form.email" type="email" autocomplete="email" required />
           </FormField>
-          <FormField id="password" label="Password">
+          <FormField id="password" label="Mật khẩu">
             <Input id="password" v-model="form.password" type="password" autocomplete="current-password" required />
           </FormField>
         </template>
-        <FormField v-else id="code" label="Verification code">
+        <FormField v-else id="code" label="Mã xác minh">
           <Input id="code" v-model="form.code" inputmode="numeric" autocomplete="one-time-code" maxlength="20" required />
         </FormField>
-        <Button type="submit" class="w-full" :disabled="busy">{{ busy ? 'Signing in…' : challenge ? 'Verify' : 'Sign in' }}</Button>
+        <Button type="submit" class="w-full" :disabled="busy">{{ busy ? 'Đang đăng nhập…' : challenge ? 'Xác minh' : 'Đăng nhập' }}</Button>
       </form>
     </CardContent>
     <CardFooter class="flex justify-between text-sm">
-      <NuxtLink to="/forgot-password" class="text-muted-foreground underline-offset-4 hover:underline">Forgot password?</NuxtLink>
-      <NuxtLink to="/register" class="text-primary underline-offset-4 hover:underline">Create account</NuxtLink>
+      <NuxtLink to="/forgot-password" class="text-muted-foreground underline-offset-4 hover:underline">Quên mật khẩu?</NuxtLink>
+      <NuxtLink to="/register" class="text-primary underline-offset-4 hover:underline">Tạo tài khoản</NuxtLink>
     </CardFooter>
   </Card>
 </template>

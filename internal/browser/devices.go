@@ -167,7 +167,7 @@ type UserInfo struct {
 	Email string    `json:"email"`
 }
 
-var errInvalidCode = apperr.Invalid(apperr.FieldError{Field: "code", Code: "invalid_code", Message: "This code is wrong, used or expired. Create a new one in the dashboard."})
+var errInvalidCode = apperr.Invalid(apperr.FieldError{Field: "code", Code: "invalid_code", Message: "Mã ghép nối sai, đã được dùng hoặc đã hết hạn. Hãy tạo mã mới trên trang quản trị."})
 
 func clean(s string, max int) string {
 	s = strings.TrimSpace(strings.Map(func(r rune) rune {
@@ -190,7 +190,7 @@ func (s *Service) Pair(ctx context.Context, in PairInput) (Paired, error) {
 	}
 	name := clean(in.DeviceName, 100)
 	if name == "" {
-		name = "Browser"
+		name = "Trình duyệt"
 	}
 	if s.System == nil {
 		return Paired{}, errNoSystem
@@ -253,11 +253,11 @@ func toDevice(d browserdb.ExtensionDevice, email string) DeviceInfo {
 		CreatedAt: d.CreatedAt.UTC(), LastUsedAt: d.LastUsedAt, ExpiresAt: d.ExpiresAt.UTC()}
 }
 
-var errNoSystem = apperr.Unavailable("extension_unavailable", "The browser extension API is not configured on this server.")
+var errNoSystem = apperr.Unavailable("extension_unavailable", "Máy chủ này chưa được cấu hình API cho tiện ích trình duyệt.")
 
 // ErrDeviceUnauthorized is returned for any token that cannot be used.
 var ErrDeviceUnauthorized = &apperr.Error{Kind: apperr.KindUnauthenticated, Code: "device_unauthorized",
-	Message: "This browser is not paired any more. Pair it again from the dashboard."}
+	Message: "Trình duyệt này không còn được ghép nối. Hãy ghép nối lại từ trang quản trị."}
 
 // Authenticate resolves a bearer token. The device must be unrevoked and
 // unexpired, and its user must still be a member allowed to run workflows.
@@ -367,10 +367,10 @@ func (s *Service) Revoke(ctx context.Context, p authctx.Principal, t authctx.Ten
 	err := s.tx(ctx, t.OrgID, p.UserID, func(q *browserdb.Queries, tx pgx.Tx) error {
 		d, err := q.GetDevice(ctx, browserdb.GetDeviceParams{OrgID: t.OrgID, ID: id})
 		if err != nil || d.RevokedAt != nil {
-			return apperr.NotFound("Device not found.")
+			return apperr.NotFound("Không tìm thấy trình duyệt đã ghép nối.")
 		}
 		if d.UserID != p.UserID && !t.Can(rbac.MembersManage) {
-			return apperr.Forbidden("forbidden", "You can only remove your own browsers.")
+			return apperr.Forbidden("forbidden", "Bạn chỉ có thể gỡ trình duyệt của chính mình.")
 		}
 		if _, err := q.RevokeDevice(ctx, browserdb.RevokeDeviceParams{RevokedAt: &now, RevokedBy: &p.UserID, OrgID: t.OrgID, ID: id}); err != nil {
 			return err
@@ -403,7 +403,7 @@ func wrapInternal(err error) error {
 		return err
 	}
 	if db.IsNoRows(err) {
-		return apperr.NotFound("Not found.")
+		return apperr.NotFound("Không tìm thấy.")
 	}
 	return apperr.Internal(err)
 }

@@ -27,9 +27,9 @@ const (
 )
 
 var (
-	errMFAUnavailable = apperr.Unavailable("mfa_unavailable", "Two-step verification is not configured on this server.")
-	errBadCode        = apperr.Invalid(apperr.FieldError{Field: "code", Code: "invalid_code", Message: "The code is wrong or was already used."})
-	errChallenge      = apperr.Unauthenticated("The sign-in attempt expired. Sign in again.")
+	errMFAUnavailable = apperr.Unavailable("mfa_unavailable", "Máy chủ này chưa được cấu hình xác minh hai bước.")
+	errBadCode        = apperr.Invalid(apperr.FieldError{Field: "code", Code: "invalid_code", Message: "Mã không đúng hoặc đã được dùng."})
+	errChallenge      = apperr.Unauthenticated("Lượt đăng nhập đã hết hạn. Hãy đăng nhập lại.")
 )
 
 func (s *Service) mfaEnabled(ctx context.Context, userID uuid.UUID) (bool, error) {
@@ -162,7 +162,7 @@ func (s *Service) SetupMFA(ctx context.Context, p authctx.Principal) (MFASetup, 
 		return MFASetup{}, errMFAUnavailable
 	}
 	if p.MFAEnabled {
-		return MFASetup{}, apperr.Conflict("mfa_enabled", "Two-step verification is already on. Turn it off first to change the app.")
+		return MFASetup{}, apperr.Conflict("mfa_enabled", "Xác minh hai bước đang bật. Hãy tắt trước khi đổi ứng dụng xác thực.")
 	}
 	sec := totp.NewSecret()
 	row, wrapped, err := s.Keys.NewRow(mfaTable, p.UserID.String())
@@ -190,13 +190,13 @@ func (s *Service) ConfirmMFA(ctx context.Context, p authctx.Principal, code stri
 		q := identitydb.New(tx)
 		m, err := q.LockMFA(ctx, p.UserID)
 		if db.IsNoRows(err) {
-			return apperr.Conflict("mfa_not_started", "Start the setup first.")
+			return apperr.Conflict("mfa_not_started", "Hãy bắt đầu thiết lập trước.")
 		}
 		if err != nil {
 			return err
 		}
 		if m.ConfirmedAt != nil {
-			return apperr.Conflict("mfa_enabled", "Two-step verification is already on.")
+			return apperr.Conflict("mfa_enabled", "Xác minh hai bước đã được bật.")
 		}
 		sec, err := s.secret(m)
 		if err != nil {
@@ -253,7 +253,7 @@ func (s *Service) DisableMFA(ctx context.Context, p authctx.Principal, password,
 		q := identitydb.New(tx)
 		m, err := q.LockMFA(ctx, p.UserID)
 		if db.IsNoRows(err) || (err == nil && m.ConfirmedAt == nil) {
-			return apperr.Conflict("mfa_disabled", "Two-step verification is not on.")
+			return apperr.Conflict("mfa_disabled", "Xác minh hai bước chưa được bật.")
 		}
 		if err != nil {
 			return err
@@ -283,7 +283,7 @@ func (s *Service) RegenerateRecoveryCodes(ctx context.Context, p authctx.Princip
 		q := identitydb.New(tx)
 		m, err := q.LockMFA(ctx, p.UserID)
 		if db.IsNoRows(err) || (err == nil && m.ConfirmedAt == nil) {
-			return apperr.Conflict("mfa_disabled", "Two-step verification is not on.")
+			return apperr.Conflict("mfa_disabled", "Xác minh hai bước chưa được bật.")
 		}
 		if err != nil {
 			return err
@@ -335,7 +335,7 @@ func (s *Service) checkPassword(ctx context.Context, userID uuid.UUID, password 
 		return wrapErr(err)
 	}
 	if ok, _, _ := s.Hasher.Verify(password, u.PasswordHash); !ok {
-		return apperr.Invalid(apperr.FieldError{Field: "password", Code: "invalid", Message: "The password is wrong."})
+		return apperr.Invalid(apperr.FieldError{Field: "password", Code: "invalid", Message: "Mật khẩu không đúng."})
 	}
 	return nil
 }

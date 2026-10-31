@@ -55,7 +55,7 @@ func (h Handler) List(w http.ResponseWriter, r *http.Request) error {
 	if v := q.Get("actor_id"); v != "" {
 		id, err := uuid.Parse(v)
 		if err != nil {
-			fields = append(fields, apperr.FieldError{Field: "actor_id", Code: "invalid_format", Message: "Must be a UUID."})
+			fields = append(fields, apperr.FieldError{Field: "actor_id", Code: "invalid_format", Message: "Phải là một UUID hợp lệ."})
 		}
 		p.ActorUserID = &id
 	}
@@ -69,7 +69,7 @@ func (h Handler) List(w http.ResponseWriter, r *http.Request) error {
 		if v := q.Get(k); v != "" {
 			ts, err := time.Parse(time.RFC3339, v)
 			if err != nil {
-				fields = append(fields, apperr.FieldError{Field: k, Code: "invalid_format", Message: "Must be an RFC 3339 timestamp."})
+				fields = append(fields, apperr.FieldError{Field: k, Code: "invalid_format", Message: "Phải là thời điểm theo định dạng RFC 3339, ví dụ 2026-10-31T14:05:00Z."})
 				continue
 			}
 			if k == "from" {
@@ -82,7 +82,7 @@ func (h Handler) List(w http.ResponseWriter, r *http.Request) error {
 	if v := q.Get("cursor"); v != "" {
 		c, ok := decodeCursor(v)
 		if !ok {
-			fields = append(fields, apperr.FieldError{Field: "cursor", Code: "invalid_format", Message: "Cursor is invalid."})
+			fields = append(fields, apperr.FieldError{Field: "cursor", Code: "invalid_format", Message: "Con trỏ phân trang không hợp lệ. Hãy tải lại danh sách."})
 		} else {
 			p.CursorCreatedAt, p.CursorID = &c.CreatedAt, &c.ID
 		}

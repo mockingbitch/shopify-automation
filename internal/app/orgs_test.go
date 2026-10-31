@@ -87,7 +87,7 @@ func TestMembershipLifecycle(t *testing.T) {
 	admin.must(409, "POST", "/orgs/"+orgID+"/invitations", map[string]string{"email": "viewer@example.com", "role": "viewer"})
 	admin.must(201, "POST", "/orgs/"+orgID+"/invitations", map[string]string{"email": "new@example.com", "role": "operator"})
 	admin.must(409, "POST", "/orgs/"+orgID+"/invitations", map[string]string{"email": "new@example.com", "role": "viewer"})
-	tok := e.tokenFromMail("new@example.com", "You are invited")
+	tok := e.tokenFromMail("new@example.com", "Bạn được mời")
 	stranger := e.signUp("stranger@example.com", "Stranger")
 	if r := stranger.must(403, "POST", "/invitations/accept", map[string]string{"token": tok}); r.code(t) != "invitation_email_mismatch" {
 		t.Fatalf("code %s", r.code(t))
@@ -104,7 +104,7 @@ func TestMembershipLifecycle(t *testing.T) {
 		} `json:"data"`
 	}
 	admin.must(201, "POST", "/orgs/"+orgID+"/invitations", map[string]string{"email": "later@example.com", "role": "viewer"}).json(t, &inv)
-	revokedTok := e.tokenFromMail("later@example.com", "You are invited")
+	revokedTok := e.tokenFromMail("later@example.com", "Bạn được mời")
 	admin.must(204, "DELETE", "/orgs/"+orgID+"/invitations/"+inv.Data.ID, nil)
 	admin.must(404, "DELETE", "/orgs/"+orgID+"/invitations/"+inv.Data.ID, nil)
 	later := e.signUp("later@example.com", "Later")

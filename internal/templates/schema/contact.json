@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.shopee-automation.local/templates/contact.json",
-  "title": "Contact",
-  "description": "Contact details used as defaults for addresses and descriptions. Shopee has no Open API for shop contact details, so this section is not applied on its own.",
+  "title": "Liên hệ",
+  "description": "Thông tin liên hệ dùng làm mặc định cho địa chỉ và mô tả. Shopee không có API cho thông tin liên hệ của shop nên mục này không được áp dụng riêng.",
   "type": "object",
   "additionalProperties": false,
   "x-applies-to": "defaults",
@@ -11,13 +11,13 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 100,
-      "title": "Contact name"
+      "title": "Tên người liên hệ"
     },
     "phone": {
       "type": "string",
       "pattern": "^\\+[1-9][0-9]{6,14}$",
-      "description": "E.164, e.g. +84901234567.",
-      "title": "Phone"
+      "description": "Định dạng quốc tế, ví dụ +84901234567.",
+      "title": "Số điện thoại"
     },
     "email": {
       "type": "string",

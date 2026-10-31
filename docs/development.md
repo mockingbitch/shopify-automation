@@ -33,6 +33,10 @@ Needs a Shopee Open Platform developer account with a sandbox app (open item S-1
 
 Without a sandbox app, the Go integration tests cover the same flows against `internal/shopee/shopeefake`, a test double of the documented endpoints.
 
+### One command for trying the product by hand
+
+`make local-up` starts the Docker services, applies migrations and runs the API, the worker (with scheduler), the FAKE Shopee and the dashboard in the background (logs and PID files in `.local-logs/`). `make local-down` stops exactly those processes (by PID, never by name). The user guide for sellers is `docs/huong-dan-su-dung.md`; the dashboard shows it at `/help`.
+
 ### Trying the dashboard with the FAKE Shopee (no account needed)
 
 `make fake-shopee` (or `go run ./cmd/shopeefake`) runs the test double on http://127.0.0.1:8099 with two test shops (7001, 7002, market VN), shipping channels, addresses and a small catalog (categories 100017 "Áo thun" with a mandatory attribute and standard variations Màu sắc / Kích cỡ, and 100636 "Dụng cụ nhà bếp"). It prints the partner ID and key to enter under *Platform admin → Shopee apps* (environment sandbox, API and auth host `http://127.0.0.1:8099`; http hosts are accepted outside production). *Connect shop* then opens a page marked **FAKE Shopee** where you pick a test shop. State lives in memory: restarting the fake loses its shops' tokens, so reconnect afterwards.

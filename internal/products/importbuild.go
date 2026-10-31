@@ -191,11 +191,11 @@ func buildGroup(g *Group, rows []RawRow, d Defaults) {
 				s := strconv.FormatInt(id, 10)
 				in.ShopeeCategoryID = &s
 			} else {
-				errf(head, "category", "unknown_category", fmt.Sprintf("Unknown category %q. Use a Shopee category ID or add it to the template's category mappings.", cat))
+				errf(head, "category", "unknown_category", fmt.Sprintf("Không có ngành hàng %q. Hãy dùng ID ngành hàng Shopee hoặc thêm nó vào mục ánh xạ ngành hàng của mẫu shop.", cat))
 			}
 		}
 	} else {
-		errf(head, "category", "required", "Category is required.")
+		errf(head, "category", "required", "Cần có ngành hàng.")
 	}
 	brand := first(rows, g.Rows, "brand")
 	if brand == "" {
@@ -218,7 +218,7 @@ func buildGroup(g *Group, rows []RawRow, d Defaults) {
 	if w != "" {
 		in.WeightKg = &w
 	} else {
-		errf(head, "weight_kg", "required", "Weight is required (Shopee needs it to create the product).")
+		errf(head, "weight_kg", "required", "Cần có cân nặng (Shopee yêu cầu để tạo sản phẩm).")
 	}
 	l, wd, h := first(rows, g.Rows, "length_cm"), first(rows, g.Rows, "width_cm"), first(rows, g.Rows, "height_cm")
 	switch {
@@ -227,7 +227,7 @@ func buildGroup(g *Group, rows []RawRow, d Defaults) {
 		wi, e2 := strconv.Atoi(wd)
 		hi, e3 := strconv.Atoi(h)
 		if e1 != nil || e2 != nil || e3 != nil {
-			errf(head, "length_cm", "invalid", "Length, width and height must all be whole centimetres.")
+			errf(head, "length_cm", "invalid", "Dài, rộng và cao đều phải là số nguyên (cm).")
 		} else {
 			in.PackageCm = &Package{Length: li, Width: wi, Height: hi}
 		}
@@ -239,7 +239,7 @@ func buildGroup(g *Group, rows []RawRow, d Defaults) {
 		if v, err := strconv.Atoi(dts); err == nil {
 			in.DaysToShip = &v
 		} else {
-			errf(head, "days_to_ship", "invalid", "Days to ship must be a whole number.")
+			errf(head, "days_to_ship", "invalid", "Thời gian chuẩn bị hàng phải là số nguyên (ngày).")
 		}
 	}
 	// Description with template header/body/footer.
@@ -255,7 +255,7 @@ func buildGroup(g *Group, rows []RawRow, d Defaults) {
 	}
 	in.Description = strings.Join(parts, "\n\n")
 	if strings.TrimSpace(desc) == "" {
-		errf(head, "description", "required", "Description is required (Shopee needs it to create the product).")
+		errf(head, "description", "required", "Cần có mô tả (Shopee yêu cầu để tạo sản phẩm).")
 	}
 	// Default attributes for this category.
 	if in.ShopeeCategoryID != nil {
@@ -276,14 +276,14 @@ func buildGroup(g *Group, rows []RawRow, d Defaults) {
 	}
 	switch {
 	case len(g.ImageURLs) == 0:
-		errf(head, "image_urls", "required", "At least one image URL is required.")
+		errf(head, "image_urls", "required", "Cần ít nhất một URL hình ảnh.")
 	case len(g.ImageURLs) > maxImageURLs:
-		errf(head, "image_urls", "too_many", "At most 20 images per product.")
+		errf(head, "image_urls", "too_many", "Mỗi sản phẩm có tối đa 20 hình ảnh.")
 	default:
 		for _, u := range g.ImageURLs {
 			pu, err := url.Parse(u)
 			if err != nil || pu.Scheme != "https" || pu.Host == "" {
-				errf(head, "image_urls", "invalid_url", "Image URLs must be https URLs: "+truncateStr(u, 80))
+				errf(head, "image_urls", "invalid_url", "URL hình ảnh phải bắt đầu bằng https: "+truncateStr(u, 80))
 				break
 			}
 		}
@@ -301,14 +301,14 @@ func buildGroup(g *Group, rows []RawRow, d Defaults) {
 	if t1 == "" {
 		if len(g.Rows) > 1 {
 			for _, i := range g.Rows[1:] {
-				errf(i, "sku", "duplicate", fmt.Sprintf("SKU %q appears on several rows. Rows of one product need variation columns (tier1_name, tier1_option).", g.SKU))
+				errf(i, "sku", "duplicate", fmt.Sprintf("SKU %q xuất hiện ở nhiều dòng. Các dòng của cùng một sản phẩm cần có cột phân loại (tier1_name, tier1_option).", g.SKU))
 			}
 		}
 		in.Price = rows[head]["price"]
 		if n, ok := stockOf(head); ok {
 			in.Stock = n
 		} else {
-			errf(head, "stock", "invalid", "Stock must be a whole number.")
+			errf(head, "stock", "invalid", "Tồn kho phải là số nguyên.")
 		}
 	} else {
 		in.Tiers = []Tier{{Name: t1}}
@@ -329,10 +329,10 @@ func buildGroup(g *Group, rows []RawRow, d Defaults) {
 		for n, i := range g.Rows {
 			r := rows[i]
 			if !strings.EqualFold(r["tier1_name"], t1) && r["tier1_name"] != "" || !strings.EqualFold(r["tier2_name"], t2) && r["tier2_name"] != "" {
-				errf(i, "tier1_name", "mismatch", "All rows of a product must use the same variation names.")
+				errf(i, "tier1_name", "mismatch", "Mọi dòng của một sản phẩm phải dùng cùng tên nhóm phân loại.")
 			}
 			if r["tier1_option"] == "" || (t2 != "" && r["tier2_option"] == "") {
-				errf(i, "tier1_option", "required", "Each variation row needs its options.")
+				errf(i, "tier1_option", "required", "Mỗi dòng phân loại hàng cần có giá trị phân loại.")
 				continue
 			}
 			v := VariationInput{TierIndex: []int{optIndex(0, r["tier1_option"])}, Price: r["price"]}
@@ -346,7 +346,7 @@ func buildGroup(g *Group, rows []RawRow, d Defaults) {
 				v.Stock = st
 				total += st
 			} else {
-				errf(i, "stock", "invalid", "Stock must be a whole number.")
+				errf(i, "stock", "invalid", "Tồn kho phải là số nguyên.")
 			}
 			in.Variations = append(in.Variations, v)
 			if validPrice(r["price"]) && (minPrice == "" || lessDecimal(r["price"], minPrice)) {
@@ -380,7 +380,7 @@ func buildGroup(g *Group, rows []RawRow, d Defaults) {
 		sort.Ints(bad)
 		for _, i := range g.Rows {
 			if _, ok := g.Errors[i]; !ok {
-				errf(i, "sku", "group_invalid", fmt.Sprintf("Another row of product %s has errors.", g.SKU))
+				errf(i, "sku", "group_invalid", fmt.Sprintf("Một dòng khác của sản phẩm %s đang có lỗi.", g.SKU))
 			}
 		}
 	}

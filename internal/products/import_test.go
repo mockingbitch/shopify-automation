@@ -65,7 +65,7 @@ func TestXLSX(t *testing.T) {
 }
 
 func TestParseLimits(t *testing.T) {
-	if _, err := ParseFile("CSV", []byte("foo,bar\n1,2\n")); err == nil || !strings.Contains(err.Error(), "sku and name") {
+	if _, err := ParseFile("CSV", []byte("foo,bar\n1,2\n")); err == nil || !strings.Contains(err.Error(), "cột sku và name") {
 		t.Fatalf("missing columns: %v", err)
 	}
 	if _, err := ParseFile("CSV", []byte("sku,name\n")); err == nil {

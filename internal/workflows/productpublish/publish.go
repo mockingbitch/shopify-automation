@@ -91,7 +91,7 @@ func validateSelection(diff json.RawMessage, selected []string) error {
 	seen := map[string]bool{}
 	for _, p := range selected {
 		if !ok[p] || seen[p] {
-			return fmt.Errorf("%s is not a product that can be published", p)
+			return fmt.Errorf("%s không phải sản phẩm có thể đăng", p)
 		}
 		seen[p] = true
 	}
@@ -174,14 +174,14 @@ func (w *Workflow) publishOne(ctx context.Context, sc *workflow.StepContext) wor
 		}
 	}
 	if pl == nil || !pl.OK {
-		return workflow.Permanent(errors.New("the product was not ready when approved"))
+		return workflow.Permanent(errors.New("sản phẩm chưa sẵn sàng khi được duyệt"))
 	}
 	items, err := w.Products.LoadForPublish(ctx, sc.OrgID, []uuid.UUID{pid})
 	if err != nil {
 		return workflow.Retryable(err)
 	}
 	if len(items) == 0 {
-		return workflow.Permanent(errors.New("the product was deleted"))
+		return workflow.Permanent(errors.New("sản phẩm đã bị xóa"))
 	}
 	it := items[0]
 	m, err := w.Products.EnsureMapping(ctx, sc.OrgID, sc.ShopID, pid, it.Product.SKU, sc.RunID)
@@ -224,7 +224,7 @@ func (w *Workflow) publishWithAccess(ctx context.Context, sc *workflow.StepConte
 		}
 		switch len(ids) {
 		case 0:
-			sc.Log("info", "No item with SKU "+it.Product.SKU+" on Shopee after an unclear attempt; creating it.", nil)
+			sc.Log("info", "Không thấy sản phẩm có SKU "+it.Product.SKU+" trên Shopee sau lần thử chưa rõ kết quả; đang tạo sản phẩm.", nil)
 			m.State = products.StatePlanned
 		case 1:
 			id := ids[0]
@@ -232,10 +232,10 @@ func (w *Workflow) publishWithAccess(ctx context.Context, sc *workflow.StepConte
 				return workflow.Retryable(err)
 			}
 			m.State, m.ItemID, res.Adopted = products.StateCreated, &id, true
-			sc.Log("warn", "Adopted the existing Shopee item "+strconv.FormatInt(id, 10)+" for SKU "+it.Product.SKU+" after an unclear attempt.", nil)
+			sc.Log("warn", "Đã dùng sản phẩm Shopee có sẵn "+strconv.FormatInt(id, 10)+" cho SKU "+it.Product.SKU+" sau lần thử chưa rõ kết quả.", nil)
 		default:
 			_ = setState(products.StateUnknown, nil, nil, map[string]any{"message": "several items share this SKU", "item_ids": ids})
-			return workflow.NeedsUser("duplicate_items", fmt.Sprintf("Shopee has %d items with SKU %s (IDs %v). Keep one in Seller Centre, then resume.", len(ids), it.Product.SKU, ids))
+			return workflow.NeedsUser("duplicate_items", fmt.Sprintf("Shopee có %d sản phẩm cùng SKU %s (ID %v). Hãy giữ lại một sản phẩm trong Kênh Người Bán, rồi bấm Tiếp tục.", len(ids), it.Product.SKU, ids))
 		}
 	}
 
@@ -255,7 +255,7 @@ func (w *Workflow) publishWithAccess(ctx context.Context, sc *workflow.StepConte
 			if se != nil && (se.Kind == shopee.KindAmbiguous || se.Kind == shopee.KindTransient) {
 				// Maybe created: the next attempt searches by SKU first.
 				_ = setState(products.StateUnknown, nil, nil, map[string]any{"code": se.Code, "message": se.Message})
-				return workflow.Retryable(fmt.Errorf("add_item outcome unknown (%s); will check by SKU", se.Code))
+				return workflow.Retryable(fmt.Errorf("chưa rõ kết quả tạo sản phẩm (%s); sẽ kiểm tra lại theo SKU", se.Code))
 			}
 			return fail(err)
 		}
@@ -263,7 +263,7 @@ func (w *Workflow) publishWithAccess(ctx context.Context, sc *workflow.StepConte
 			return workflow.Retryable(err)
 		}
 		m.State, m.ItemID = products.StateCreated, &id
-		sc.Log("info", "Created Shopee item "+strconv.FormatInt(id, 10)+" for SKU "+it.Product.SKU+".", map[string]any{"shopee_request_id": meta.RequestID})
+		sc.Log("info", "Đã tạo sản phẩm Shopee "+strconv.FormatInt(id, 10)+" cho SKU "+it.Product.SKU+".", map[string]any{"shopee_request_id": meta.RequestID})
 	}
 
 	// 3. Variations.
@@ -298,10 +298,10 @@ func (w *Workflow) publishWithAccess(ctx context.Context, sc *workflow.StepConte
 			return fail(err)
 		}
 		if len(list) != 1 || !strings.EqualFold(list[0].SKU, it.Product.SKU) {
-			return workflow.Retryable(fmt.Errorf("item %d is not readable yet", *m.ItemID))
+			return workflow.Retryable(fmt.Errorf("chưa đọc được sản phẩm %d trên Shopee", *m.ItemID))
 		}
 		if len(it.Product.Tiers) > 0 && len(models) != len(it.Product.Variations) {
-			sc.Log("warn", fmt.Sprintf("SKU %s has %d models on Shopee, %d expected.", it.Product.SKU, len(models), len(it.Product.Variations)), nil)
+			sc.Log("warn", fmt.Sprintf("SKU %s có %d phân loại hàng trên Shopee, cần %d.", it.Product.SKU, len(models), len(it.Product.Variations)), nil)
 		}
 		var mdl any
 		if models != nil {
@@ -444,13 +444,13 @@ func (w *Workflow) Start(ctx context.Context, p authctx.Principal, t authctx.Ten
 		status = *in.ItemStatus
 	}
 	if status != "UNLIST" && status != "NORMAL" {
-		return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "item_status", Code: "invalid", Message: "Must be UNLIST or NORMAL."})
+		return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "item_status", Code: "invalid", Message: "Phải là UNLIST (ẩn) hoặc NORMAL (hiển thị)."})
 	}
 	if (len(in.ProductIDs) == 0) == (in.ImportBatchID == nil) {
-		return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "product_ids", Code: "required", Message: "Give product_ids or import_batch_id."})
+		return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "product_ids", Code: "required", Message: "Hãy chọn sản phẩm (product_ids) hoặc lô nhập (import_batch_id)."})
 	}
 	if len(in.ShopIDs) == 0 || len(in.ShopIDs) > maxShops {
-		return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "invalid", Message: "Choose between 1 and 50 shops."})
+		return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "invalid", Message: "Chọn từ 1 đến 50 shop."})
 	}
 	ids := in.ProductIDs
 	if in.ImportBatchID != nil {
@@ -459,11 +459,11 @@ func (w *Workflow) Start(ctx context.Context, p authctx.Principal, t authctx.Ten
 			return PublishResult{}, apperr.Internal(err)
 		}
 		if len(ids) == 0 {
-			return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "import_batch_id", Code: "empty", Message: "The import has no products."})
+			return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "import_batch_id", Code: "empty", Message: "Lô nhập không có sản phẩm nào."})
 		}
 	}
 	if len(ids) > maxProducts {
-		return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "product_ids", Code: "too_many", Message: "At most 200 products per publish."})
+		return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "product_ids", Code: "too_many", Message: "Mỗi lần đăng tối đa 200 sản phẩm."})
 	}
 	uniq := func(list []uuid.UUID) []uuid.UUID {
 		seen := map[uuid.UUID]bool{}
@@ -483,24 +483,24 @@ func (w *Workflow) Start(ctx context.Context, p authctx.Principal, t authctx.Ten
 		return PublishResult{}, apperr.Internal(err)
 	}
 	if len(loaded) != len(ids) {
-		return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "product_ids", Code: "not_found", Message: "Some products were not found."})
+		return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "product_ids", Code: "not_found", Message: "Không tìm thấy một số sản phẩm."})
 	}
 	for _, sid := range shopIDs {
 		d, err := w.Shops.Get(ctx, t, sid)
 		if err != nil {
 			if apperr.IsKind(err, apperr.KindNotFound) {
-				return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "not_found", Message: "Shop " + sid.String() + " was not found."})
+				return PublishResult{}, apperr.Invalid(apperr.FieldError{Field: "shop_ids", Code: "not_found", Message: "Không tìm thấy shop " + sid.String() + "."})
 			}
 			return PublishResult{}, err
 		}
 		if d.Shop.Status != shops.StatusActive {
-			return PublishResult{}, apperr.FailedDependency("shop_reconnect_required", "Shop "+d.Shop.ShopeeShopID+" is not connected.")
+			return PublishResult{}, apperr.FailedDependency("shop_reconnect_required", "Shop "+d.Shop.ShopeeShopID+" chưa được kết nối. Hãy kết nối lại shop.")
 		}
 	}
 	var key *string
 	if idemKey != "" {
 		if _, err := uuid.Parse(idemKey); err != nil {
-			return PublishResult{}, apperr.BadRequest("bad_request", "Idempotency-Key must be a UUID.")
+			return PublishResult{}, apperr.BadRequest("bad_request", "Idempotency-Key phải là một UUID.")
 		}
 		key = &idemKey
 	}
@@ -528,7 +528,7 @@ func (w *Workflow) Start(ctx context.Context, p authctx.Principal, t authctx.Ten
 			}
 			if len(prev) > 0 {
 				if !bytes.Equal(prev[0].RequestHash, hash) {
-					return apperr.Conflict("idempotency_mismatch", "This Idempotency-Key was used for a different request.")
+					return apperr.Conflict("idempotency_mismatch", "Idempotency-Key này đã được dùng cho một yêu cầu khác.")
 				}
 				out.Replay = true
 				for _, r := range prev {

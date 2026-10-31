@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.shopee-automation.local/templates/category_mappings.json",
-  "title": "Category mappings",
-  "description": "Maps category labels used in import files to Shopee leaf category IDs (product/get_category).",
+  "title": "Ánh xạ ngành hàng",
+  "description": "Gán nhãn ngành hàng trong file nhập với ID ngành hàng cấp cuối của Shopee.",
   "type": "object",
   "additionalProperties": false,
   "x-applies-to": "products",
@@ -10,7 +10,7 @@
     "mappings": {
       "type": "array",
       "maxItems": 2000,
-      "title": "Mappings",
+      "title": "Danh sách ánh xạ",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -23,12 +23,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200,
-            "title": "Category label in your files"
+            "title": "Nhãn ngành hàng trong file của bạn"
           },
           "shopee_category_id": {
             "type": "integer",
             "minimum": 1,
-            "title": "Shopee category ID"
+            "title": "ID ngành hàng Shopee"
           }
         }
       }

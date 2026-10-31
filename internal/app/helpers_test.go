@@ -255,7 +255,7 @@ func (e *env) signUp(email, name string) *client {
 	e.t.Helper()
 	c := e.client()
 	c.must(202, "POST", "/auth/register", map[string]string{"email": email, "password": testPassword, "display_name": name})
-	tok := e.tokenFromMail(email, "Verify")
+	tok := e.tokenFromMail(email, "Xác minh")
 	c.must(204, "POST", "/auth/verify-email", map[string]string{"token": tok})
 	c.login(email, testPassword)
 	return c
@@ -317,7 +317,7 @@ func findMember(ms []member, email string) member {
 func (e *env) addMember(owner *client, orgID string, invitee *client, email, role string) {
 	e.t.Helper()
 	owner.must(201, "POST", "/orgs/"+orgID+"/invitations", map[string]string{"email": email, "role": role})
-	tok := e.tokenFromMail(email, "You are invited")
+	tok := e.tokenFromMail(email, "Bạn được mời")
 	invitee.must(200, "POST", "/invitations/accept", map[string]string{"token": tok})
 }
 

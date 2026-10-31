@@ -152,7 +152,7 @@ func (w *Workflow) prepare(ctx context.Context, sc *workflow.StepContext) workfl
 	}
 	for _, id := range in.ProductIDs {
 		if !found[id] {
-			out.Plans = append(out.Plans, Plan{ProductID: id, Problems: []string{"The product was deleted."}})
+			out.Plans = append(out.Plans, Plan{ProductID: id, Problems: []string{"Sản phẩm đã bị xóa."}})
 		}
 	}
 	sort.SliceStable(out.Plans, func(i, j int) bool { return out.Plans[i].SKU < out.Plans[j].SKU })
@@ -165,16 +165,16 @@ func plan(it products.PublishItem, region string, channels []shopee.Channel, loa
 	bad := func(format string, a ...any) { p.Problems = append(p.Problems, fmt.Sprintf(format, a...)) }
 
 	if want := products.CurrencyFor(region); want == "" || want != pr.Price.Currency {
-		bad("The price is in %s but the shop's market (%s) uses %s.", pr.Price.Currency, region, want)
+		bad("Giá đang tính bằng %s nhưng thị trường của shop (%s) dùng %s.", pr.Price.Currency, region, want)
 	}
 	if pr.WeightKg == nil {
-		bad("Weight is missing.")
+		bad("Thiếu cân nặng.")
 	}
 	if strings.TrimSpace(pr.Description) == "" {
-		bad("Description is missing.")
+		bad("Thiếu mô tả.")
 	}
 	if len(it.Images) == 0 {
-		bad("The product has no images.")
+		bad("Sản phẩm chưa có hình ảnh.")
 	}
 	var logistics []any
 	for _, ch := range channels {
@@ -185,12 +185,12 @@ func plan(it products.PublishItem, region string, channels []shopee.Channel, loa
 		}
 	}
 	if len(logistics) == 0 {
-		bad("The shop has no enabled shipping channel that can be used for products.")
+		bad("Shop chưa bật đơn vị vận chuyển nào dùng được cho sản phẩm.")
 	}
 	p.Logistics = logistics
 
 	if pr.ShopeeCategoryID == nil {
-		bad("Shopee category is missing.")
+		bad("Thiếu ngành hàng Shopee.")
 		p.OK = len(p.Problems) == 0
 		return p
 	}
@@ -201,9 +201,9 @@ func plan(it products.PublishItem, region string, channels []shopee.Channel, loa
 	case ci.err != nil:
 		return p // reported by the caller as a step failure
 	case !ci.exists:
-		bad("Category %d does not exist in this shop's market.", cid)
+		bad("Ngành hàng %d không có ở thị trường của shop này.", cid)
 	case !ci.leaf:
-		bad("Category %d is not a leaf category; choose a more specific one.", cid)
+		bad("Ngành hàng %d chưa phải ngành hàng cấp cuối; hãy chọn ngành hàng cụ thể hơn.", cid)
 	default:
 		checkLimits(&p, pr, len(it.Images), ci.limit, bad)
 		checkAttributes(&p, pr, ci.attrs, bad)
@@ -221,13 +221,13 @@ func checkLimits(p *Plan, pr products.Product, images int, l shopee.ItemLimit, b
 		return (r.Min == 0 || v >= r.Min) && (r.Max == 0 || v <= r.Max)
 	}
 	if n := float64(utf8.RuneCountInString(pr.Name)); !inRange(n, l.NameLength) {
-		bad("The name has %d characters; Shopee allows %g to %g in this category.", int(n), l.NameLength.Min, l.NameLength.Max)
+		bad("Tên có %d ký tự; Shopee cho phép từ %g đến %g ký tự ở ngành hàng này.", int(n), l.NameLength.Min, l.NameLength.Max)
 	}
 	if n := float64(utf8.RuneCountInString(pr.Description)); !inRange(n, l.DescLength) {
-		bad("The description has %d characters; Shopee allows %g to %g in this category.", int(n), l.DescLength.Min, l.DescLength.Max)
+		bad("Mô tả có %d ký tự; Shopee cho phép từ %g đến %g ký tự ở ngành hàng này.", int(n), l.DescLength.Min, l.DescLength.Max)
 	}
 	if !inRange(float64(images), l.ImageCount) {
-		bad("The product has %d images; Shopee allows %g to %g.", images, l.ImageCount.Min, l.ImageCount.Max)
+		bad("Sản phẩm có %d hình ảnh; Shopee cho phép từ %g đến %g.", images, l.ImageCount.Min, l.ImageCount.Max)
 	}
 	prices := []string{pr.Price.Amount}
 	for _, v := range pr.Variations {
@@ -236,12 +236,12 @@ func checkLimits(p *Plan, pr products.Product, images int, l shopee.ItemLimit, b
 	for _, s := range prices {
 		f, _ := strconv.ParseFloat(s, 64)
 		if !inRange(f, l.Price) {
-			bad("Price %s is outside Shopee's range %g to %g.", s, l.Price.Min, l.Price.Max)
+			bad("Giá %s nằm ngoài khoảng Shopee cho phép (%g đến %g).", s, l.Price.Min, l.Price.Max)
 			break
 		}
 	}
 	if !inRange(float64(pr.Stock), l.Stock) {
-		bad("Stock %d is outside Shopee's range %g to %g.", pr.Stock, l.Stock.Min, l.Stock.Max)
+		bad("Tồn kho %d nằm ngoài khoảng Shopee cho phép (%g đến %g).", pr.Stock, l.Stock.Min, l.Stock.Max)
 	}
 }
 
@@ -261,12 +261,12 @@ func checkAttributes(p *Plan, pr products.Product, tree []shopee.Attribute, bad 
 		}
 	}
 	if len(missing) > 0 {
-		bad("Mandatory attributes are missing: %s.", strings.Join(missing, ", "))
+		bad("Thiếu thuộc tính bắt buộc: %s.", strings.Join(missing, ", "))
 	}
 	var list []any
 	for _, a := range pr.Attributes {
 		if !known[a.AttributeID] {
-			p.Warnings = append(p.Warnings, fmt.Sprintf("Attribute %d is not used in this category and is left out.", a.AttributeID))
+			p.Warnings = append(p.Warnings, fmt.Sprintf("Thuộc tính %d không dùng cho ngành hàng này nên sẽ được bỏ qua.", a.AttributeID))
 			continue
 		}
 		v := map[string]any{"value_id": a.ValueID}
@@ -290,12 +290,12 @@ func checkBrand(p *Plan, pr products.Product, b shopee.BrandPage, bad func(strin
 			}
 		}
 		if b.IsMandatory {
-			bad("Brand %q is not in Shopee's brand list for this category, and a brand is mandatory.", *pr.BrandName)
+			bad("Thương hiệu %q không có trong danh sách thương hiệu Shopee của ngành hàng này, mà ngành hàng này bắt buộc có thương hiệu.", *pr.BrandName)
 			return
 		}
-		p.Warnings = append(p.Warnings, fmt.Sprintf("Brand %q is not in Shopee's list; the product is created as No Brand.", *pr.BrandName))
+		p.Warnings = append(p.Warnings, fmt.Sprintf("Thương hiệu %q không có trong danh sách của Shopee; sản phẩm sẽ được tạo với \"No Brand\" (không thương hiệu).", *pr.BrandName))
 	} else if b.IsMandatory {
-		bad("This category requires a brand.")
+		bad("Ngành hàng này bắt buộc có thương hiệu.")
 		return
 	}
 	// add_item: brand_id 0 with "No Brand" when the product has no brand.
@@ -317,7 +317,7 @@ func checkTiers(p *Plan, pr products.Product, tree []shopee.StdVariation, bad fu
 			}
 		}
 		if v == nil {
-			bad("Variation %q is not one of Shopee's variations for this category (%s).", t.Name, listOf(names))
+			bad("Nhóm phân loại %q không thuộc các nhóm phân loại Shopee của ngành hàng này (%s).", t.Name, listOf(names))
 			continue
 		}
 		var opts []any
@@ -336,7 +336,7 @@ func checkTiers(p *Plan, pr products.Product, tree []shopee.StdVariation, bad fu
 				}
 			}
 			if !found {
-				bad("Option %q of %q is not one of Shopee's options (%s).", o, t.Name, listOf(available))
+				bad("Giá trị %q của %q không thuộc các giá trị Shopee cho phép (%s).", o, t.Name, listOf(available))
 			}
 		}
 		entry := map[string]any{"variation_id": v.ID, "variation_name": v.Name, "variation_option_list": opts}
@@ -350,7 +350,7 @@ func checkTiers(p *Plan, pr products.Product, tree []shopee.StdVariation, bad fu
 
 func listOf(names []string) string {
 	if len(names) == 0 {
-		return "none"
+		return "không có"
 	}
 	if len(names) > 15 {
 		return strings.Join(names[:15], ", ") + ", …"

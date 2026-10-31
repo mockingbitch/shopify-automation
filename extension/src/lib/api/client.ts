@@ -16,7 +16,8 @@ async function readProblem(res: Response): Promise<Problem> {
   } catch {
     /* not JSON */
   }
-  return { status: res.status, title: res.statusText || `HTTP ${res.status}`, detail: text.slice(0, 200) };
+  // Not a problem document (proxy page, outage): keep the raw body out of the seller's view.
+  return { status: res.status, title: `Máy chủ đang gặp lỗi (HTTP ${res.status}). Hãy thử lại sau ít phút.`, errors: text.slice(0, 200) };
 }
 
 /** Client for /api/v1/ext. Every call except pair sends the device token. */
@@ -31,7 +32,7 @@ export class ExtApi {
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (auth) {
       const token = await this.opts.getToken();
-      if (!token) throw new ApiError(401, 'device_unauthorized', { title: 'Not paired', code: 'device_unauthorized' });
+      if (!token) throw new ApiError(401, 'device_unauthorized', { title: 'Trình duyệt này chưa được ghép nối.', code: 'device_unauthorized' });
       headers.Authorization = `Bearer ${token}`;
     }
     let payload: BodyInit | undefined;
@@ -44,7 +45,7 @@ export class ExtApi {
     try {
       res = await this.f(`${this.opts.baseUrl}${path}`, { method, headers, body: payload, credentials: 'omit', cache: 'no-store' });
     } catch (e) {
-      throw new ApiError(0, 'network_error', { title: 'Cannot reach the server', detail: String((e as Error)?.message ?? e) });
+      throw new ApiError(0, 'network_error', { title: 'Không kết nối được máy chủ. Hãy kiểm tra mạng, rồi thử lại.', errors: String((e as Error)?.message ?? e) });
     }
     if (!res.ok) {
       const p = await readProblem(res);

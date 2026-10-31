@@ -40,7 +40,7 @@ func optUUID(r *http.Request, key string) (*uuid.UUID, error) {
 	}
 	id, err := uuid.Parse(v)
 	if err != nil {
-		return nil, apperr.Invalid(apperr.FieldError{Field: key, Code: "invalid", Message: "Must be a UUID."})
+		return nil, apperr.Invalid(apperr.FieldError{Field: key, Code: "invalid", Message: "Phải là một UUID hợp lệ."})
 	}
 	return &id, nil
 }
@@ -51,21 +51,21 @@ func readFile(w http.ResponseWriter, r *http.Request, limit int64) (string, []by
 	if err := r.ParseMultipartForm(8 << 20); err != nil { //nolint:gosec // G120: body is bounded by MaxBytesReader above
 		var mbe *http.MaxBytesError
 		if errors.As(err, &mbe) {
-			return "", nil, &apperr.Error{Kind: apperr.KindPayloadTooLarge, Code: "payload_too_large", Message: "The file is too large."}
+			return "", nil, &apperr.Error{Kind: apperr.KindPayloadTooLarge, Code: "payload_too_large", Message: "Tệp quá lớn."}
 		}
-		return "", nil, &apperr.Error{Kind: apperr.KindUnsupportedMediaType, Code: "unsupported_media_type", Message: "Send multipart/form-data with a file field."}
+		return "", nil, &apperr.Error{Kind: apperr.KindUnsupportedMediaType, Code: "unsupported_media_type", Message: "Hãy gửi dạng multipart/form-data có trường file."}
 	}
 	f, hdr, err := r.FormFile("file")
 	if err != nil {
-		return "", nil, apperr.Invalid(apperr.FieldError{Field: "file", Code: "required", Message: "Choose a file."})
+		return "", nil, apperr.Invalid(apperr.FieldError{Field: "file", Code: "required", Message: "Hãy chọn một tệp."})
 	}
 	defer func() { _ = f.Close() }()
 	b, err := io.ReadAll(io.LimitReader(f, limit+1))
 	if err != nil {
-		return "", nil, apperr.BadRequest("bad_request", "Could not read the file.")
+		return "", nil, apperr.BadRequest("bad_request", "Không đọc được tệp.")
 	}
 	if int64(len(b)) > limit {
-		return "", nil, &apperr.Error{Kind: apperr.KindPayloadTooLarge, Code: "payload_too_large", Message: "The file is too large."}
+		return "", nil, &apperr.Error{Kind: apperr.KindPayloadTooLarge, Code: "payload_too_large", Message: "Tệp quá lớn."}
 	}
 	return hdr.Filename, b, nil
 }
@@ -83,7 +83,7 @@ func (h Handler) List(w http.ResponseWriter, r *http.Request) error {
 	var q *string
 	if v := r.URL.Query().Get("q"); v != "" {
 		if len(v) > 100 {
-			return apperr.Invalid(apperr.FieldError{Field: "q", Code: "too_long", Message: "Must be at most 100 characters."})
+			return apperr.Invalid(apperr.FieldError{Field: "q", Code: "too_long", Message: "Tối đa 100 ký tự."})
 		}
 		q = &v
 	}
@@ -181,7 +181,7 @@ func (h Handler) DeleteImage(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	imageID, err := pathID(r, "imageID", apperr.NotFound("Image not found."))
+	imageID, err := pathID(r, "imageID", apperr.NotFound("Không tìm thấy hình ảnh."))
 	if err != nil {
 		return err
 	}
@@ -203,7 +203,7 @@ func (h Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 		if v := r.FormValue(field); v != "" {
 			id, err := uuid.Parse(v)
 			if err != nil {
-				return apperr.Invalid(apperr.FieldError{Field: field, Code: "invalid", Message: "Must be a UUID."})
+				return apperr.Invalid(apperr.FieldError{Field: field, Code: "invalid", Message: "Phải là một UUID hợp lệ."})
 			}
 			*dst = &id
 		}
@@ -253,7 +253,7 @@ func (h Handler) Rows(w http.ResponseWriter, r *http.Request) error {
 	after := 0
 	if c := r.URL.Query().Get("cursor"); c != "" {
 		if after, err = strconv.Atoi(c); err != nil || after < 0 {
-			return apperr.Invalid(apperr.FieldError{Field: "cursor", Code: "invalid", Message: "Invalid cursor."})
+			return apperr.Invalid(apperr.FieldError{Field: "cursor", Code: "invalid", Message: "Con trỏ phân trang không hợp lệ. Hãy tải lại danh sách."})
 		}
 	}
 	var status *string
@@ -274,7 +274,7 @@ func (h Handler) FixRow(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rowID, err := pathID(r, "rowID", apperr.NotFound("Row not found."))
+	rowID, err := pathID(r, "rowID", apperr.NotFound("Không tìm thấy dòng."))
 	if err != nil {
 		return err
 	}

@@ -22,7 +22,7 @@ export function useUpload() {
     if (!res.ok) {
       throw new ApiError({
         type: body.type ?? 'about:blank', title: body.title ?? res.statusText, status: res.status,
-        code: body.code ?? 'unknown_error', detail: body.detail ?? 'The upload failed.', errors: body.errors,
+        code: body.code ?? 'unknown_error', detail: body.detail ?? 'Tải tệp lên không thành công. Bạn hãy thử lại.', errors: body.errors,
       })
     }
     return body.data as T

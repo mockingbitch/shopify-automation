@@ -125,7 +125,7 @@ func Permanent(err error) Result { return Result{kind: kindPermanent, err: err} 
 // Ambiguous means an external write may or may not have happened. The step
 // waits for a person to check before it is resumed.
 func Ambiguous(err error) Result {
-	return Result{kind: kindAmbiguous, err: err, reason: "ambiguous", message: "The outcome is unknown. Check the shop before resuming."}
+	return Result{kind: kindAmbiguous, err: err, reason: "ambiguous", message: "Chưa rõ kết quả. Hãy kiểm tra shop trước khi tiếp tục."}
 }
 
 // NeedsUser pauses the step until a user resumes the run (e.g. reconnect).
@@ -135,7 +135,7 @@ func NeedsUser(reason, message string) Result {
 
 // Manual pauses the step until a user marks the tasks done. output is kept.
 func Manual(tasks []ManualTask, output any) Result {
-	return Result{kind: kindManual, tasks: tasks, output: output, reason: "manual_tasks", message: "Manual tasks are waiting."}
+	return Result{kind: kindManual, tasks: tasks, output: output, reason: "manual_tasks", message: "Có việc làm thủ công đang chờ bạn."}
 }
 
 // AwaitApproval stops at an approval gate showing diff.
@@ -280,7 +280,7 @@ func (e *Engine) CreateRuns(ctx context.Context, tx pgx.Tx, o StartOptions, spec
 				return nil, err
 			}
 		}
-		if err := e.event(ctx, q, run.OrgID, run.ID, nil, "RUN_CREATED", "info", "Run created.",
+		if err := e.event(ctx, q, run.OrgID, run.ID, nil, "RUN_CREATED", "info", "Đã tạo lượt chạy.",
 			map[string]any{"definition": d.Key, "version": d.Version}); err != nil {
 			return nil, err
 		}
@@ -415,11 +415,11 @@ func (e *Engine) claim(ctx context.Context, orgID, stepID uuid.UUID) (*claimed, 
 		switch {
 		case expired:
 			// The previous worker died or hung. Record its attempt as timed out.
-			if err := e.attempt(ctx, q, step, "TIMED_OUT", map[string]any{"message": "Lease expired."}, now); err != nil {
+			if err := e.attempt(ctx, q, step, "TIMED_OUT", map[string]any{"message": "Hết thời gian giữ bước."}, now); err != nil {
 				return err
 			}
 			if err := e.event(ctx, q, orgID, run.ID, &step.ID, "STEP_ATTEMPT_FINISHED", "warn",
-				"The worker running this step stopped responding; the step is retried.", map[string]any{"step": step.StepKey}); err != nil {
+				"Tiến trình đang chạy bước này không phản hồi; bước sẽ được chạy lại.", map[string]any{"step": step.StepKey}); err != nil {
 				return err
 			}
 			if int(step.AttemptCount) >= int(step.MaxAttempts) {
@@ -591,12 +591,12 @@ func (e *Engine) finish(ctx context.Context, c *claimed, res Result) error {
 			p.Status, outcome = StepSucceeded, "SUCCEEDED"
 			p.Output = marshal(map[string]any{"items": res.items, "result": res.output})
 			p.FinishedAt = &now
-			msg = fmt.Sprintf("Expanded into %d items.", len(res.items))
+			msg = fmt.Sprintf("Đã tách thành %d mục.", len(res.items))
 		case kindSkip:
 			p.Status, outcome = StepSkipped, "SKIPPED"
 			p.SkipReason = &res.reason
 			p.FinishedAt = &now
-			msg = "Skipped: " + res.reason
+			msg = "Đã bỏ qua: " + skipReasonText(res.reason)
 		case kindRetryable:
 			p.Error = errJSON(res.err)
 			if cancelled {
@@ -606,17 +606,17 @@ func (e *Engine) finish(ctx context.Context, c *claimed, res Result) error {
 				retryDelay = backoff(int(c.step.AttemptCount), orDefaultDur(c.spec.BaseDelay, defaultBaseDelay), orDefaultDur(c.spec.MaxDelay, defaultMaxDelay))
 				p.Status, outcome = StepPending, "RETRY"
 				p.NextAttemptAt = now.Add(retryDelay)
-				level, msg = "warn", "Attempt failed, retrying: "+safeMessage(res.err)
+				level, msg = "warn", "Lần thử thất bại, đang thử lại: "+safeMessage(res.err)
 			} else {
 				p.Status, outcome = StepFailed, "FAILED"
 				p.FinishedAt = &now
-				level, msg = "error", "Step failed after all attempts: "+safeMessage(res.err)
+				level, msg = "error", "Bước thất bại sau khi đã thử hết số lần: "+safeMessage(res.err)
 			}
 		case kindPermanent:
 			p.Status, outcome = StepFailed, "FAILED"
 			p.Error = errJSON(res.err)
 			p.FinishedAt = &now
-			level, msg = "error", "Step failed: "+safeMessage(res.err)
+			level, msg = "error", "Bước thất bại: "+safeMessage(res.err)
 		case kindAmbiguous, kindNeedsUser, kindManual:
 			if cancelled {
 				p.Status, outcome = StepCancelled, "CANCELLED"
@@ -676,7 +676,7 @@ func (e *Engine) finish(ctx context.Context, c *claimed, res Result) error {
 			if err != nil {
 				return err
 			}
-			evType, msg = "APPROVAL_REQUESTED", "Waiting for approval of the changes."
+			evType, msg = "APPROVAL_REQUESTED", "Đang chờ duyệt các thay đổi."
 			if err := e.event(ctx, q, run.OrgID, run.ID, &step.ID, evType, "info", msg, map[string]any{"approval_id": a.ID.String()}); err != nil {
 				return err
 			}
@@ -734,7 +734,33 @@ func (e *Engine) event(ctx context.Context, q *workflowdb.Queries, orgID, runID 
 }
 
 // definitionTitles names runs in notifications.
-var definitionTitles = map[string]string{"SHOP_SETUP": "Shop setup", "PRODUCT_PUBLISH": "Product publishing"}
+var definitionTitles = map[string]string{"SHOP_SETUP": "Thiết lập shop", "PRODUCT_PUBLISH": "Đăng sản phẩm"}
+
+// skipReasonText describes a skip reason code for the activity log.
+func skipReasonText(reason string) string {
+	switch reason {
+	case "nothing_to_change":
+		return "không có gì cần thay đổi."
+	case "not_selected":
+		return "thay đổi không được chọn khi duyệt."
+	case "no_manual_changes":
+		return "không có việc làm thủ công."
+	case "nothing_to_publish":
+		return "không có sản phẩm nào cần đăng."
+	}
+	return reason
+}
+
+// runStatusText names a final run status in notification titles.
+func runStatusText(status string) string {
+	switch status {
+	case RunFailed:
+		return "thất bại"
+	case RunPartiallyCompleted:
+		return "hoàn tất một phần"
+	}
+	return strings.ToLower(strings.ReplaceAll(status, "_", " "))
+}
 
 // notify writes in-app notifications for events someone must act on, in
 // the same transaction as the event.
@@ -763,18 +789,18 @@ func (e *Engine) notify(ctx context.Context, q *workflowdb.Queries, orgID, runID
 	}
 	switch typ {
 	case "APPROVAL_REQUESTED":
-		kind, title, dedupe = "approval_requested", name+": approval needed", "approval:"+step
+		kind, title, dedupe = "approval_requested", name+": cần duyệt", "approval:"+step
 		roles = rbac.RolesWith(rbac.ApprovalsDecide)
 	case "USER_ACTION_REQUESTED":
-		kind, title, dedupe = "run_needs_user", name+": waiting for you", "needs_user:"+step
+		kind, title, dedupe = "run_needs_user", name+": chờ bạn xử lý", "needs_user:"+step
 		creatorOrRunners()
 	case "RUN_STATUS_CHANGED":
 		to, _ := data["to"].(string)
 		if to != RunFailed && to != RunPartiallyCompleted {
 			return nil
 		}
-		kind, title, dedupe = "run_failed", name+": "+strings.ToLower(strings.ReplaceAll(to, "_", " ")), "run_failed:"+runID.String()
-		msg = "Open the run to see what failed and retry."
+		kind, title, dedupe = "run_failed", name+": "+runStatusText(to), "run_failed:"+runID.String()
+		msg = "Mở lượt chạy để xem lỗi và thử lại."
 		creatorOrRunners()
 	default:
 		return nil

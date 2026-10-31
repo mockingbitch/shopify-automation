@@ -184,14 +184,14 @@ var runStatuses = []string{RunPending, RunRunning, RunWaitingApproval, RunWaitin
 // ListRuns lists runs, newest first, with a time cursor.
 func (e *Engine) ListRuns(ctx context.Context, p authctx.Principal, t authctx.Tenant, f ListFilter) ([]RunSummary, *string, error) {
 	if f.Status != nil && !contains(runStatuses, *f.Status) {
-		return nil, nil, apperr.Invalid(apperr.FieldError{Field: "status", Code: "invalid", Message: "Unknown status."})
+		return nil, nil, apperr.Invalid(apperr.FieldError{Field: "status", Code: "invalid", Message: "Trạng thái không hợp lệ."})
 	}
 	var before *time.Time
 	if f.Cursor != "" {
 		b, err := base64.RawURLEncoding.DecodeString(f.Cursor)
 		ts, perr := time.Parse(time.RFC3339Nano, string(b))
 		if err != nil || perr != nil {
-			return nil, nil, apperr.Invalid(apperr.FieldError{Field: "cursor", Code: "invalid", Message: "Invalid cursor."})
+			return nil, nil, apperr.Invalid(apperr.FieldError{Field: "cursor", Code: "invalid", Message: "Con trỏ phân trang không hợp lệ."})
 		}
 		before = &ts
 	}
@@ -220,7 +220,7 @@ func (e *Engine) Events(ctx context.Context, p authctx.Principal, t authctx.Tena
 	if after != "" {
 		at, id, ok := decodeEventCursor(after)
 		if !ok {
-			return nil, nil, apperr.Invalid(apperr.FieldError{Field: "after", Code: "invalid", Message: "Invalid cursor."})
+			return nil, nil, apperr.Invalid(apperr.FieldError{Field: "after", Code: "invalid", Message: "Con trỏ phân trang không hợp lệ."})
 		}
 		afterAt, afterID = &at, &id
 	}
@@ -249,14 +249,14 @@ func (e *Engine) Events(ctx context.Context, p authctx.Principal, t authctx.Tena
 // OrgEvents lists recent events of all runs (execution log), newest first.
 func (e *Engine) OrgEvents(ctx context.Context, p authctx.Principal, t authctx.Tenant, level *string, before string, limit int) ([]EventView, *string, error) {
 	if level != nil && *level != "info" && *level != "warn" && *level != "error" {
-		return nil, nil, apperr.Invalid(apperr.FieldError{Field: "level", Code: "invalid", Message: "Must be info, warn or error."})
+		return nil, nil, apperr.Invalid(apperr.FieldError{Field: "level", Code: "invalid", Message: "Chỉ nhận info, warn hoặc error."})
 	}
 	var beforeAt *time.Time
 	var beforeID *uuid.UUID
 	if before != "" {
 		at, id, ok := decodeEventCursor(before)
 		if !ok {
-			return nil, nil, apperr.Invalid(apperr.FieldError{Field: "cursor", Code: "invalid", Message: "Invalid cursor."})
+			return nil, nil, apperr.Invalid(apperr.FieldError{Field: "cursor", Code: "invalid", Message: "Con trỏ phân trang không hợp lệ."})
 		}
 		beforeAt, beforeID = &at, &id
 	}
@@ -304,7 +304,7 @@ func decodeEventCursor(s string) (time.Time, uuid.UUID, bool) {
 // ListApprovals lists approvals, newest first.
 func (e *Engine) ListApprovals(ctx context.Context, p authctx.Principal, t authctx.Tenant, status *string) ([]ApprovalView, error) {
 	if status != nil && !contains([]string{"PENDING", "APPROVED", "REJECTED", "EXPIRED"}, *status) {
-		return nil, apperr.Invalid(apperr.FieldError{Field: "status", Code: "invalid", Message: "Unknown status."})
+		return nil, apperr.Invalid(apperr.FieldError{Field: "status", Code: "invalid", Message: "Trạng thái không hợp lệ."})
 	}
 	out := []ApprovalView{}
 	err := e.tx(ctx, t.OrgID, p.UserID, func(q *workflowdb.Queries, _ pgx.Tx) error {

@@ -3,7 +3,7 @@ import type { components } from '~/types/api'
 import { assignableRoles, canAssign, canManageMember, roleLabels, type Role } from '~/utils/rbac'
 
 definePageMeta({ middleware: 'org' })
-useHead({ title: 'Members' })
+useHead({ title: 'Thành viên' })
 
 type Member = components['schemas']['Member']
 type Invitation = components['schemas']['Invitation']
@@ -58,7 +58,7 @@ function changeRole(m: Member, value: unknown) {
   if (next === m.role) return
   void run(async () => unwrap(await api.PATCH('/orgs/{orgID}/members/{memberID}', {
     params: { path: { orgID: orgId.value, memberID: m.id } }, body: { role: next as 'admin' | 'operator' | 'viewer' },
-  })), `${m.display_name} is now ${roleLabels[next]}.`)
+  })), `${m.display_name} giờ là ${roleLabels[next]}.`)
 }
 
 function remove(m: Member) {
@@ -69,7 +69,7 @@ function remove(m: Member) {
       await session.load(true)
       await navigateTo('/orgs')
     }
-  }, `${m.display_name} was removed.`)
+  }, `Đã xóa ${m.display_name} khỏi tổ chức.`)
 }
 
 async function sendInvite() {
@@ -79,7 +79,7 @@ async function sendInvite() {
     unwrap(await api.POST('/orgs/{orgID}/invitations', {
       params: { path: path.value }, body: { email: invite.email, role: invite.role as 'admin' | 'operator' | 'viewer' },
     }))
-    notice.value = `Invitation sent to ${invite.email}.`
+    notice.value = `Đã gửi lời mời tới ${invite.email}.`
     invite.email = ''
     await load()
   } catch (e) {
@@ -92,15 +92,15 @@ async function sendInvite() {
 function revoke(i: Invitation) {
   void run(async () => unwrap(await api.DELETE('/orgs/{orgID}/invitations/{invitationID}', {
     params: { path: { orgID: orgId.value, invitationID: i.id } },
-  })), `Invitation to ${i.email} was revoked.`)
+  })), `Đã thu hồi lời mời gửi ${i.email}.`)
 }
 
-const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
+const fmt = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' })
 </script>
 
 <template>
   <div class="mx-auto max-w-5xl space-y-8">
-    <PageHeader title="Members" :description="`People with access to ${membership?.organization.name ?? 'this organization'}.`" />
+    <PageHeader title="Thành viên" :description="`Những người có quyền truy cập ${membership?.organization.name ?? 'tổ chức này'}.`" />
 
     <div aria-live="polite">
       <Alert v-if="notice"><AlertDescription>{{ notice }}</AlertDescription></Alert>
@@ -108,21 +108,21 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
     <FormError :message="error" />
 
     <section aria-labelledby="members-heading">
-      <h2 id="members-heading" class="sr-only">Members</h2>
-      <p v-if="loading && !members.length" role="status" class="text-sm text-muted-foreground">Loading…</p>
+      <h2 id="members-heading" class="sr-only">Thành viên</h2>
+      <p v-if="loading && !members.length" role="status" class="text-sm text-muted-foreground">Đang tải…</p>
       <div v-else class="overflow-x-auto rounded-lg border bg-background">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
+              <TableHead>Tên</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead><span class="sr-only">Actions</span></TableHead>
+              <TableHead>Vai trò</TableHead>
+              <TableHead><span class="sr-only">Thao tác</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             <TableRow v-for="m in members" :key="m.id">
-              <TableCell class="font-medium">{{ m.display_name }}<span v-if="m.id === myMemberId" class="text-muted-foreground"> (you)</span></TableCell>
+              <TableCell class="font-medium">{{ m.display_name }}<span v-if="m.id === myMemberId" class="text-muted-foreground"> (bạn)</span></TableCell>
               <TableCell class="text-muted-foreground">{{ m.email }}</TableCell>
               <TableCell>
                 <Select
@@ -130,7 +130,7 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
                   :model-value="m.role"
                   @update:model-value="(v) => changeRole(m, v)"
                 >
-                  <SelectTrigger class="w-36" :aria-label="`Role for ${m.display_name}`"><SelectValue /></SelectTrigger>
+                  <SelectTrigger class="w-36" :aria-label="`Vai trò của ${m.display_name}`"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem v-for="r in assignableRoles.filter((r) => canAssign(role, r))" :key="r" :value="r">{{ roleLabels[r] }}</SelectItem>
                   </SelectContent>
@@ -140,13 +140,13 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
               <TableCell class="text-right">
                 <ConfirmDialog
                   v-if="m.role !== 'owner' && (m.id === myMemberId || canManageMember(role, m.role))"
-                  :title="m.id === myMemberId ? 'Leave organization?' : `Remove ${m.display_name}?`"
-                  :description="m.id === myMemberId ? 'You will lose access until someone invites you again.' : 'They will lose access to this organization immediately.'"
-                  :confirm-label="m.id === myMemberId ? 'Leave' : 'Remove'"
+                  :title="m.id === myMemberId ? 'Rời tổ chức?' : `Xóa ${m.display_name} khỏi tổ chức?`"
+                  :description="m.id === myMemberId ? 'Bạn sẽ mất quyền truy cập cho đến khi được mời lại.' : 'Người này sẽ mất quyền truy cập tổ chức ngay lập tức.'"
+                  :confirm-label="m.id === myMemberId ? 'Rời tổ chức' : 'Xóa'"
                   @confirm="remove(m)"
                 >
                   <template #trigger>
-                    <Button variant="ghost" size="sm">{{ m.id === myMemberId ? 'Leave' : 'Remove' }}</Button>
+                    <Button variant="ghost" size="sm">{{ m.id === myMemberId ? 'Rời tổ chức' : 'Xóa' }}</Button>
                   </template>
                 </ConfirmDialog>
               </TableCell>
@@ -157,7 +157,7 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
     </section>
 
     <section v-if="can('members.manage')" aria-labelledby="invite-heading" class="space-y-4">
-      <h2 id="invite-heading" class="text-lg font-medium">Invite someone</h2>
+      <h2 id="invite-heading" class="text-lg font-medium">Mời thành viên</h2>
       <Card>
         <CardContent class="pt-6">
           <form class="grid gap-4 sm:grid-cols-[1fr_12rem_auto] sm:items-end" novalidate @submit.prevent="sendInvite">
@@ -166,7 +166,7 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
                 <Input id="invite-email" v-model="invite.email" type="email" :aria-invalid="invalid" :aria-describedby="describedBy" required />
               </template>
             </FormField>
-            <FormField id="invite-role" label="Role" :error="inviteFields.role">
+            <FormField id="invite-role" label="Vai trò" :error="inviteFields.role">
               <Select v-model="invite.role">
                 <SelectTrigger id="invite-role" class="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -174,7 +174,7 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
                 </SelectContent>
               </Select>
             </FormField>
-            <Button type="submit">Send invitation</Button>
+            <Button type="submit">Gửi lời mời</Button>
           </form>
           <div class="mt-3"><FormError :message="inviteError" /></div>
         </CardContent>
@@ -182,13 +182,13 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
 
       <div v-if="invitations.length" class="overflow-x-auto rounded-lg border bg-background">
         <Table>
-          <TableCaption class="sr-only">Pending invitations</TableCaption>
+          <TableCaption class="sr-only">Lời mời đang chờ</TableCaption>
           <TableHeader>
             <TableRow>
-              <TableHead>Pending invitation</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Expires</TableHead>
-              <TableHead><span class="sr-only">Actions</span></TableHead>
+              <TableHead>Lời mời đang chờ</TableHead>
+              <TableHead>Vai trò</TableHead>
+              <TableHead>Hết hạn</TableHead>
+              <TableHead><span class="sr-only">Thao tác</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -197,8 +197,8 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
               <TableCell>{{ roleLabels[i.role] }}</TableCell>
               <TableCell><time :datetime="i.expires_at">{{ fmt.format(new Date(i.expires_at)) }}</time></TableCell>
               <TableCell class="text-right">
-                <ConfirmDialog :title="`Revoke invitation to ${i.email}?`" description="The link in their email will stop working." confirm-label="Revoke" @confirm="revoke(i)">
-                  <template #trigger><Button variant="ghost" size="sm">Revoke</Button></template>
+                <ConfirmDialog :title="`Thu hồi lời mời gửi ${i.email}?`" description="Liên kết trong email mời sẽ không dùng được nữa." confirm-label="Thu hồi" @confirm="revoke(i)">
+                  <template #trigger><Button variant="ghost" size="sm">Thu hồi</Button></template>
                 </ConfirmDialog>
               </TableCell>
             </TableRow>

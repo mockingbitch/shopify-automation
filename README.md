@@ -22,3 +22,7 @@ Quick start: see [docs/development.md](docs/development.md).
 | [docs/roadmap.md](docs/roadmap.md) | Phases, task breakdowns, pending decisions |
 | [docs/development.md](docs/development.md) | Local setup, commands, conventions |
 | [api/openapi.yaml](api/openapi.yaml) | HTTP API contract |
+
+## Hướng dẫn sử dụng
+
+Hướng dẫn cho người bán (tiếng Việt, có hình minh họa): [docs/huong-dan-su-dung.md](docs/huong-dan-su-dung.md). Trong hệ thống: menu **Hướng dẫn sử dụng** (`/help`). Chạy thử trên máy: `make local-up` (xem `docs/development.md`).

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.shopee-automation.local/templates/return_address.json",
-  "title": "Return address",
-  "description": "Pickup/return address. Existing addresses are edited with logistics/update_address and flagged with logistics/set_address_config; creating an address has no Open API (browser or manual). User-managed: never changed unless ticked in the approval step.",
+  "title": "Địa chỉ trả hàng",
+  "description": "Địa chỉ lấy hàng/trả hàng. Địa chỉ đã có được sửa qua API của Shopee; Shopee không có API để tạo địa chỉ mới (tiện ích trình duyệt hoặc làm thủ công). Chỉ thay đổi khi bạn đánh dấu chọn ở bước duyệt.",
   "type": "object",
   "additionalProperties": false,
   "x-applies-to": "shop",
@@ -11,53 +11,53 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 100,
-      "title": "Recipient name"
+      "title": "Tên người nhận"
     },
     "phone": {
       "type": "string",
       "pattern": "^\\+[1-9][0-9]{6,14}$",
-      "description": "E.164, e.g. +84901234567.",
-      "title": "Recipient phone"
+      "description": "Định dạng quốc tế, ví dụ +84901234567.",
+      "title": "Số điện thoại người nhận"
     },
     "state": {
       "type": "string",
       "minLength": 1,
       "maxLength": 100,
-      "title": "State / province"
+      "title": "Tỉnh / thành phố"
     },
     "city": {
       "type": "string",
       "minLength": 1,
       "maxLength": 100,
-      "title": "City"
+      "title": "Thành phố / thị xã"
     },
     "district": {
       "type": "string",
       "minLength": 1,
       "maxLength": 100,
-      "title": "District"
+      "title": "Quận / huyện"
     },
     "town": {
       "type": "string",
       "minLength": 1,
       "maxLength": 100,
-      "title": "Town / ward"
+      "title": "Phường / xã"
     },
     "address": {
       "type": "string",
       "minLength": 1,
       "maxLength": 500,
-      "title": "Street address"
+      "title": "Địa chỉ cụ thể"
     },
     "zipcode": {
       "type": "string",
       "pattern": "^[A-Za-z0-9 -]{3,12}$",
-      "title": "Postal code"
+      "title": "Mã bưu chính"
     },
     "use_as": {
       "type": "array",
       "uniqueItems": true,
-      "title": "Use as",
+      "title": "Dùng làm",
       "items": {
         "type": "string",
         "enum": [
@@ -67,7 +67,7 @@
         ]
       },
       "x-capability": "shop.address.config",
-      "description": "Address types from logistics/set_address_config."
+      "description": "Loại địa chỉ trên Shopee (mặc định, lấy hàng, trả hàng)."
     }
   },
   "x-capability": "shop.address.update",

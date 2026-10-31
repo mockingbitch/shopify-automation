@@ -178,7 +178,7 @@ export async function execute(doc: Document, href: string, cmd: Command): Promis
       const found = m?.[1];
       if (!found) return fail('shop_id_not_found', 'the shop ID pattern did not match the targeted element');
       if (found !== cmd.expected) {
-        return fail('shop_mismatch', `This tab is logged in to shop ${found}, but the task is for shop ${cmd.expected}`);
+        return fail('shop_mismatch', `Tab này đang đăng nhập shop ${found}, nhưng việc này dành cho shop ${cmd.expected}. Hãy đăng nhập đúng shop trong tab này, rồi bấm Chạy lại.`);
       }
       return { ok: true, detail: found };
     }

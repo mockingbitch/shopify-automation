@@ -36,7 +36,7 @@ func optUUID(r *http.Request, key string) (*uuid.UUID, error) {
 	}
 	id, err := uuid.Parse(v)
 	if err != nil {
-		return nil, apperr.Invalid(apperr.FieldError{Field: key, Code: "invalid", Message: "Must be a UUID."})
+		return nil, apperr.Invalid(apperr.FieldError{Field: key, Code: "invalid", Message: "Phải là UUID hợp lệ."})
 	}
 	return &id, nil
 }

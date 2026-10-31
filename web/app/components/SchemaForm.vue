@@ -72,7 +72,7 @@ function obj(name: string): JsonObject {
       <fieldset v-if="s.type === 'object'" class="rounded-md border p-3">
         <legend class="px-1 text-sm font-medium">
           {{ labelOf(name, s) }}
-          <Badge v-if="s['x-sensitive']" variant="outline" class="ml-1">Sensitive</Badge>
+          <Badge v-if="s['x-sensitive']" variant="outline" class="ml-1">Nhạy cảm</Badge>
         </legend>
         <p v-if="s.description" class="mb-2 text-xs text-muted-foreground">{{ s.description }}</p>
         <SchemaForm :schema="s" :model-value="obj(name)" :path="`${path}.${name}`" :id-prefix="fid(name)"
@@ -84,18 +84,18 @@ function obj(name: string): JsonObject {
       <fieldset v-else-if="s.type === 'array' && s.items?.type === 'object'" class="rounded-md border p-3">
         <legend class="px-1 text-sm font-medium">
           {{ labelOf(name, s) }}
-          <Badge v-if="s['x-sensitive']" variant="outline" class="ml-1">Sensitive</Badge>
+          <Badge v-if="s['x-sensitive']" variant="outline" class="ml-1">Nhạy cảm</Badge>
         </legend>
         <p v-if="s.description" class="mb-2 text-xs text-muted-foreground">{{ s.description }}</p>
-        <p v-if="!rows(name).length" class="text-sm text-muted-foreground">None.</p>
+        <p v-if="!rows(name).length" class="text-sm text-muted-foreground">Chưa có mục nào.</p>
         <div v-for="(row, i) in rows(name)" :key="i" class="mb-3 rounded border bg-muted/30 p-3">
           <SchemaForm :schema="s.items!" :model-value="row" :path="`${path}.${name}.${i}`" :id-prefix="`${fid(name)}-${i}`"
                       :errors="errors" :readonly="readonly" @update:model-value="setRow(name, i, $event)" />
           <p v-if="errors?.[`${path}.${name}.${i}`]" class="mt-1 text-xs text-destructive">{{ errors[`${path}.${name}.${i}`] }}</p>
-          <Button v-if="!readonly" type="button" variant="ghost" size="sm" class="mt-2" :aria-label="`Remove item ${i + 1} from ${labelOf(name, s)}`" @click="removeRow(name, i)">Remove</Button>
+          <Button v-if="!readonly" type="button" variant="ghost" size="sm" class="mt-2" :aria-label="`Xóa mục ${i + 1} khỏi ${labelOf(name, s)}`" @click="removeRow(name, i)">Xóa</Button>
         </div>
-        <Button v-if="!readonly && (s.maxItems === undefined || rows(name).length < s.maxItems)" type="button" variant="outline" size="sm" :aria-label="`Add to ${labelOf(name, s)}`" @click="addRow(name)">
-          Add
+        <Button v-if="!readonly && (s.maxItems === undefined || rows(name).length < s.maxItems)" type="button" variant="outline" size="sm" :aria-label="`Thêm vào ${labelOf(name, s)}`" @click="addRow(name)">
+          Thêm
         </Button>
         <p v-if="errorFor(name)" class="mt-1 text-xs text-destructive">{{ errorFor(name) }}</p>
       </fieldset>
@@ -104,7 +104,7 @@ function obj(name: string): JsonObject {
       <template v-else>
         <Label :for="fid(name)">
           {{ labelOf(name, s) }}
-          <Badge v-if="s['x-sensitive']" variant="outline" class="ml-1">Sensitive</Badge>
+          <Badge v-if="s['x-sensitive']" variant="outline" class="ml-1">Nhạy cảm</Badge>
         </Label>
 
         <div v-if="s.type === 'array' && s.items?.enum" :id="fid(name)" role="group" class="flex flex-wrap gap-4">
@@ -116,17 +116,17 @@ function obj(name: string): JsonObject {
           </label>
         </div>
         <textarea v-else-if="s.type === 'array'" :id="fid(name)" rows="3" :readonly="readonly"
-                  class="w-full rounded-md border bg-background px-3 py-2 text-sm" placeholder="One per line"
+                  class="w-full rounded-md border bg-background px-3 py-2 text-sm" placeholder="Mỗi dòng một giá trị"
                   :value="lines(modelValue[name])" @input="set(name, fromLines($event))" />
         <select v-else-if="s.enum" :id="fid(name)" :disabled="readonly" class="h-9 w-full rounded-md border bg-background px-3 text-sm"
                 :value="modelValue[name] ?? ''" @change="set(name, ($event.target as HTMLSelectElement).value || undefined)">
-          <option value="">Not set</option>
+          <option value="">Chưa chọn</option>
           <option v-for="opt in s.enum" :key="String(opt)" :value="opt">{{ opt }}</option>
         </select>
         <label v-else-if="s.type === 'boolean'" class="flex items-center gap-2 text-sm">
           <input :id="fid(name)" type="checkbox" class="size-4" :disabled="readonly" :checked="modelValue[name] === true"
                  @change="set(name, ($event.target as HTMLInputElement).checked)">
-          Yes
+          Có
         </label>
         <Input v-else-if="s.type === 'integer' || s.type === 'number'" :id="fid(name)" type="number" :readonly="readonly"
                :step="s.type === 'integer' ? 1 : 'any'" :model-value="(modelValue[name] as number | undefined) ?? ''"

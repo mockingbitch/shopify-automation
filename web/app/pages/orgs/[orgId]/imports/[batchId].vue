@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { batchLabels, isBatchActive, rowLabels, type ImportBatch, type ImportRow } from '~/utils/products'
+import { batchLabels, importColumnHelp, isBatchActive, rowLabels, type ImportBatch, type ImportRow } from '~/utils/products'
 
 definePageMeta({ middleware: 'org' })
 
@@ -17,7 +17,7 @@ const editing = ref<string | null>(null)
 const draft = ref<Record<string, string>>({})
 const rowError = ref('')
 const publishing = ref(false)
-useHead({ title: () => batch.value?.filename ?? 'Import' })
+useHead({ title: () => batch.value?.filename ?? 'Lô nhập' })
 
 const path = computed(() => ({ orgID: orgId.value, batchID: id.value }))
 
@@ -84,7 +84,7 @@ async function retry() {
   error.value = ''
   try {
     batch.value = unwrap(await api.POST('/orgs/{orgID}/imports/{batchID}/retry', { params: { path: path.value } })).data
-    notice.value = 'Importing the fixed rows again.'
+    notice.value = 'Đang nhập lại các dòng đã sửa.'
   } catch (e) {
     error.value = toApiError(e).message
   }
@@ -102,50 +102,53 @@ const needsAttention = computed(() => (batch.value?.invalid_rows ?? 0) + (batch.
 
 <template>
   <div class="mx-auto max-w-6xl space-y-6">
-    <PageHeader :title="batch?.filename ?? 'Import'" description="Rows with errors are not imported. Fix them here, then import again.">
+    <PageHeader :title="batch?.filename ?? 'Lô nhập'" description="Các dòng có lỗi sẽ không được nhập. Hãy sửa chúng tại đây rồi nhập lại.">
       <template v-if="batch" #actions>
-        <Button v-if="batch.has_report" variant="outline" @click="report">Download report</Button>
+        <Button v-if="batch.has_report" variant="outline" @click="report">Tải báo cáo</Button>
         <Button v-if="can('imports.write') && !isBatchActive(batch.status) && (needsAttention || batch.status === 'FAILED')" variant="outline" @click="retry">
-          {{ batch.status === 'FAILED' ? 'Retry import' : 'Import fixed rows' }}
+          {{ batch.status === 'FAILED' ? 'Thử lại' : 'Nhập lại các dòng đã sửa' }}
         </Button>
-        <Button v-if="can('workflows.run') && batch.imported_rows" @click="publishing = true">Publish imported products</Button>
+        <Button v-if="can('workflows.run') && batch.imported_rows" @click="publishing = true">Đăng các sản phẩm đã nhập</Button>
       </template>
     </PageHeader>
     <div aria-live="polite"><Alert v-if="notice"><AlertDescription>{{ notice }}</AlertDescription></Alert></div>
     <FormError :message="error" />
-    <PublishPanel v-if="publishing && batch" :import-batch-id="batch.id" label="the imported products" @close="publishing = false" />
+    <PublishPanel v-if="publishing && batch" :import-batch-id="batch.id" label="các sản phẩm đã nhập" @close="publishing = false" />
 
     <dl v-if="batch" class="grid grid-cols-2 gap-3 rounded-lg border bg-background p-4 text-sm sm:grid-cols-6" aria-live="polite">
-      <div><dt class="text-muted-foreground">Status</dt><dd><Badge :variant="batch.status === 'FAILED' ? 'destructive' : 'secondary'">{{ batchLabels[batch.status] }}</Badge></dd></div>
-      <div><dt class="text-muted-foreground">Rows</dt><dd>{{ batch.total_rows }}</dd></div>
-      <div><dt class="text-muted-foreground">Valid</dt><dd>{{ batch.valid_rows }}</dd></div>
-      <div><dt class="text-muted-foreground">Invalid</dt><dd>{{ batch.invalid_rows }}</dd></div>
-      <div><dt class="text-muted-foreground">Imported</dt><dd>{{ batch.imported_rows }}</dd></div>
-      <div><dt class="text-muted-foreground">Failed</dt><dd>{{ batch.failed_rows }}</dd></div>
+      <div><dt class="text-muted-foreground">Trạng thái</dt><dd><Badge :variant="batch.status === 'FAILED' ? 'destructive' : 'secondary'">{{ batchLabels[batch.status] }}</Badge></dd></div>
+      <div><dt class="text-muted-foreground">Số dòng</dt><dd>{{ batch.total_rows }}</dd></div>
+      <div><dt class="text-muted-foreground">Hợp lệ</dt><dd>{{ batch.valid_rows }}</dd></div>
+      <div><dt class="text-muted-foreground">Có lỗi</dt><dd>{{ batch.invalid_rows }}</dd></div>
+      <div><dt class="text-muted-foreground">Đã nhập</dt><dd>{{ batch.imported_rows }}</dd></div>
+      <div><dt class="text-muted-foreground">Thất bại</dt><dd>{{ batch.failed_rows }}</dd></div>
     </dl>
     <Alert v-if="batch?.error" variant="destructive"><AlertDescription>{{ batch.error }}</AlertDescription></Alert>
     <p v-if="batch?.imported_rows" class="text-sm">
-      <NuxtLink :to="`/orgs/${orgId}/products?batch=${batch.id}`" class="underline">View the imported products</NuxtLink>
+      <NuxtLink :to="`/orgs/${orgId}/products?batch=${batch.id}`" class="underline">Xem các sản phẩm đã nhập</NuxtLink>
     </p>
 
     <div class="flex items-end gap-3">
       <div class="space-y-1.5">
-        <Label for="row-status">Show rows</Label>
+        <Label for="row-status">Hiển thị dòng</Label>
         <select id="row-status" v-model="status" class="h-9 rounded-md border bg-background px-3 text-sm">
-          <option value="">All</option>
+          <option value="">Tất cả</option>
           <option v-for="(label, s) in rowLabels" :key="s" :value="s">{{ label }}</option>
         </select>
       </div>
     </div>
 
-    <EmptyState v-if="!rows.length" title="No rows" :description="batch && isBatchActive(batch.status) ? 'The file is being read…' : 'No rows match this filter.'" />
+    <EmptyState v-if="!rows.length" title="Không có dòng nào" :description="batch && isBatchActive(batch.status) ? 'Đang đọc file…' : 'Không có dòng nào khớp với bộ lọc này.'" />
     <div v-else class="overflow-x-auto rounded-lg border bg-background">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Line</TableHead><TableHead>Status</TableHead>
-            <TableHead v-for="c in columns" :key="c">{{ c }}</TableHead>
-            <TableHead><span class="sr-only">Actions</span></TableHead>
+            <TableHead>Dòng</TableHead><TableHead>Trạng thái</TableHead>
+            <TableHead v-for="c in columns" :key="c" class="align-bottom">
+              <span class="font-mono">{{ c }}</span>
+              <span v-if="importColumnHelp[c]" class="block text-xs font-normal">{{ importColumnHelp[c] }}</span>
+            </TableHead>
+            <TableHead><span class="sr-only">Thao tác</span></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -156,25 +159,25 @@ const needsAttention = computed(() => (batch.value?.invalid_rows ?? 0) + (batch.
               <p v-for="e in r.errors.filter((x) => !columns.includes(x.column))" :key="e.code + e.column" class="mt-1 text-xs text-destructive">{{ e.message }}</p>
             </TableCell>
             <TableCell v-for="c in columns" :key="c" class="min-w-32 align-top">
-              <Input v-if="editing === r.id" v-model="draft[c]" :aria-label="`${c}, line ${r.row_number}`" />
+              <Input v-if="editing === r.id" v-model="draft[c]" :aria-label="`${c}, dòng ${r.row_number}`" />
               <span v-else class="block max-w-64 truncate" :title="r.values[c]">{{ r.values[c] }}</span>
               <p v-for="e in errorsFor(r, c)" :key="e.code" class="mt-1 text-xs text-destructive">{{ e.message }}</p>
             </TableCell>
             <TableCell class="space-x-2 whitespace-nowrap text-right align-top">
               <template v-if="can('imports.write') && r.status !== 'IMPORTED'">
                 <template v-if="editing === r.id">
-                  <Button size="sm" @click="saveRow(r)">Save</Button>
-                  <Button size="sm" variant="outline" @click="editing = null">Cancel</Button>
+                  <Button size="sm" @click="saveRow(r)">Lưu</Button>
+                  <Button size="sm" variant="outline" @click="editing = null">Hủy</Button>
                   <p v-if="rowError" class="mt-1 text-xs text-destructive">{{ rowError }}</p>
                 </template>
-                <Button v-else size="sm" variant="outline" :disabled="batch ? isBatchActive(batch.status) : true" :aria-label="`Fix line ${r.row_number}`" @click="edit(r)">Fix</Button>
+                <Button v-else size="sm" variant="outline" :disabled="batch ? isBatchActive(batch.status) : true" :aria-label="`Sửa dòng ${r.row_number}`" @click="edit(r)">Sửa</Button>
               </template>
-              <NuxtLink v-if="r.product_id" :to="`/orgs/${orgId}/products/${r.product_id}`" class="text-sm underline">Product</NuxtLink>
+              <NuxtLink v-if="r.product_id" :to="`/orgs/${orgId}/products/${r.product_id}`" class="text-sm underline">Xem sản phẩm</NuxtLink>
             </TableCell>
           </TableRow>
         </TableBody>
       </Table>
     </div>
-    <div v-if="next" class="flex justify-center"><Button variant="outline" @click="loadRows(true)">Load more</Button></div>
+    <div v-if="next" class="flex justify-center"><Button variant="outline" @click="loadRows(true)">Tải thêm</Button></div>
   </div>
 </template>

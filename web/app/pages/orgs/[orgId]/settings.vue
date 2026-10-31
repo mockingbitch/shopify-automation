@@ -2,7 +2,7 @@
 import type { components } from '~/types/api'
 
 definePageMeta({ middleware: 'org' })
-useHead({ title: 'Settings' })
+useHead({ title: 'Cài đặt' })
 
 type Member = components['schemas']['Member']
 const api = useApi()
@@ -47,12 +47,12 @@ async function save() {
     })
     unwrap(res)
     etag.value = res.response.headers.get('ETag') ?? ''
-    notice.value = 'Settings saved.'
+    notice.value = 'Đã lưu cài đặt.'
     await session.load(true)
   } catch (e) {
     const err = toApiError(e)
     fields.value = err.fields
-    error.value = err.status === 412 ? 'Someone else changed these settings. Reload the page to see the latest version.' : (Object.keys(err.fields).length ? '' : err.message)
+    error.value = err.status === 412 ? 'Người khác vừa thay đổi cài đặt này. Bạn hãy tải lại trang để xem bản mới nhất.' : (Object.keys(err.fields).length ? '' : err.message)
   } finally {
     saving.value = false
   }
@@ -63,7 +63,7 @@ async function transfer() {
   try {
     unwrap(await api.POST('/orgs/{orgID}/transfer-ownership', { params: { path: path.value }, body: { new_owner_user_id: newOwner.value } }))
     await session.load(true)
-    notice.value = 'Ownership transferred. You are now an admin.'
+    notice.value = 'Đã chuyển quyền sở hữu. Giờ bạn là quản trị viên.'
   } catch (e) {
     error.value = toApiError(e).message
   }
@@ -83,83 +83,83 @@ async function remove() {
 
 <template>
   <div class="mx-auto max-w-3xl space-y-8">
-    <PageHeader title="Settings" />
+    <PageHeader title="Cài đặt" />
     <div aria-live="polite"><Alert v-if="notice"><AlertDescription>{{ notice }}</AlertDescription></Alert></div>
     <FormError :message="error" />
 
     <Card>
-      <CardHeader><CardTitle as="h2">General</CardTitle></CardHeader>
+      <CardHeader><CardTitle as="h2">Thông tin chung</CardTitle></CardHeader>
       <CardContent>
         <form class="space-y-4" novalidate @submit.prevent="save">
-          <FormField id="org-name" label="Organization name" :error="fields.name">
+          <FormField id="org-name" label="Tên tổ chức" :error="fields.name">
             <template #default="{ describedBy, invalid }">
               <Input id="org-name" v-model="form.name" :disabled="!can('org.update')" :aria-invalid="invalid" :aria-describedby="describedBy" />
             </template>
           </FormField>
-          <FormField id="org-slug" label="URL name" hint="The URL name cannot be changed.">
+          <FormField id="org-slug" label="Tên trong URL" hint="Không thể đổi tên trong URL.">
             <Input id="org-slug" :model-value="form.slug" disabled />
           </FormField>
           <div class="flex items-start gap-3">
             <input id="self-approval" v-model="form.allowSelfApproval" type="checkbox" class="mt-1 size-4 accent-primary" :disabled="!can('org.update')" aria-describedby="self-approval-hint">
             <div>
-              <Label for="self-approval">Operators may approve their own workflows</Label>
-              <p id="self-approval-hint" class="text-xs text-muted-foreground">When off, someone other than the person who started a workflow must approve its changes.</p>
+              <Label for="self-approval">Nhân viên vận hành được tự duyệt quy trình của mình</Label>
+              <p id="self-approval-hint" class="text-xs text-muted-foreground">Khi tắt, thay đổi của một quy trình phải do người khác (không phải người bắt đầu quy trình) duyệt.</p>
             </div>
           </div>
           <div class="flex items-start gap-3">
             <input id="require-mfa" v-model="form.requireMFA" type="checkbox" class="mt-1 size-4 accent-primary" :disabled="!can('org.update')" aria-describedby="require-mfa-hint">
             <div>
-              <Label for="require-mfa">Require two-step verification for owners and admins</Label>
+              <Label for="require-mfa">Bắt buộc chủ sở hữu và quản trị viên bật xác minh hai bước</Label>
               <p id="require-mfa-hint" class="text-xs text-muted-foreground">
-                Owners and admins without it cannot open this organization until they turn it on in
-                <NuxtLink to="/account" class="underline">Account security</NuxtLink>. Turn it on for your own account first.
+                Chủ sở hữu và quản trị viên chưa bật sẽ không mở được tổ chức này cho đến khi bật trong
+                <NuxtLink to="/account" class="underline">Bảo mật tài khoản</NuxtLink>. Bạn hãy bật cho tài khoản của mình trước.
               </p>
               <p v-if="fields['settings.require_mfa']" class="text-xs text-destructive">{{ fields['settings.require_mfa'] }}</p>
             </div>
           </div>
-          <Button v-if="can('org.update')" type="submit" :disabled="saving">Save changes</Button>
+          <Button v-if="can('org.update')" type="submit" :disabled="saving">Lưu thay đổi</Button>
         </form>
       </CardContent>
     </Card>
 
     <Card v-if="can('audit.read')">
       <CardHeader>
-        <CardTitle as="h2">Audit log</CardTitle>
-        <CardDescription>See who changed what in this organization.</CardDescription>
+        <CardTitle as="h2">Nhật ký hoạt động</CardTitle>
+        <CardDescription>Xem ai đã thay đổi gì trong tổ chức này.</CardDescription>
       </CardHeader>
-      <CardContent><Button variant="outline" as-child><NuxtLink :to="`/orgs/${orgId}/audit`">Open audit log</NuxtLink></Button></CardContent>
+      <CardContent><Button variant="outline" as-child><NuxtLink :to="`/orgs/${orgId}/audit`">Mở nhật ký hoạt động</NuxtLink></Button></CardContent>
     </Card>
 
     <Card v-if="role === 'owner'">
       <CardHeader>
-        <CardTitle as="h2">Transfer ownership</CardTitle>
-        <CardDescription>The new owner must already be a member. You will become an admin.</CardDescription>
+        <CardTitle as="h2">Chuyển quyền sở hữu</CardTitle>
+        <CardDescription>Chủ sở hữu mới phải là thành viên của tổ chức. Bạn sẽ trở thành quản trị viên.</CardDescription>
       </CardHeader>
       <CardContent class="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <FormField id="new-owner" label="New owner" class="flex-1">
+        <FormField id="new-owner" label="Chủ sở hữu mới" class="flex-1">
           <Select v-model="newOwner">
-            <SelectTrigger id="new-owner" class="w-full"><SelectValue placeholder="Choose a member" /></SelectTrigger>
+            <SelectTrigger id="new-owner" class="w-full"><SelectValue placeholder="Chọn thành viên" /></SelectTrigger>
             <SelectContent>
               <SelectItem v-for="m in members" :key="m.user_id" :value="m.user_id">{{ m.display_name }} ({{ m.email }})</SelectItem>
             </SelectContent>
           </Select>
         </FormField>
-        <ConfirmDialog title="Transfer ownership?" description="You will no longer be able to delete the organization or transfer it again." confirm-label="Transfer" :disabled="!newOwner" @confirm="transfer">
-          <template #trigger><Button variant="outline" :disabled="!newOwner">Transfer</Button></template>
+        <ConfirmDialog title="Chuyển quyền sở hữu?" description="Bạn sẽ không thể xóa tổ chức hay chuyển quyền sở hữu thêm lần nữa." confirm-label="Chuyển quyền" :disabled="!newOwner" @confirm="transfer">
+          <template #trigger><Button variant="outline" :disabled="!newOwner">Chuyển quyền</Button></template>
         </ConfirmDialog>
       </CardContent>
     </Card>
 
     <Card v-if="can('org.delete')" class="border-destructive/40">
       <CardHeader>
-        <CardTitle as="h2" class="text-destructive">Delete organization</CardTitle>
-        <CardDescription>All members lose access. This cannot be undone from the dashboard.</CardDescription>
+        <CardTitle as="h2" class="text-destructive">Xóa tổ chức</CardTitle>
+        <CardDescription>Mọi thành viên sẽ mất quyền truy cập. Không thể hoàn tác thao tác này trên bảng điều khiển.</CardDescription>
       </CardHeader>
       <CardContent>
-        <ConfirmDialog title="Delete this organization?" :description="`Type ${form.slug} to confirm.`" confirm-label="Delete" :disabled="confirmSlug !== form.slug" @confirm="remove">
-          <template #trigger><Button variant="destructive">Delete organization</Button></template>
+        <ConfirmDialog title="Xóa tổ chức này?" :description="`Nhập ${form.slug} để xác nhận.`" confirm-label="Xóa" :disabled="confirmSlug !== form.slug" @confirm="remove">
+          <template #trigger><Button variant="destructive">Xóa tổ chức</Button></template>
           <div class="space-y-1.5">
-            <Label for="confirm-slug">Organization URL name</Label>
+            <Label for="confirm-slug">Tên trong URL của tổ chức</Label>
             <Input id="confirm-slug" v-model="confirmSlug" autocomplete="off" />
           </div>
         </ConfirmDialog>

@@ -13,17 +13,17 @@ interface UAData {
   platform?: string;
 }
 
-/** A readable default device name such as "Chrome on Linux". */
+/** A readable default device name such as "Chrome trên Linux". */
 export function defaultDeviceName(nav: { userAgent: string; userAgentData?: UAData } = navigator as never): string {
   const ua = nav.userAgent ?? '';
   const brands = nav.userAgentData?.brands?.map((b) => b.brand) ?? [];
   const pick = (names: string[]) => names.find((n) => brands.includes(n));
   let browserName =
     pick(['Microsoft Edge', 'Brave', 'Opera', 'CocCoc', 'Google Chrome']) ??
-    (/Edg\//.test(ua) ? 'Microsoft Edge' : /coc_coc|CocCoc/i.test(ua) ? 'Cốc Cốc' : /OPR\//.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome' : 'Browser');
+    (/Edg\//.test(ua) ? 'Microsoft Edge' : /coc_coc|CocCoc/i.test(ua) ? 'Cốc Cốc' : /OPR\//.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome' : 'Trình duyệt');
   if (browserName === 'Google Chrome') browserName = 'Chrome';
   if (browserName === 'CocCoc') browserName = 'Cốc Cốc';
   let os = nav.userAgentData?.platform || '';
   if (!os) os = /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /CrOS/.test(ua) ? 'ChromeOS' : /Android/.test(ua) ? 'Android' : /Linux/.test(ua) ? 'Linux' : '';
-  return os ? `${browserName} on ${os}` : browserName;
+  return os ? `${browserName} trên ${os}` : browserName;
 }

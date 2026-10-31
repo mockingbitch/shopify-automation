@@ -77,7 +77,7 @@ func (s *Service) MarkRead(ctx context.Context, p authctx.Principal, t authctx.T
 		}
 		n, err := q.MarkRead(ctx, notifydb.MarkReadParams{Now: &now, OrgID: t.OrgID, UserID: p.UserID, ID: id})
 		if err == nil && n == 0 {
-			return apperr.NotFound("Notification not found.")
+			return apperr.NotFound("Không tìm thấy thông báo.")
 		}
 		return err
 	})
@@ -96,7 +96,7 @@ func (h Handler) List(w http.ResponseWriter, r *http.Request) error {
 	if v := r.URL.Query().Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 100 {
-			return apperr.Invalid(apperr.FieldError{Field: "limit", Code: "invalid", Message: "Must be between 1 and 100."})
+			return apperr.Invalid(apperr.FieldError{Field: "limit", Code: "invalid", Message: "Phải từ 1 đến 100."})
 		}
 		limit = n
 	}
@@ -111,7 +111,7 @@ func (h Handler) List(w http.ResponseWriter, r *http.Request) error {
 func (h Handler) Read(w http.ResponseWriter, r *http.Request) error {
 	id, err := uuid.Parse(chi.URLParam(r, "notificationID"))
 	if err != nil || id == uuid.Nil {
-		return apperr.NotFound("Notification not found.")
+		return apperr.NotFound("Không tìm thấy thông báo.")
 	}
 	if err := h.Svc.MarkRead(r.Context(), authctx.MustPrincipal(r.Context()), authctx.MustTenant(r.Context()), id); err != nil {
 		return err

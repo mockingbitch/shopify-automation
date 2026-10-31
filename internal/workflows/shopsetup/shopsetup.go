@@ -203,7 +203,7 @@ func (s *Setup) validateTemplate(ctx context.Context, sc *workflow.StepContext) 
 		return shopstep.FromErr(err)
 	}
 	if res.Status == templates.StatusDraft {
-		return workflow.Permanent(errors.New("the template version is not published"))
+		return workflow.Permanent(errors.New("phiên bản mẫu shop chưa được phát hành"))
 	}
 	rep := s.Templates.Registry.Validate(res.Sections)
 	if !rep.Valid {
@@ -211,7 +211,7 @@ func (s *Setup) validateTemplate(ctx context.Context, sc *workflow.StepContext) 
 		for _, e := range rep.Errors {
 			msgs = append(msgs, strings.TrimPrefix(e.Field, "sections.")+": "+e.Message)
 		}
-		return workflow.Permanent(errors.New("template is invalid for this shop: " + strings.Join(msgs, "; ")))
+		return workflow.Permanent(errors.New("mẫu shop không hợp lệ cho shop này: " + strings.Join(msgs, "; ")))
 	}
 	var fetched Config
 	if err := sc.Output("fetch_current_config", &fetched); err == nil {
@@ -220,7 +220,7 @@ func (s *Setup) validateTemplate(ctx context.Context, sc *workflow.StepContext) 
 		}
 		_ = json.Unmarshal(res.Sections["general"], &g)
 		if g.Region != "" && fetched.Region != "" && g.Region != fetched.Region {
-			sc.Log("warn", "The template targets "+g.Region+" but the shop is in "+fetched.Region+".", nil)
+			sc.Log("warn", "Mẫu shop dành cho thị trường "+g.Region+" nhưng shop thuộc "+fetched.Region+".", nil)
 		}
 	}
 	for _, w := range rep.Warnings {
@@ -278,10 +278,10 @@ func validateSelection(diff json.RawMessage, selected []string) error {
 	seen := map[string]bool{}
 	for _, p := range selected {
 		if !allowed[p] {
-			return fmt.Errorf("%s is not a change that can be applied", p)
+			return fmt.Errorf("%s không phải là thay đổi có thể áp dụng", p)
 		}
 		if seen[p] {
-			return fmt.Errorf("%s is listed twice", p)
+			return fmt.Errorf("%s bị chọn hai lần", p)
 		}
 		seen[p] = true
 	}
@@ -358,15 +358,15 @@ func (s *Setup) applyProfile(ctx context.Context, sc *workflow.StepContext) work
 	if err != nil {
 		return shopstep.FromErr(err)
 	}
-	sc.Log("info", "Shop profile updated.", map[string]any{"fields": applied, "shopee_request_id": meta.RequestID})
+	sc.Log("info", "Đã cập nhật hồ sơ shop.", map[string]any{"fields": applied, "shopee_request_id": meta.RequestID})
 	return workflow.Succeeded(map[string]any{"applied": applied, "shopee_request_id": meta.RequestID})
 }
 
 var taskText = map[string][2]string{
-	"branding.logo_url":         {"Set the shop logo", "Upload the image from the URL below as the shop logo in Seller Centre > Shop Profile."},
-	"branding.banner_urls":      {"Upload shop banners", "Add the banner images below in Seller Centre > Shop Decoration."},
-	"branding.decoration_notes": {"Update shop decoration", "Follow the decoration instructions below in Seller Centre > Shop Decoration."},
-	"warehouse.instructions":    {"Update warehouse settings", "Follow the instructions below in Seller Centre > Shipping > Warehouse."},
+	"branding.logo_url":         {"Đặt logo shop", "Tải ảnh từ URL bên dưới lên làm logo shop trong Kênh Người Bán > Hồ sơ shop."},
+	"branding.banner_urls":      {"Tải lên banner shop", "Thêm các ảnh banner bên dưới trong Kênh Người Bán > Trang trí shop."},
+	"branding.decoration_notes": {"Cập nhật trang trí shop", "Làm theo hướng dẫn trang trí bên dưới trong Kênh Người Bán > Trang trí shop."},
+	"warehouse.instructions":    {"Cập nhật cài đặt kho hàng", "Làm theo hướng dẫn bên dưới trong Kênh Người Bán > Vận chuyển > Kho hàng."},
 }
 
 // Step 7: everything selected that has no Open API (or whose extension
@@ -387,7 +387,7 @@ func (s *Setup) manualTasks(ctx context.Context, sc *workflow.StepContext) workf
 		if c.Mode != capability.ModeManual && c.Mode != capability.ModeBrowser {
 			continue
 		}
-		title, how := "Apply "+p, "Apply this change in Seller Centre."
+		title, how := "Áp dụng "+p, "Thực hiện thay đổi này trong Kênh Người Bán."
 		if t, ok := taskText[p]; ok {
 			title, how = t[0], t[1]
 		}
@@ -397,8 +397,8 @@ func (s *Setup) manualTasks(ctx context.Context, sc *workflow.StepContext) workf
 	var fetched Config
 	_ = sc.Output("fetch_current_config", &fetched)
 	if c, ok := sel["return_address.address"]; ok && (!fetched.AddressesKnown || returnAddress(fetched) == nil) {
-		tasks = append(tasks, workflow.ManualTask{Key: "return_address.create", Title: "Create the return address",
-			Instructions: "The shop has no return address to edit and Shopee has no API to create one. Add it in Seller Centre > Shop Settings > Addresses and mark it as return address.",
+		tasks = append(tasks, workflow.ManualTask{Key: "return_address.create", Title: "Tạo địa chỉ trả hàng",
+			Instructions: "Shop chưa có địa chỉ trả hàng để sửa và Shopee không có API để tạo mới. Hãy thêm địa chỉ trong Kênh Người Bán > Thiết lập shop > Địa chỉ và đặt làm địa chỉ trả hàng.",
 			Capability:   "shop.address.create", Data: c.Target})
 	}
 	if len(tasks) == 0 {
@@ -429,7 +429,7 @@ func (s *Setup) manualTasks(ctx context.Context, sc *workflow.StepContext) workf
 		}
 	}
 	if browserTasks > 0 {
-		sc.Log("info", fmt.Sprintf("%d of %d tasks can be done by the browser extension.", browserTasks, len(tasks)), nil)
+		sc.Log("info", fmt.Sprintf("Tiện ích trình duyệt có thể làm %d trên %d việc.", browserTasks, len(tasks)), nil)
 	}
 	return workflow.Manual(tasks, map[string]any{"task_count": len(tasks), "browser_tasks": browserTasks})
 }
@@ -526,11 +526,11 @@ func (s *Setup) applyLogistics(ctx context.Context, sc *workflow.StepContext) wo
 				return r
 			}
 			results = append(results, item{Path: p, Error: errMessage(err)})
-			sc.Log("error", p+" failed: "+errMessage(err), nil)
+			sc.Log("error", p+" thất bại: "+errMessage(err), nil)
 			continue
 		}
 		results = append(results, item{Path: p, OK: true, RequestID: meta.RequestID})
-		sc.Log("info", p+" applied.", map[string]any{"shopee_request_id": meta.RequestID})
+		sc.Log("info", "Đã áp dụng "+p+".", map[string]any{"shopee_request_id": meta.RequestID})
 	}
 	if len(results) == 0 {
 		return workflow.Skip("not_selected")
@@ -545,7 +545,7 @@ func (s *Setup) applyLogistics(ctx context.Context, sc *workflow.StepContext) wo
 		}
 	}
 	if len(failed) > 0 {
-		return workflow.Permanent(fmt.Errorf("%d of %d changes failed: %s", len(failed), len(results), strings.Join(failed, "; ")))
+		return workflow.Permanent(fmt.Errorf("%d trên %d thay đổi thất bại: %s", len(failed), len(results), strings.Join(failed, "; ")))
 	}
 	return workflow.Succeeded(map[string]any{"applied": applied, "results": results})
 }
@@ -597,7 +597,7 @@ func (s *Setup) verify(ctx context.Context, sc *workflow.StepContext) workflow.R
 		checked++
 		if !matches(p, c.Target, now.Values[p]) {
 			mismatches = append(mismatches, mismatch{Path: p, Target: c.Target, Actual: now.Values[p]})
-			sc.Log("warn", p+" does not match the template after applying.", nil)
+			sc.Log("warn", p+" vẫn chưa khớp với mẫu shop sau khi áp dụng.", nil)
 		}
 	}
 	sort.Slice(mismatches, func(i, j int) bool { return mismatches[i].Path < mismatches[j].Path })

@@ -134,14 +134,14 @@ type Handler struct{ Svc *Service }
 func params(r *http.Request, withCategory bool) (uuid.UUID, int64, error) {
 	id, err := uuid.Parse(chi.URLParam(r, "shopID"))
 	if err != nil {
-		return uuid.Nil, 0, apperr.NotFound("Shop not found.")
+		return uuid.Nil, 0, apperr.NotFound("Không tìm thấy shop.")
 	}
 	if !withCategory {
 		return id, 0, nil
 	}
 	c, err := strconv.ParseInt(chi.URLParam(r, "categoryID"), 10, 64)
 	if err != nil || c <= 0 {
-		return uuid.Nil, 0, apperr.NotFound("Category not found.")
+		return uuid.Nil, 0, apperr.NotFound("Không tìm thấy ngành hàng.")
 	}
 	return id, c, nil
 }

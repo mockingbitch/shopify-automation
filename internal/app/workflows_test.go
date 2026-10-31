@@ -147,7 +147,7 @@ func TestShopSetupEndToEnd(t *testing.T) {
 	// Profile applied; the banner is a manual task.
 	v = owner.runView(org, runID)
 	brandingID, status, out := v.step("apply_branding")
-	if v.Data.Run.Status != "WAITING_USER" || status != "WAITING_USER" || !strings.Contains(string(out), "Upload shop banners") ||
+	if v.Data.Run.Status != "WAITING_USER" || status != "WAITING_USER" || !strings.Contains(string(out), "Tải lên banner shop") ||
 		strings.Contains(string(out), "warehouse") {
 		t.Fatalf("manual step: %s %s %s", v.Data.Run.Status, status, out)
 	}

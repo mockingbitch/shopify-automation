@@ -47,30 +47,30 @@ async function start() {
   <section class="space-y-4 rounded-lg border bg-background p-4" aria-labelledby="publish-title">
     <div class="flex items-start justify-between gap-4">
       <div>
-        <h2 id="publish-title" class="text-base font-semibold">Publish {{ label }}</h2>
+        <h2 id="publish-title" class="text-base font-semibold">Đăng {{ label }}</h2>
         <p class="text-sm text-muted-foreground">
-          Each shop gets its own run. It checks every product against the shop's categories, attributes, brands and shipping,
-          then waits for your approval before creating anything on Shopee.
+          Mỗi shop có một lượt chạy riêng. Hệ thống kiểm tra từng sản phẩm theo ngành hàng, thuộc tính, thương hiệu và đơn vị vận chuyển
+          của shop, rồi chờ bạn duyệt trước khi tạo sản phẩm trên Shopee.
         </p>
       </div>
-      <Button variant="outline" size="sm" @click="emit('close')">Close</Button>
+      <Button variant="outline" size="sm" @click="emit('close')">Đóng</Button>
     </div>
     <FormError :message="error" />
     <fieldset class="space-y-2">
-      <legend class="text-sm font-medium">Shops</legend>
-      <p v-if="!shops.length" class="text-sm text-muted-foreground">No connected shop. Connect a shop first.</p>
+      <legend class="text-sm font-medium">Shop</legend>
+      <p v-if="!shops.length" class="text-sm text-muted-foreground">Chưa có shop nào được kết nối. Hãy kết nối shop trước.</p>
       <label v-for="s in shops" :key="s.id" class="flex items-center gap-2 text-sm">
         <input v-model="selected" type="checkbox" :value="s.id" class="size-4">
         {{ s.shop_name ?? `Shop ${s.shopee_shop_id}` }} <span class="text-muted-foreground">({{ s.region }})</span>
       </label>
     </fieldset>
     <fieldset class="space-y-2">
-      <legend class="text-sm font-medium">After creation</legend>
-      <label class="flex items-center gap-2 text-sm"><input v-model="status" type="radio" value="UNLIST" class="size-4"> Keep unlisted so I can review it in Seller Centre</label>
-      <label class="flex items-center gap-2 text-sm"><input v-model="status" type="radio" value="NORMAL" class="size-4"> List for sale immediately</label>
+      <legend class="text-sm font-medium">Sau khi tạo trên Shopee</legend>
+      <label class="flex items-center gap-2 text-sm"><input v-model="status" type="radio" value="UNLIST" class="size-4"> Để ở trạng thái Ẩn (chưa hiển thị) để tôi kiểm tra lại trong Kênh Người Bán</label>
+      <label class="flex items-center gap-2 text-sm"><input v-model="status" type="radio" value="NORMAL" class="size-4"> Hiển thị và mở bán ngay</label>
     </fieldset>
     <div class="flex justify-end">
-      <Button :disabled="busy || !selected.length" @click="start">Check and publish</Button>
+      <Button :disabled="busy || !selected.length" @click="start">Kiểm tra và đăng</Button>
     </div>
   </section>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'auth' })
-useHead({ title: 'Reset password' })
+useHead({ title: 'Đặt lại mật khẩu' })
 
 const email = ref('')
 const done = ref(false)
@@ -24,21 +24,21 @@ async function submit() {
 <template>
   <Card>
     <CardHeader>
-      <CardTitle as="h1">Reset password</CardTitle>
-      <CardDescription v-if="!done">We will email you a link to choose a new password.</CardDescription>
+      <CardTitle as="h1">Đặt lại mật khẩu</CardTitle>
+      <CardDescription v-if="!done">Chúng tôi sẽ gửi email kèm liên kết để bạn đặt mật khẩu mới.</CardDescription>
     </CardHeader>
     <CardContent>
-      <p v-if="done" role="status" class="text-sm">If an account exists for <strong>{{ email }}</strong>, a reset link is on its way. It is valid for 1 hour.</p>
+      <p v-if="done" role="status" class="text-sm">Nếu <strong>{{ email }}</strong> có tài khoản, chúng tôi đã gửi liên kết đặt lại mật khẩu. Liên kết có hiệu lực trong 1 giờ.</p>
       <form v-else class="space-y-4" novalidate @submit.prevent="submit">
         <FormError :message="error" />
         <FormField id="email" label="Email">
           <Input id="email" v-model="email" type="email" autocomplete="email" required />
         </FormField>
-        <Button type="submit" class="w-full" :disabled="busy">Send reset link</Button>
+        <Button type="submit" class="w-full" :disabled="busy">Gửi liên kết đặt lại</Button>
       </form>
     </CardContent>
     <CardFooter class="text-sm">
-      <NuxtLink to="/login" class="text-muted-foreground underline-offset-4 hover:underline">Back to sign in</NuxtLink>
+      <NuxtLink to="/login" class="text-muted-foreground underline-offset-4 hover:underline">Quay lại đăng nhập</NuxtLink>
     </CardFooter>
   </Card>
 </template>

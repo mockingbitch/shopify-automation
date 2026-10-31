@@ -300,7 +300,7 @@ func TestImportFailureAndRetry(t *testing.T) {
 	var b batchResp
 	alice.upload(base, "p.csv", []byte("sku,name,price,currency,stock\nF-1,Fork,1000,VND,1\n"), nil).json(t, &b)
 	alice.must(200, "GET", base+"/"+b.Data.ID, nil).json(t, &b)
-	if b.Data.Status != "FAILED" || b.Data.Error == nil || !strings.Contains(*b.Data.Error, "Retry") {
+	if b.Data.Status != "FAILED" || b.Data.Error == nil || !strings.Contains(*b.Data.Error, "thử lại") {
 		t.Fatalf("failed batch: %+v", b.Data)
 	}
 	alice.must(202, "POST", base+"/"+b.Data.ID+"/retry", nil)

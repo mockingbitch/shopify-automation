@@ -14,11 +14,11 @@ const etag = ref('')
 const shops = ref<Record<string, Shop>>({})
 const errors = ref<Record<string, string>>({})
 const error = ref('')
-const notice = ref(route.query.created ? 'Product created. Add images, then publish it.' : '')
+const notice = ref(route.query.created ? 'Đã tạo sản phẩm. Hãy thêm hình ảnh rồi đăng sản phẩm lên shop.' : '')
 const busy = ref(false)
 const formKey = ref(0)
 const publishing = ref(false)
-useHead({ title: () => product.value?.name ?? 'Product' })
+useHead({ title: () => product.value?.name ?? 'Sản phẩm' })
 
 async function load() {
   try {
@@ -47,16 +47,16 @@ async function save(input: ProductInput) {
     })
     product.value = unwrap(res).data
     etag.value = res.response.headers.get('ETag') ?? ''
-    notice.value = 'Saved.'
+    notice.value = 'Đã lưu.'
   } catch (e) {
     const err = toApiError(e)
     errors.value = err.fields
     if (err.status === 412) {
-      error.value = 'Someone else changed this product. The latest version was loaded; make your changes again.'
+      error.value = 'Người khác vừa sửa sản phẩm này. Phiên bản mới nhất đã được tải lại; bạn hãy nhập lại thay đổi của mình.'
       await load()
       formKey.value++
     } else {
-      error.value = Object.keys(err.fields).length ? 'Some fields need attention.' : err.message
+      error.value = Object.keys(err.fields).length ? 'Vui lòng sửa các ô được đánh dấu bên dưới.' : err.message
     }
   } finally {
     busy.value = false
@@ -98,17 +98,17 @@ async function remove() {
   }
 }
 const shopName = (sid: string) => shops.value[sid]?.shop_name ?? (shops.value[sid] ? `Shop ${shops.value[sid]!.shopee_shop_id}` : 'Shop')
-const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const fmt = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' })
 </script>
 
 <template>
   <div class="mx-auto max-w-4xl space-y-6">
-    <PageHeader :title="product?.name ?? 'Product'" :description="product ? `SKU ${product.sku}` : undefined">
+    <PageHeader :title="product?.name ?? 'Sản phẩm'" :description="product ? `SKU ${product.sku}` : undefined">
       <template v-if="product" #actions>
-        <Button v-if="can('workflows.run')" @click="publishing = true">Publish</Button>
-        <ConfirmDialog v-if="can('products.write')" title="Delete this product?"
-                       description="It is removed from your catalog. Items already created on Shopee are not deleted." confirm-label="Delete" @confirm="remove">
-          <template #trigger><Button variant="outline">Delete</Button></template>
+        <Button v-if="can('workflows.run')" @click="publishing = true">Đăng lên shop</Button>
+        <ConfirmDialog v-if="can('products.write')" title="Xóa sản phẩm này?"
+                       description="Sản phẩm sẽ bị xóa khỏi danh sách của bạn. Sản phẩm đã tạo trên Shopee vẫn được giữ nguyên." confirm-label="Xóa" @confirm="remove">
+          <template #trigger><Button variant="outline">Xóa</Button></template>
         </ConfirmDialog>
       </template>
     </PageHeader>
@@ -119,32 +119,32 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
     <template v-if="product">
       <section class="space-y-3 rounded-lg border bg-background p-4" aria-labelledby="pd-images">
         <div class="flex items-center justify-between">
-          <h2 id="pd-images" class="text-base font-semibold">Images</h2>
+          <h2 id="pd-images" class="text-base font-semibold">Hình ảnh</h2>
           <template v-if="can('products.write')">
             <input id="pd-file" ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="addImages">
-            <Button as-child variant="outline" size="sm" :disabled="uploading"><label for="pd-file" class="cursor-pointer">{{ uploading ? 'Uploading…' : 'Add images' }}</label></Button>
+            <Button as-child variant="outline" size="sm" :disabled="uploading"><label for="pd-file" class="cursor-pointer">{{ uploading ? 'Đang tải lên…' : 'Thêm hình ảnh' }}</label></Button>
           </template>
         </div>
-        <p class="text-sm text-muted-foreground">JPEG, PNG or WebP, up to 10 MB each. The first image is the cover.</p>
+        <p class="text-sm text-muted-foreground">JPEG, PNG hoặc WebP, tối đa 10 MB mỗi ảnh. Ảnh đầu tiên là ảnh bìa.</p>
         <ul v-if="product.images.length" class="grid grid-cols-3 gap-3 sm:grid-cols-5">
           <li v-for="im in product.images" :key="im.id" class="space-y-1">
-            <img :src="im.url" :alt="`Image ${im.position + 1}`" class="aspect-square w-full rounded border object-cover">
+            <img :src="im.url" :alt="`Ảnh ${im.position + 1}`" class="aspect-square w-full rounded border object-cover">
             <div class="flex items-center justify-between text-xs text-muted-foreground">
               <span>{{ im.width }}×{{ im.height }}</span>
-              <button v-if="can('products.write')" type="button" class="underline" @click="removeImage(im.id)">Remove</button>
+              <button v-if="can('products.write')" type="button" class="underline" :aria-label="`Xóa ảnh ${im.position + 1}`" @click="removeImage(im.id)">Xóa</button>
             </div>
           </li>
         </ul>
-        <p v-else class="text-sm text-muted-foreground">No images yet. Shopee requires at least one.</p>
+        <p v-else class="text-sm text-muted-foreground">Chưa có hình ảnh. Shopee yêu cầu ít nhất một ảnh.</p>
       </section>
 
       <section v-if="product.mappings.length" class="space-y-2 rounded-lg border bg-background p-4" aria-labelledby="pd-shops">
-        <h2 id="pd-shops" class="text-base font-semibold">On Shopee</h2>
+        <h2 id="pd-shops" class="text-base font-semibold">Trên Shopee</h2>
         <ul class="divide-y text-sm">
           <li v-for="m in product.mappings" :key="m.shop_id" class="flex flex-wrap items-center justify-between gap-2 py-2">
             <span>{{ shopName(m.shop_id) }}</span>
             <span class="flex items-center gap-2">
-              <span v-if="m.shopee_item_id" class="text-muted-foreground">Item {{ m.shopee_item_id }}</span>
+              <span v-if="m.shopee_item_id" class="text-muted-foreground">ID trên Shopee: {{ m.shopee_item_id }}</span>
               <Badge :variant="publishVariant(m.publish_state)">{{ publishLabels[m.publish_state] }}</Badge>
               <span class="text-xs text-muted-foreground">{{ fmt.format(new Date(m.updated_at)) }}</span>
             </span>
@@ -152,7 +152,7 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle:
         </ul>
       </section>
 
-      <ProductForm :key="formKey + etag" :initial="toInput(product)" :errors="errors" :busy="busy" :readonly="!can('products.write')" submit-label="Save changes" @submit="save" />
+      <ProductForm :key="formKey + etag" :initial="toInput(product)" :errors="errors" :busy="busy" :readonly="!can('products.write')" submit-label="Lưu thay đổi" @submit="save" />
     </template>
   </div>
 </template>
